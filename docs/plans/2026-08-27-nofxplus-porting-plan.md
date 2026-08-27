@@ -143,7 +143,12 @@
 - 移除 Lighter、PostgreSQL、Telegram 的改动：与当前功能目标相反。
 - nofxplus 中多次 rollback、debug、临时验证和重复 README commit：不具备可移植价值。
 
-## P1 实施任务
+## P2 实施进度
+
+### P2.1：市场微结构分析
+
+**Status:** 已移植。提供只读的盘口深度、VWAP、spread、深度、盘口不平衡、支撑/阻力和大单分析；暂不自动接入下单路径。
+
 
 ### Task 1：Provider 抽象与 DIY fallback
 
