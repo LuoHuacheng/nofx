@@ -751,7 +751,7 @@ function Claw402ConfigForm({
                   cursor: 'pointer',
                 }}
               >
-                {language === 'zh' ? '🔑 Create Wallet' : '🔑 Create Wallet'}
+                {'🔑 Create Wallet'}
               </button>
             )}
           </div>
@@ -769,15 +769,12 @@ function Claw402ConfigForm({
                 className="text-xs font-bold mb-2"
                 style={{ color: '#D6433A' }}
               >
-                🚨{' '}
-                {language === 'zh'
-                  ? 'Important: Backup your private key NOW!'
-                  : 'Important: Backup your private key NOW!'}
+                🚨 {'Important: Backup your private key NOW!'}
               </div>
               <div className="text-[11px] mb-2" style={{ color: '#D6433A' }}>
-                {language === 'zh'
-                  ? 'This is your wallet private key. If lost, it cannot be recovered and all assets will be permanently lost. Copy and save it securely.'
-                  : 'This is your wallet private key. If lost, it cannot be recovered and all assets will be permanently lost. Copy and save it securely.'}
+                {
+                  'This is your wallet private key. If lost, it cannot be recovered and all assets will be permanently lost. Copy and save it securely.'
+                }
               </div>
               <div className="flex items-center gap-2 mb-2">
                 <code
@@ -809,23 +806,10 @@ function Claw402ConfigForm({
                 style={{ color: '#8A8478' }}
               >
                 <div>
-                  ✅{' '}
-                  {language === 'zh'
-                    ? 'Save to a password manager (1Password / Bitwarden)'
-                    : 'Save to a password manager (1Password / Bitwarden)'}
+                  ✅ {'Save to a password manager (1Password / Bitwarden)'}
                 </div>
-                <div>
-                  ✅{' '}
-                  {language === 'zh'
-                    ? 'Or write it down and store it safely'
-                    : 'Or write it down and store it safely'}
-                </div>
-                <div>
-                  ❌{' '}
-                  {language === 'zh'
-                    ? 'Do NOT screenshot or share with anyone'
-                    : 'Do NOT screenshot or share with anyone'}
-                </div>
+                <div>✅ {'Or write it down and store it safely'}</div>
+                <div>❌ {'Do NOT screenshot or share with anyone'}</div>
               </div>
             </div>
           )}
@@ -907,9 +891,9 @@ function Claw402ConfigForm({
                     style={{ color: '#E0483B' }}
                   >
                     ⚠️{' '}
-                    {language === 'zh'
-                      ? 'Please confirm this is your wallet address (verify in MetaMask)'
-                      : 'Please confirm this is your wallet address (verify in MetaMask)'}
+                    {
+                      'Please confirm this is your wallet address (verify in MetaMask)'
+                    }
                   </div>
                 </div>
                 {usdcBalance !== null && (
@@ -931,13 +915,7 @@ function Claw402ConfigForm({
                         cursor: 'pointer',
                       }}
                     >
-                      {showDeposit
-                        ? language === 'zh'
-                          ? 'Hide'
-                          : 'Hide'
-                        : language === 'zh'
-                          ? '💳 Deposit'
-                          : '💳 Deposit'}
+                      {showDeposit ? 'Hide' : '💳 Deposit'}
                     </button>
                   </div>
                 )}
@@ -953,10 +931,7 @@ function Claw402ConfigForm({
                       className="text-xs font-semibold mb-2"
                       style={{ color: '#2E8B57' }}
                     >
-                      💳{' '}
-                      {language === 'zh'
-                        ? 'Deposit USDC (Base Chain)'
-                        : 'Deposit USDC (Base Chain)'}
+                      💳 {'Deposit USDC (Base Chain)'}
                     </div>
                     <div className="flex gap-3 items-start mb-3">
                       <div
@@ -970,9 +945,7 @@ function Claw402ConfigForm({
                           className="text-[11px] mb-1"
                           style={{ color: '#8A8478' }}
                         >
-                          {language === 'zh'
-                            ? 'Scan QR or copy address to transfer'
-                            : 'Scan QR or copy address to transfer'}
+                          {'Scan QR or copy address to transfer'}
                         </div>
                         <code
                           className="text-[10px] font-mono break-all select-all block mb-1.5"
@@ -1003,20 +976,10 @@ function Claw402ConfigForm({
                       className="text-[10px] space-y-1"
                       style={{ color: '#8A8478' }}
                     >
+                      <div>📱 {'Scan QR with exchange app to transfer'}</div>
+                      <div>• {'Choose Base network when withdrawing'}</div>
                       <div>
-                        📱{' '}
-                        {language === 'zh'
-                          ? 'Scan QR with exchange app to transfer'
-                          : 'Scan QR with exchange app to transfer'}
-                      </div>
-                      <div>
-                        •{' '}
-                        {language === 'zh'
-                          ? 'Choose Base network when withdrawing'
-                          : 'Choose Base network when withdrawing'}
-                      </div>
-                      <div>
-                        • {language === 'zh' ? 'Or bridge: ' : 'Or bridge: '}
+                        • {'Or bridge: '}
                         <a
                           href="https://bridge.base.org"
                           target="_blank"
@@ -1027,12 +990,7 @@ function Claw402ConfigForm({
                           bridge.base.org
                         </a>
                       </div>
-                      <div>
-                        •{' '}
-                        {language === 'zh'
-                          ? 'Min $1 USDC to start'
-                          : 'Min $1 USDC to start'}
-                      </div>
+                      <div>• {'Min $1 USDC to start'}</div>
                     </div>
                   </div>
                 )}

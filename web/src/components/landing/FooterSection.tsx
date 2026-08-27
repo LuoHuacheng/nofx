@@ -23,7 +23,7 @@ export default function FooterSection({ language }: FooterSectionProps) {
     ],
     resources: [
       {
-        name: language === 'zh' ? 'Documentation' : 'Documentation',
+        name: 'Documentation',
         href: 'https://github.com/NoFxAiOS/nofx/blob/main/README.md',
       },
       { name: 'Issues', href: 'https://github.com/NoFxAiOS/nofx/issues' },

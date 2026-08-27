@@ -4,7 +4,6 @@ import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 import { api } from '../../lib/api'
 import type { HyperliquidAccountSummary } from '../../lib/api/wallet'
-import type { Language } from '../../i18n/translations'
 import { copyWithToast } from '../../lib/clipboard'
 import {
   formatUSDC,
@@ -56,7 +55,6 @@ async function fetchArbitrumBalances(address: string) {
 }
 
 interface HyperliquidFundsPanelProps {
-  language: Language
   walletAddress: string
   /**
    * Hyperliquid "unified account" mode (the default, and HL's recommendation):
@@ -164,12 +162,12 @@ const TEXT = {
 }
 
 export function HyperliquidFundsPanel({
-  language,
   walletAddress,
+  // ponytail: was `language` but UI is en-only
   unifiedAccount = true,
   onTransferred,
 }: HyperliquidFundsPanelProps) {
-  const t = TEXT[language === 'zh' ? 'zh' : 'en']
+  const t = TEXT['en']
   const address = normalizeAddress(walletAddress)
   const [tab, setTab] = useState<'deposit' | 'transfer'>('deposit')
   const [account, setAccount] = useState<HyperliquidAccountSummary | null>(null)

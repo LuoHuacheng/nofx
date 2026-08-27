@@ -964,7 +964,7 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
             {/* Page size selector */}
             <div className="flex items-center gap-2">
               <span className="text-xs" style={{ color: '#8A8478' }}>
-                {language === 'zh' ? 'Per page' : 'Per page'}:
+                {'Per page'}:
               </span>
               <NofxSelect
                 value={pageSize}

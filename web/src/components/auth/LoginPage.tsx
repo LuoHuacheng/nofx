@@ -88,69 +88,26 @@ export function LoginPage() {
               </span>
             </div>
             <h2 className="text-4xl xl:text-5xl font-bold tracking-tight text-nofx-text leading-[1.05]">
-              {language === 'zh' ? (
-                <>
-                  AI-Powered
-                  <br />
-                  <span className="text-nofx-gold">
-                    Multi-Market Trading Terminal
-                  </span>
-                </>
-              ) : language === 'id' ? (
-                <>
-                  Terminal Trading
-                  <br />
-                  <span className="text-nofx-gold">Multi-Pasar AI</span>
-                </>
-              ) : (
+              {
                 <>
                   AI-Powered
                   <br />
                   <span className="text-nofx-gold">Trading Terminal</span>
                 </>
-              )}
+              }
             </h2>
             <p className="mt-5 text-nofx-text-muted text-base leading-relaxed max-w-md">
-              {language === 'zh'
-                ? 'Plug into 10+ exchanges including Hyperliquid, OKX, Aster, and 7 LLM models. Deploy 24/7 automated strategies with natural language.'
-                : language === 'id'
-                  ? 'Hubungkan ke 10+ bursa termasuk Hyperliquid, OKX, Aster dan 7 model LLM. Terapkan strategi otomatis 24/7 dengan bahasa alami.'
-                  : 'Plug into 10+ exchanges including Hyperliquid, OKX, Aster, and 7 LLM models. Deploy 24/7 automated strategies with natural language.'}
+              {
+                'Plug into 10+ exchanges including Hyperliquid, OKX, Aster, and 7 LLM models. Deploy 24/7 automated strategies with natural language.'
+              }
             </p>
           </div>
 
           {/* Stats strip */}
           <div className="relative grid grid-cols-3 gap-8 max-w-md">
-            <Stat
-              value="10+"
-              label={
-                language === 'zh'
-                  ? 'Exchanges'
-                  : language === 'id'
-                    ? 'Bursa'
-                    : 'Exchanges'
-              }
-            />
-            <Stat
-              value="7"
-              label={
-                language === 'zh'
-                  ? 'AI Models'
-                  : language === 'id'
-                    ? 'Model AI'
-                    : 'AI Models'
-              }
-            />
-            <Stat
-              value="24/7"
-              label={
-                language === 'zh'
-                  ? 'Always On'
-                  : language === 'id'
-                    ? 'Sepanjang Waktu'
-                    : 'Always On'
-              }
-            />
+            <Stat value="10+" label="Exchanges" />
+            <Stat value="7" label="AI Models" />
+            <Stat value="24/7" label="Always On" />
           </div>
         </section>
 
@@ -171,11 +128,7 @@ export function LoginPage() {
                 {t('signIn', language)}
               </h1>
               <p className="mt-1.5 text-sm text-nofx-text-muted">
-                {language === 'zh'
-                  ? 'Continue with your email'
-                  : language === 'id'
-                    ? 'Lanjutkan dengan email Anda'
-                    : 'Continue with your email'}
+                Continue with your email
               </p>
             </div>
 

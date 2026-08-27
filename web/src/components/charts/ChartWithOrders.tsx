@@ -585,7 +585,7 @@ export function ChartWithOrders({
               }}
             >
               {new Date((tooltipData.time as number) * 1000).toLocaleString(
-                language === 'zh' ? 'zh-CN' : 'en-US',
+                'en-US',
                 {
                   month: 'short',
                   day: 'numeric',

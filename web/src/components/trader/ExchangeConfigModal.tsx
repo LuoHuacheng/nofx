@@ -406,11 +406,7 @@ export function ExchangeConfigModal({
           testnet
         )
       } else if (currentExchangeType === 'hyperliquid') {
-        toast.error(
-          language === 'zh'
-            ? 'Use the wallet authorization flow to connect Hyperliquid.'
-            : 'Use the wallet authorization flow to connect Hyperliquid.'
-        )
+        toast.error('Use the wallet authorization flow to connect Hyperliquid.')
         return
       } else if (currentExchangeType === 'aster') {
         if (!asterUser.trim() || !asterSigner.trim() || !asterPrivateKey.trim())
@@ -1075,17 +1071,15 @@ export function ExchangeConfigModal({
                           className="text-sm font-semibold mb-1"
                           style={{ color: '#E0483B' }}
                         >
-                          {language === 'zh'
-                            ? 'Hyperliquid requires wallet authorization'
-                            : 'Hyperliquid requires wallet authorization'}
+                          {'Hyperliquid requires wallet authorization'}
                         </div>
                         <div
                           className="text-xs leading-5"
                           style={{ color: '#8A8478' }}
                         >
-                          {language === 'zh'
-                            ? 'Manual private-key/API-key entry is disabled. Use MetaMask, Rabby, OKX, Coinbase Wallet or another EVM wallet to connect, authorize the agent, and approve the builder fee.'
-                            : 'Manual private-key/API-key entry is disabled. Use MetaMask, Rabby, OKX, Coinbase Wallet or another EVM wallet to connect, authorize the agent, and approve the builder fee.'}
+                          {
+                            'Manual private-key/API-key entry is disabled. Use MetaMask, Rabby, OKX, Coinbase Wallet or another EVM wallet to connect, authorize the agent, and approve the builder fee.'
+                          }
                         </div>
                       </div>
                     </div>
@@ -1099,7 +1093,6 @@ export function ExchangeConfigModal({
                   </div>
                   {selectedExchange?.hyperliquidWalletAddr && (
                     <HyperliquidFundsPanel
-                      language={language}
                       walletAddress={selectedExchange.hyperliquidWalletAddr}
                       unifiedAccount={
                         selectedExchange.hyperliquidUnifiedAccount ?? true

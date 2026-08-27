@@ -103,23 +103,13 @@ export default function HeaderBar({
                   {
                     page: 'data',
                     path: ROUTES.data,
-                    label:
-                      language === 'zh'
-                        ? 'Data'
-                        : language === 'id'
-                          ? 'Data'
-                          : 'Data',
+                    label: 'Data',
                     requiresAuth: false,
                   },
                   {
                     page: 'strategy-market',
                     path: ROUTES.strategyMarket,
-                    label:
-                      language === 'zh'
-                        ? 'Market'
-                        : language === 'id'
-                          ? 'Pasar'
-                          : 'Market',
+                    label: 'Market',
                     requiresAuth: true,
                     hidden: true,
                   },
@@ -386,23 +376,13 @@ export default function HeaderBar({
                     {
                       page: 'data',
                       path: ROUTES.data,
-                      label:
-                        language === 'zh'
-                          ? 'Data'
-                          : language === 'id'
-                            ? 'Data'
-                            : 'Data',
+                      label: 'Data',
                       requiresAuth: false,
                     },
                     {
                       page: 'strategy-market',
                       path: ROUTES.strategyMarket,
-                      label:
-                        language === 'zh'
-                          ? 'Market'
-                          : language === 'id'
-                            ? 'Pasar'
-                            : 'Market',
+                      label: 'Market',
                       requiresAuth: true,
                       hidden: true,
                     },
