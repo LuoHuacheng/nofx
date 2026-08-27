@@ -102,10 +102,12 @@ func (s *Server) handleBacktestStart(c *gin.Context) {
 		SafeBadRequest(c, "model not found")
 		return
 	}
+	// The API key is intentionally NOT stored in the run snapshot; the
+	// manager resolves it from this model record at execution time.
 	modelSnap := backtest.ModelConfigSnapshot{
+		ModelID:         model.ID,
 		Provider:        model.Provider,
 		Model:           model.CustomModelName,
-		APIKey:          string(model.APIKey),
 		CustomAPIURL:    model.CustomAPIURL,
 		CustomModelName: model.CustomModelName,
 	}
@@ -224,13 +226,13 @@ func (s *Server) handleBacktestEquity(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 	from, to := parseTimeRange(c)
 
-	pts, err := s.store.Backtest().GetEquityPoints(runID, from, to, limit)
-	if err != nil || !runBelongsTo(s, userID, runID) {
-		if err != nil {
-			SafeInternalError(c, "Failed to get equity points", err)
-			return
-		}
+	if !runBelongsTo(s, userID, runID) {
 		SafeBadRequest(c, "run not found")
+		return
+	}
+	pts, err := s.store.Backtest().GetEquityPoints(runID, from, to, limit)
+	if err != nil {
+		SafeInternalError(c, "Failed to get equity points", err)
 		return
 	}
 	c.JSON(http.StatusOK, pts)
@@ -243,13 +245,13 @@ func (s *Server) handleBacktestTrades(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 	from, to := parseTimeRange(c)
 
-	trades, err := s.store.Backtest().GetTrades(runID, from, to, limit)
-	if err != nil || !runBelongsTo(s, userID, runID) {
-		if err != nil {
-			SafeInternalError(c, "Failed to get trades", err)
-			return
-		}
+	if !runBelongsTo(s, userID, runID) {
 		SafeBadRequest(c, "run not found")
+		return
+	}
+	trades, err := s.store.Backtest().GetTrades(runID, from, to, limit)
+	if err != nil {
+		SafeInternalError(c, "Failed to get trades", err)
 		return
 	}
 	c.JSON(http.StatusOK, trades)

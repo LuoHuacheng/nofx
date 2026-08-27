@@ -147,6 +147,16 @@ func (m *RunManager) Start(req StartRequest) (string, error) {
 		return "", fmt.Errorf("strategy config is required")
 	}
 
+	// Resolve fee fallbacks now so the RunMetadata snapshot (§2.2) records
+	// exactly what the engine will charge — results stay reproducible.
+	feeMaker := req.FeeMaker
+	if feeMaker <= 0 {
+		feeMaker = DefaultMakerFee
+	}
+	feeTaker := req.FeeTaker
+	if feeTaker <= 0 {
+		feeTaker = DefaultTakerFee(req.ExchangeType)
+	}
 	cfg := RunConfig{
 		UserID:             req.UserID,
 		Name:               req.Name,
@@ -155,8 +165,8 @@ func (m *RunManager) Start(req StartRequest) (string, error) {
 		StartTime:          req.StartTime,
 		EndTime:            req.EndTime,
 		InitialBalance:     req.InitialBalance,
-		FeeMaker:           req.FeeMaker,
-		FeeTaker:           req.FeeTaker,
+		FeeMaker:           feeMaker,
+		FeeTaker:           feeTaker,
 		ExchangeType:       req.ExchangeType,
 		StrategyConfigJSON: req.StrategyConfigJSON,
 		ModelConfigJSON:    req.ModelConfigJSON,
@@ -246,8 +256,10 @@ func (m *RunManager) execute(runID string, req StartRequest, cfg RunConfig, engi
 		return
 	}
 
-	// Build the decider (kernel adapter by default).
-	client := NewAIClientFromSnapshot(req.ModelSnapshot)
+	// Build the decider (kernel adapter by default). The API key is
+	// resolved from the store at execution time (never persisted in the
+	// run snapshot); ModelID in the snapshot points back to the record.
+	client := NewAIClientFromSnapshot(m.resolveModelSnapshot(req))
 	decider := m.deciderFor(cfg, req.StrategyConfig, client)
 	if decider == nil {
 		m.finish(runID, StatusFailed, "decider init failed", nil)
@@ -409,6 +421,26 @@ func (m *RunManager) finish(runID, status, errMsg string, metrics *Metrics) {
 	} else {
 		logger.Infof("🏁 [backtest %s] %s", runID, status)
 	}
+}
+
+// resolveModelSnapshot fills the API key from the user's stored AI
+// model when the snapshot carries a ModelID. Keys are never persisted
+// in BacktestRun.ModelConfigJSON (§7: no secrets in the DB).
+func (m *RunManager) resolveModelSnapshot(req StartRequest) ModelConfigSnapshot {
+	snap := req.ModelSnapshot
+	if snap.ModelID == "" {
+		return snap
+	}
+	if m.st.GormDB() == nil {
+		return snap
+	}
+	model, err := m.st.AIModel().Get(req.UserID, snap.ModelID)
+	if err != nil {
+		logger.Warnf("⚠️ [backtest] model %s not found at run start: %v", snap.ModelID, err)
+		return snap
+	}
+	snap.APIKey = string(model.APIKey)
+	return snap
 }
 
 // appendTrace buffers a trace line per run (capped at 5000 entries,
@@ -634,7 +666,7 @@ func runToStartRequest(run *store.BacktestRun) *StartRequest {
 		EndTime:            run.EndTime,
 		InitialBalance:     run.InitialBalance,
 		ExchangeType:       run.ExchangeType,
-		FeeMaker:           run.FeeMaker,
+		FeeMaker:           run.FeeMaker, // already resolved (snapshot)
 		FeeTaker:           run.FeeTaker,
 		StrategyConfigJSON: run.StrategyConfigJSON,
 		ModelConfigJSON:    run.ModelConfigJSON,

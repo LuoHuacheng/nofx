@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -230,6 +231,40 @@ func TestBacktestAPIFlow(t *testing.T) {
 	}
 	if _, err := st.Backtest().GetRun("u1", runID); err == nil {
 		t.Fatal("run should be deleted")
+	}
+}
+
+// TestBacktestAPIConcurrency429 verifies the per-user running cap
+// surfaces as HTTP 429 Too Many Requests (design §4).
+func TestBacktestAPIConcurrency429(t *testing.T) {
+	s, _ := newBacktestTestServer(t)
+	// Blocking decider keeps two runs alive.
+	block := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(block) }) }
+	defer release()
+	s.backtestManager.SetDeciderBuilder(func(cfg backtest.RunConfig, strCfg *store.StrategyConfig, client mcp.AIClient, cache *backtest.AICache) backtest.Decider {
+		return backtest.DeciderFunc(func(dc *backtest.DecisionContext) []backtest.Decision {
+			<-block
+			return nil
+		})
+	})
+	body := map[string]any{
+		"symbols": []string{"BTCUSDT"}, "timeframe": "5m",
+		"start_time": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T01:00:00Z",
+		"initial_balance": 1000, "strategy_id": "s1", "model_id": "m1",
+	}
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, authedReq(t, http.MethodPost, "/api/backtest/start", body))
+		if w.Code != http.StatusOK {
+			t.Fatalf("start #%d = %d body=%s", i+1, w.Code, w.Body.String())
+		}
+	}
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, authedReq(t, http.MethodPost, "/api/backtest/start", body))
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("3rd concurrent start = %d, want 429 (body=%s)", w.Code, w.Body.String())
 	}
 }
 

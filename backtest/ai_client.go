@@ -18,9 +18,10 @@ import (
 // API handler builds it from the user's AIModel record at start time so
 // the run is reproducible.
 type ModelConfigSnapshot struct {
+	ModelID         string `json:"model_id,omitempty"` // store record id; API key is resolved from it at run time
 	Provider        string `json:"provider"`
-	Model           string `json:"model"`             // custom model name (custom provider)
-	APIKey          string `json:"api_key,omitempty"` // resolved at start time
+	Model           string `json:"model"`              // custom model name (custom provider)
+	APIKey          string `json:"api_key,omitempty"`  // transient: never persisted with the run
 	CustomAPIURL    string `json:"custom_api_url,omitempty"`
 	CustomModelName string `json:"custom_model_name,omitempty"`
 }
