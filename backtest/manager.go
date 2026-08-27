@@ -61,6 +61,9 @@ type RunManager struct {
 	runCancel     map[string]context.CancelFunc // engine-level cancel (stop/pause/timeout)
 	pauseByRun    map[string]bool
 
+	traceMu sync.Mutex
+	traces  map[string][]TraceEntry // in-memory trace buffer (diagnostics only)
+
 	retentionStop chan struct{}
 	started       bool
 	timeout       time.Duration
@@ -87,6 +90,7 @@ func NewRunManager(st *store.Store, feed FeedBuilder) *RunManager {
 		cancelByRun:   make(map[string]context.CancelFunc),
 		runCancel:     make(map[string]context.CancelFunc),
 		pauseByRun:    make(map[string]bool),
+		traces:        make(map[string][]TraceEntry),
 		retentionStop: make(chan struct{}),
 		timeout:       RunTimeout,
 	}
@@ -281,7 +285,9 @@ func (m *RunManager) execute(runID string, req StartRequest, cfg RunConfig, engi
 		defer flushDecisions(true)
 	}
 
-	eng, err := NewEngine(cfg, feed, decider)
+	eng, err := NewEngine(cfg, feed, decider, WithTrace(func(e TraceEntry) {
+		m.appendTrace(runID, e)
+	}))
 	if err != nil {
 		m.finish(runID, StatusFailed, fmt.Sprintf("engine init failed: %v", err), nil)
 		return
@@ -405,6 +411,34 @@ func (m *RunManager) finish(runID, status, errMsg string, metrics *Metrics) {
 	}
 }
 
+// appendTrace buffers a trace line per run (capped at 5000 entries,
+// oldest dropped). Traces are diagnostics only and are not persisted.
+func (m *RunManager) appendTrace(runID string, e TraceEntry) {
+	m.traceMu.Lock()
+	defer m.traceMu.Unlock()
+	buf := m.traces[runID]
+	if len(buf) >= 5000 {
+		buf = append(buf[:0], buf[1:]...)
+	}
+	m.traces[runID] = append(buf, e)
+}
+
+// Trace returns the buffered trace for a run, newest-first capped at
+// limit (default 100, max 5000).
+func (m *RunManager) Trace(runID string, limit int) []TraceEntry {
+	if limit <= 0 || limit > 5000 {
+		limit = 100
+	}
+	m.traceMu.Lock()
+	buf := m.traces[runID]
+	m.traceMu.Unlock()
+	out := make([]TraceEntry, 0, len(buf))
+	for i := len(buf) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, buf[i])
+	}
+	return out
+}
+
 func (m *RunManager) cleanup(runID string, engineCancel context.CancelFunc) {
 	engineCancel()
 	m.mu.Lock()
@@ -475,6 +509,9 @@ func (m *RunManager) Delete(userID, runID string) error {
 	if ok {
 		ec() // stop it first
 	}
+	m.traceMu.Lock()
+	delete(m.traces, runID)
+	m.traceMu.Unlock()
 	if m.st.GormDB() == nil {
 		return nil
 	}

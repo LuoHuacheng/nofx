@@ -137,6 +137,7 @@ func main() {
 
 	// Start API server
 	server := api.NewServer(traderManager, st, cryptoService, cfg.APIServerPort)
+	server.StartBacktestRetention()
 
 	go func() {
 		if err := server.Start(); err != nil {

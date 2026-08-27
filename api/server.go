@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"nofx/auth"
+	"nofx/backtest"
 	"nofx/crypto"
 	"nofx/logger"
 	"nofx/manager"
@@ -22,6 +23,7 @@ type Server struct {
 	router                    *gin.Engine
 	traderManager             *manager.TraderManager
 	store                     *store.Store
+	backtestManager           *backtest.RunManager
 	cryptoHandler             *CryptoHandler
 	exchangeAccountStateCache *ExchangeAccountStateCache
 	httpServer                *http.Server
@@ -47,6 +49,7 @@ func NewServer(traderManager *manager.TraderManager, st *store.Store, cryptoServ
 		router:                    router,
 		traderManager:             traderManager,
 		store:                     st,
+		backtestManager:           backtest.NewRunManager(st, marketBacktestFeed),
 		cryptoHandler:             cryptoHandler,
 		exchangeAccountStateCache: NewExchangeAccountStateCache(),
 		port:                      port,
@@ -451,7 +454,35 @@ Returns: {"total_trades":<int>,"winning_trades":<int>,"win_rate":<float>,"total_
 Returns: {"total_trades","win_trades","loss_trades","win_rate","profit_factor","sharpe_ratio","total_pnl","total_fee","avg_win","avg_loss","max_drawdown_pct"}`,
 				s.handleStatisticsFull)
 
+			// ===== Backtest subsystem (P3.4) =====
+			s.routeWithSchema(protected, "POST", "/backtest/start", "Start a historical backtest run",
+				`Body: {"name":"<string, optional>","symbols":["BTCUSDT","ETHUSDT"],"timeframe":"5m","start_time":"2026-01-01T00:00:00Z","end_time":"2026-01-02T00:00:00Z","initial_balance":1000,"strategy_id":"<EXACT id from GET /api/strategies>","model_id":"<EXACT id from GET /api/models>","exchange_id":"<optional, EXACT id from GET /api/exchanges — used for fee defaults>","fee_maker":0,"fee_taker":0}
+Limits: max 20 symbols, max 90 days span, min timeframe 1m, at most 2 running backtests per user (429 otherwise). Returns {"run_id":"<uuid>","status":"running"}.`,
+				s.handleBacktestStart)
+			s.routeWithSchema(protected, "POST", "/backtest/pause", "Pause a running backtest (stops execution; resume restarts it)", `Body: {"run_id":"<EXACT run_id from GET /api/backtest/runs>"}`, s.handleBacktestPause)
+			s.routeWithSchema(protected, "POST", "/backtest/resume", "Resume a paused backtest (restarts execution of the same configuration)", `Body: {"run_id":"<EXACT run_id from GET /api/backtest/runs>"}`, s.handleBacktestResume)
+			s.routeWithSchema(protected, "POST", "/backtest/stop", "Stop a running backtest", `Body: {"run_id":"<EXACT run_id from GET /api/backtest/runs>"}`, s.handleBacktestStop)
+			s.routeWithSchema(protected, "POST", "/backtest/delete", "Delete a backtest run and all its result data", `Body: {"run_id":"<EXACT run_id from GET /api/backtest/runs>"}`, s.handleBacktestDelete)
+			s.routeWithSchema(protected, "GET", "/backtest/status", "Get backtest run status", `Query: ?run_id=<EXACT run_id>`, s.handleBacktestStatus)
+			s.routeWithSchema(protected, "GET", "/backtest/runs", "List backtest runs", `Query: ?page=1&page_size=20&status=running|completed|failed|cancelled|paused|all (default all)`, s.handleBacktestRuns)
+			s.routeWithSchema(protected, "GET", "/backtest/equity", "Backtest equity curve points", `Query: ?run_id=<EXACT run_id>&from=<RFC3339>&to=<RFC3339>&limit=100 (max 5000)`, s.handleBacktestEquity)
+			s.routeWithSchema(protected, "GET", "/backtest/trades", "Backtest filled trades", `Query: ?run_id=<EXACT run_id>&from=<RFC3339>&to=<RFC3339>&limit=100 (max 5000)`, s.handleBacktestTrades)
+			s.routeWithSchema(protected, "GET", "/backtest/metrics", "Backtest final metrics", `Query: ?run_id=<EXACT run_id>`, s.handleBacktestMetrics)
+			s.routeWithSchema(protected, "GET", "/backtest/trace", "Backtest execution trace (newest first)", `Query: ?run_id=<EXACT run_id>&limit=100 (max 5000)`, s.handleBacktestTrace)
+			s.routeWithSchema(protected, "GET", "/backtest/decisions", "Backtest decision snapshots (newest first)", `Query: ?run_id=<EXACT run_id>&limit=100 (max 5000)`, s.handleBacktestDecisions)
+			s.routeWithSchema(protected, "GET", "/backtest/export", "Export backtest trades (CSV or JSON). >10k trades returns a download link.", `Query: ?run_id=<EXACT run_id>&format=csv|json (default json)`, s.handleBacktestExport)
+			s.route(protected, "GET", "/backtest/download/:filename", "Download a previously generated backtest export file", s.handleBacktestDownload)
+			s.route(protected, "GET", "/backtest/klines", "Historical klines for the backtest data picker (?symbol=&from=&to=&timeframe=)", s.handleBacktestKlines)
+
 		}
+	}
+}
+
+// StartBacktestRetention launches the periodic backtest retention
+// sweep (completed runs kept 30 days, §4). Called from main.go.
+func (s *Server) StartBacktestRetention() {
+	if s.backtestManager != nil {
+		s.backtestManager.StartRetention()
 	}
 }
 
@@ -467,9 +498,9 @@ func (s *Server) handleHealth(c *gin.Context) {
 func (s *Server) handleGetSystemConfig(c *gin.Context) {
 	userCount, _ := s.store.User().Count()
 	c.JSON(http.StatusOK, gin.H{
-		"initialized":            userCount > 0,
-		"btc_eth_leverage":       10,
-		"altcoin_leverage":       5,
+		"initialized":           userCount > 0,
+		"btc_eth_leverage":      10,
+		"altcoin_leverage":      5,
 		"claw402_guide_enabled": os.Getenv("CLAW402_GUIDE_ENABLED") != "false",
 	})
 }

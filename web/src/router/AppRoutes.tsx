@@ -25,6 +25,7 @@ import { BeginnerOnboardingPage } from '../pages/BeginnerOnboardingPage'
 import { DataPage } from '../pages/DataPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { StrategyStudioPage } from '../pages/StrategyStudioPage'
+import BacktestPage from '../pages/BacktestPage'
 import { TerminalDashboard } from '../components/terminal/TerminalDashboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -429,6 +430,18 @@ export function AppRoutes() {
             <AppChrome currentPage="data" showFooter={false}>
               <DataPage />
             </AppChrome>
+          }
+        />
+        <Route
+          path={ROUTES.backtest}
+          element={
+            isAuthenticated ? (
+              <AppChrome currentPage="backtest" showFooter={false}>
+                <BacktestPage />
+              </AppChrome>
+            ) : (
+              <Navigate to={ROUTES.login} replace />
+            )
           }
         />
         <Route

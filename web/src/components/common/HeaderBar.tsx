@@ -107,6 +107,12 @@ export default function HeaderBar({
                     requiresAuth: false,
                   },
                   {
+                    page: 'backtest',
+                    path: ROUTES.backtest,
+                    label: 'Backtest',
+                    requiresAuth: true,
+                  },
+                  {
                     page: 'strategy-market',
                     path: ROUTES.strategyMarket,
                     label: 'Market',
@@ -378,6 +384,12 @@ export default function HeaderBar({
                       path: ROUTES.data,
                       label: 'Data',
                       requiresAuth: false,
+                    },
+                    {
+                      page: 'backtest',
+                      path: ROUTES.backtest,
+                      label: 'Backtest',
+                      requiresAuth: true,
                     },
                     {
                       page: 'strategy-market',
