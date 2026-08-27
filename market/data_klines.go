@@ -14,8 +14,25 @@ import (
 
 // Note: Kline data now uses free/open API (coinank_api.Kline) which doesn't require authentication
 
-// getKlinesFromCoinAnk fetches kline data from CoinAnk API (replacement for WSMonitorCli)
+// getKlinesFromCoinAnk fetches kline data — WS cache first, REST fallback.
+//
+// Priority order:
+//  1. WS cache (in-memory ring fed by Binance/Bybit WebSocket streams)
+//  2. CoinAnk REST API (existing path, now lives in getKlinesFromCoinAnkREST)
+//
+// The WS path returns true from TryGetKlinesViaWS only after the cache holds
+// at least `limit` closed candles for the requested (exchange, symbol,
+// interval). Until then the call falls through to REST, which simultaneously
+// primes the WS subscription so subsequent calls are served from cache.
 func getKlinesFromCoinAnk(symbol, interval, exchange string, limit int) ([]Kline, error) {
+	if klines, ok, _ := TryGetKlinesViaWS(exchange, symbol, interval, limit); ok {
+		return klines, nil
+	}
+	return getKlinesFromCoinAnkREST(symbol, interval, exchange, limit)
+}
+
+// getKlinesFromCoinAnkREST fetches kline data from CoinAnk API (the original REST path).
+func getKlinesFromCoinAnkREST(symbol, interval, exchange string, limit int) ([]Kline, error) {
 	// Map interval string to coinank enum
 	var coinankInterval coinank_enum.Interval
 	switch interval {
