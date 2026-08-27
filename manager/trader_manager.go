@@ -678,8 +678,8 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		// 策略使用顺序：优先使用 trader 绑定的 vergex_signal 策略；当
 		// claw402 钱包未配置（vergex 付费数据源不可用）时，自动回退到
 		// 非 vergex_signal 的策略（激活的优先，其次系统默认）。
-		strategyConfig, strategyConfigRaw = resolveStrategyWithVergexFallback(
-			st, traderCfg, aiModelCfg, strategyConfig, strategyConfigRaw)
+		strategyConfig, strategyConfigRaw = trader.ResolveStrategyWithVergexFallback(
+			st, traderCfg.UserID, strategyConfig, strategyConfigRaw)
 	} else {
 		return fmt.Errorf("trader %s has no strategy configured", traderCfg.Name)
 	}
@@ -809,71 +809,6 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 	}
 
 	return nil
-}
-
-// isVergexSource reports whether a coin source is the paid Vergex
-// signal source (which requires a configured claw402 wallet).
-func isVergexSource(sourceType string) bool {
-	return strings.EqualFold(strings.TrimSpace(sourceType), "vergex_signal")
-}
-
-// parseNonVergexStrategy parses a strategy and returns its config only
-// when it is NOT a vergex_signal strategy (a usable fallback).
-func parseNonVergexStrategy(s *store.Strategy) (*store.StrategyConfig, string, bool) {
-	if s == nil {
-		return nil, "", false
-	}
-	cfg, err := s.ParseConfig()
-	if err != nil || isVergexSource(cfg.CoinSource.SourceType) {
-		return nil, "", false
-	}
-	cfg.ClampLimits()
-	return cfg, s.Config, true
-}
-
-// resolveStrategyWithVergexFallback implements the strategy priority
-// order: keep the trader's vergex_signal strategy while a claw402 wallet
-// is configured; when the wallet is missing (vergex data source
-// unusable), fall back to the user's active non-vergex strategy, then
-// the system default, then any non-vergex strategy. When nothing
-// suitable exists, the original strategy is kept and the engine reports
-// the concrete claw402-wallet error at runtime.
-func resolveStrategyWithVergexFallback(st *store.Store, traderCfg *store.Trader, aiModelCfg *store.AIModel, strategyConfig *store.StrategyConfig, strategyConfigRaw string) (*store.StrategyConfig, string) {
-	if strategyConfig == nil || !isVergexSource(strategyConfig.CoinSource.SourceType) {
-		return strategyConfig, strategyConfigRaw
-	}
-	if resolveTraderDataWalletKey(st, traderCfg.UserID, aiModelCfg) != "" {
-		return strategyConfig, strategyConfigRaw // wallet available, keep vergex
-	}
-
-	logger.Warnf("⚠️ Trader %s uses vergex_signal but no claw402 wallet is configured — falling back to a non-vergex strategy", traderCfg.Name)
-
-	// 1) The user's active strategy, when it is usable.
-	if active, err := st.Strategy().GetActive(traderCfg.UserID); err == nil {
-		if cfg, raw, ok := parseNonVergexStrategy(active); ok {
-			logger.Infof("↘️ Trader %s fell back to active strategy \"%s\"", traderCfg.Name, active.Name)
-			return cfg, raw
-		}
-	}
-	// 2) The system default strategy, when it is usable.
-	if def, err := st.Strategy().GetDefault(); err == nil {
-		if cfg, raw, ok := parseNonVergexStrategy(def); ok {
-			logger.Infof("↘️ Trader %s fell back to default strategy \"%s\"", traderCfg.Name, def.Name)
-			return cfg, raw
-		}
-	}
-	// 3) Any other non-vergex strategy of the user.
-	if list, err := st.Strategy().List(traderCfg.UserID); err == nil {
-		for _, s := range list {
-			if cfg, raw, ok := parseNonVergexStrategy(s); ok {
-				logger.Infof("↘️ Trader %s fell back to strategy \"%s\"", traderCfg.Name, s.Name)
-				return cfg, raw
-			}
-		}
-	}
-
-	logger.Warnf("⚠️ Trader %s: no non-vergex strategy found; keeping vergex_signal (requires a claw402 wallet)", traderCfg.Name)
-	return strategyConfig, strategyConfigRaw
 }
 
 func resolveTraderDataWalletKey(st *store.Store, userID string, selectedModel *store.AIModel) string {

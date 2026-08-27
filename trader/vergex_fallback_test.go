@@ -1,4 +1,4 @@
-package manager
+package trader
 
 import (
 	"encoding/json"
@@ -61,7 +61,6 @@ func TestResolveStrategyWithVergexFallback(t *testing.T) {
 	insertStrategy(t, st, "s-static", "u1", "Static Active", true, false, staticActive)
 
 	traderCfg := &store.Trader{ID: "t1", UserID: "u1", Name: "t1", StrategyID: "s-vergex"}
-	aiModelCfg := &store.AIModel{ID: "m-custom", UserID: "u1", Provider: "custom"}
 
 	// vergex config as loaded from the DB.
 	bound, err := st.Strategy().Get("u1", "s-vergex")
@@ -74,7 +73,7 @@ func TestResolveStrategyWithVergexFallback(t *testing.T) {
 	}
 
 	// Case 1: no claw402 wallet -> falls back to the active static strategy.
-	gotCfg, gotRaw := resolveStrategyWithVergexFallback(st, traderCfg, aiModelCfg, boundCfg, bound.Config)
+	gotCfg, gotRaw := ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
 	if gotCfg == nil || gotCfg.CoinSource.SourceType != "static" {
 		t.Fatalf("expected fallback to static strategy, got source=%q", sourceTypeOf(gotCfg))
 	}
@@ -86,7 +85,7 @@ func TestResolveStrategyWithVergexFallback(t *testing.T) {
 	if err := st.AIModel().Create("u1", "m-claw", "claw402", "claw402", true, "0xwalletkey", ""); err != nil {
 		t.Fatal(err)
 	}
-	gotCfg, gotRaw = resolveStrategyWithVergexFallback(st, traderCfg, aiModelCfg, boundCfg, bound.Config)
+	gotCfg, gotRaw = ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
 	if gotCfg == nil || gotCfg.CoinSource.SourceType != "vergex_signal" {
 		t.Fatalf("expected vergex kept when wallet configured, got %q", sourceTypeOf(gotCfg))
 	}
@@ -103,7 +102,6 @@ func TestResolveStrategyWithVergexFallbackDefaultAndNone(t *testing.T) {
 	insertStrategy(t, st, "s-def", "system", "System Default", false, true, staticDefault)
 
 	traderCfg := &store.Trader{ID: "t2", UserID: "u2", Name: "t2", StrategyID: "s-vergex"}
-	aiModelCfg := &store.AIModel{ID: "m-custom", UserID: "u2", Provider: "custom"}
 	// The trader's bound vergex strategy (u2 has no active strategy).
 	cfg := store.GetDefaultStrategyConfig("en")
 	cfg.CoinSource.SourceType = "vergex_signal"
@@ -111,7 +109,7 @@ func TestResolveStrategyWithVergexFallbackDefaultAndNone(t *testing.T) {
 	b, _ := json.Marshal(cfg)
 	bound := &store.Strategy{ID: "s-vergex", UserID: "u2", Name: "V", Config: string(b)}
 	boundCfg, _ := bound.ParseConfig()
-	gotCfg, _ := resolveStrategyWithVergexFallback(st, traderCfg, aiModelCfg, boundCfg, bound.Config)
+	gotCfg, _ := ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
 	if gotCfg == nil || gotCfg.CoinSource.SourceType != "static" {
 		t.Fatalf("expected fallback to system default static, got %q", sourceTypeOf(gotCfg))
 	}
@@ -123,7 +121,6 @@ func TestResolveStrategyKeepsNonVergex(t *testing.T) {
 	insertStrategy(t, st, "s-static", "u3", "Static", true, false, staticJSON)
 
 	traderCfg := &store.Trader{ID: "t3", UserID: "u3", Name: "t3", StrategyID: "s-static"}
-	aiModelCfg := &store.AIModel{ID: "m", UserID: "u3", Provider: "custom"}
 	bound, err := st.Strategy().Get("u3", "s-static")
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +129,7 @@ func TestResolveStrategyKeepsNonVergex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotCfg, gotRaw := resolveStrategyWithVergexFallback(st, traderCfg, aiModelCfg, boundCfg, bound.Config)
+	gotCfg, gotRaw := ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
 	if gotCfg.CoinSource.SourceType != "static" {
 		t.Fatalf("non-vergex strategy must pass through untouched")
 	}
@@ -151,7 +148,6 @@ func TestResolveStrategyNoUsableFallback(t *testing.T) {
 	insertStrategy(t, st, "s-v2", "u4", "V2", true, false, vergexJSON)
 
 	traderCfg := &store.Trader{ID: "t4", UserID: "u4", Name: "t4", StrategyID: "s-v1"}
-	aiModelCfg := &store.AIModel{ID: "m", UserID: "u4", Provider: "custom"}
 	bound, err := st.Strategy().Get("u4", "s-v1")
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +156,7 @@ func TestResolveStrategyNoUsableFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotCfg, gotRaw := resolveStrategyWithVergexFallback(st, traderCfg, aiModelCfg, boundCfg, bound.Config)
+	gotCfg, gotRaw := ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
 	if gotCfg == nil || gotCfg.CoinSource.SourceType != "vergex_signal" {
 		t.Fatalf("expected vergex kept when no fallback exists")
 	}

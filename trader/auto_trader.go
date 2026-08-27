@@ -438,6 +438,13 @@ func (at *AutoTrader) reloadStrategyConfigIfChanged() error {
 	}
 	strategyConfig.ClampLimits()
 
+	// 策略使用顺序：vergex_signal 优先；claw402 钱包未配置时回退到
+	// 非 vergex 策略（激活 > 系统默认 > 任意）。与 trader 加载时共用，
+	// 防止运行时刷新把降级覆盖回 vergex。
+	strategyConfigRaw := strategy.Config
+	strategyConfig, strategyConfigRaw = ResolveStrategyWithVergexFallback(
+		at.store, at.userID, strategyConfig, strategyConfigRaw)
+
 	// NOTE: this used to hardcode the Autopilot book shape (6 positions ×
 	// equity×1.2 notional), silently overriding whatever the user configured in
 	// their strategy. Sizing now comes from the strategy's own RiskControl —
@@ -450,7 +457,7 @@ func (at *AutoTrader) reloadStrategyConfigIfChanged() error {
 	}
 
 	at.config.StrategyConfig = strategyConfig
-	at.config.StrategyConfigRaw = strategy.Config
+	at.config.StrategyConfigRaw = strategyConfigRaw
 	at.strategyEngine = kernel.NewStrategyEngine(strategyConfig, claw402Key)
 	at.logInfof("🔄 Strategy config refreshed from DB: %s", strategy.Name)
 	return nil
