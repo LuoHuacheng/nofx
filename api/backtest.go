@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -143,7 +144,7 @@ func (s *Server) handleBacktestStart(c *gin.Context) {
 	})
 	if err != nil {
 		// The per-user concurrency cap surfaces as 429.
-		if strings.Contains(err.Error(), "concurrent") {
+		if errors.Is(err, backtest.ErrTooManyConcurrent) {
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
 			return
 		}
@@ -322,7 +323,7 @@ func (s *Server) handleBacktestExport(c *gin.Context) {
 			return
 		}
 		if format == "csv" {
-			c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=backtest-%s.csv", runID[:8]))
+			c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=backtest-%s.csv", runID))
 			c.Header("Content-Type", "text/csv")
 			c.String(http.StatusOK, tradesCSV(run, trades))
 			return
@@ -341,7 +342,7 @@ func (s *Server) handleBacktestExport(c *gin.Context) {
 		SafeInternalError(c, "Failed to create export dir", err)
 		return
 	}
-	filename := fmt.Sprintf("backtest-%s.%s", runID[:8], format)
+	filename := fmt.Sprintf("backtest-%s.%s", runID, format)
 	path := filepath.Join(dir, filename)
 	if err := writeExportFile(path, format, run, s.store, runID); err != nil {
 		SafeInternalError(c, "Failed to write export", err)
@@ -352,10 +353,27 @@ func (s *Server) handleBacktestExport(c *gin.Context) {
 }
 
 // handleBacktestDownload serves a previously generated export file.
+// Ownership is enforced by parsing the run ID out of the filename
+// (format: backtest-<runID>.<format>) and checking it belongs to the
+// requesting user.
 func (s *Server) handleBacktestDownload(c *gin.Context) {
+	userID := c.GetString("user_id")
 	filename := c.Param("filename")
 	if filename == "" || strings.Contains(filename, "/") || strings.Contains(filename, "..") {
 		SafeBadRequest(c, "invalid filename")
+		return
+	}
+	// backtest-<runID>.<format>
+	runID := strings.TrimPrefix(filename, "backtest-")
+	if idx := strings.LastIndex(runID, "."); idx > 0 {
+		runID = runID[:idx]
+	}
+	if runID == "" {
+		SafeBadRequest(c, "invalid filename")
+		return
+	}
+	if !runBelongsTo(s, userID, runID) {
+		SafeBadRequest(c, "run not found")
 		return
 	}
 	dir := os.Getenv("BACKTEST_EXPORT_DIR")
@@ -377,6 +395,10 @@ func (s *Server) handleBacktestKlines(c *gin.Context) {
 	from, to := parseTimeRange(c)
 	if from == nil || to == nil {
 		SafeBadRequest(c, "from/to are required (RFC3339)")
+		return
+	}
+	if to.Sub(*from) > backtest.MaxRunSpan {
+		SafeBadRequest(c, "time span exceeds the 90-day limit")
 		return
 	}
 	klines, err := market.GetKlinesRange(symbol, tf, *from, *to)

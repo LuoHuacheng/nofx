@@ -17,14 +17,12 @@ type walletValidateRequest struct {
 }
 
 type walletValidateResponse struct {
-	Valid        bool   `json:"valid"`
-	Address      string `json:"address,omitempty"`
-	BalanceUSDC  string `json:"balance_usdc,omitempty"`
+	Valid         bool   `json:"valid"`
+	Address       string `json:"address,omitempty"`
+	BalanceUSDC   string `json:"balance_usdc,omitempty"`
 	Claw402Status string `json:"claw402_status"` // "ok", "unreachable", "error"
-	Error        string `json:"error,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
-
-
 
 func (s *Server) handleWalletValidate(c *gin.Context) {
 	var req walletValidateRequest
@@ -84,14 +82,12 @@ func (s *Server) handleWalletValidate(c *gin.Context) {
 	claw402Status := checkClaw402Health()
 
 	c.JSON(http.StatusOK, walletValidateResponse{
-		Valid:        true,
-		Address:      addrHex,
-		BalanceUSDC:  balanceStr,
+		Valid:         true,
+		Address:       addrHex,
+		BalanceUSDC:   balanceStr,
 		Claw402Status: claw402Status,
 	})
 }
-
-
 
 type walletGenerateResponse struct {
 	Address    string `json:"address"`

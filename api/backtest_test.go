@@ -268,6 +268,30 @@ func TestBacktestAPIConcurrency429(t *testing.T) {
 	}
 }
 
+// TestBacktestDownloadGuards verifies the export download route rejects
+// path traversal, malformed names and other users' runs.
+func TestBacktestDownloadGuards(t *testing.T) {
+	s, st := newBacktestTestServer(t)
+	// A completed run owned by u1.
+	run := &store.BacktestRun{ID: "dl-run-1", UserID: "other-user", Status: "completed", Symbols: "[]"}
+	if err := st.Backtest().CreateRun(run); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct{ name, path string }{
+		{"traversal", "/api/backtest/download/..%2F..%2Fetc%2Fpasswd"},
+		{"no run id", "/api/backtest/download/backtest-.json"},
+		{"foreign run", "/api/backtest/download/backtest-dl-run-1.json"},
+	}
+	for _, tc := range cases {
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, authedReq(t, http.MethodGet, tc.path, nil))
+		if w.Code == http.StatusOK {
+			t.Fatalf("%s: expected rejection, got 200", tc.name)
+		}
+	}
+}
+
 // TestBacktestAPIRoutesRequireAuth verifies the protected routes reject
 // unauthenticated requests.
 func TestBacktestAPIRoutesRequireAuth(t *testing.T) {

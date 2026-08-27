@@ -3,6 +3,7 @@ package backtest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -14,6 +15,10 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// ErrTooManyConcurrent is returned by Start when the user already has
+// MaxRunningPerUser runs executing; the API maps it to HTTP 429.
+var ErrTooManyConcurrent = errors.New("too many concurrent backtests")
 
 // StartRequest is the manager's input for launching a backtest run. The
 // API handler (P3.4) resolves the strategy + model snapshots and passes
@@ -51,7 +56,6 @@ type RunManager struct {
 	st       *store.Store
 	lock     *RunLock
 	registry *RunRegistry
-	cache    *AICache
 	feed     FeedBuilder
 	decider  DeciderBuilder
 
@@ -84,7 +88,6 @@ func NewRunManager(st *store.Store, feed FeedBuilder) *RunManager {
 		st:            st,
 		lock:          NewRunLock(),
 		registry:      NewRunRegistry(),
-		cache:         NewAICache(2000),
 		feed:          feed,
 		runningByUser: make(map[string]int),
 		cancelByRun:   make(map[string]context.CancelFunc),
@@ -179,7 +182,7 @@ func (m *RunManager) Start(req StartRequest) (string, error) {
 	m.mu.Lock()
 	if m.runningByUser[req.UserID] >= MaxRunningPerUser {
 		m.mu.Unlock()
-		return "", fmt.Errorf("too many concurrent backtests: at most %d running per user", MaxRunningPerUser)
+		return "", fmt.Errorf("%w: at most %d running per user", ErrTooManyConcurrent, MaxRunningPerUser)
 	}
 	m.runningByUser[req.UserID]++
 	m.mu.Unlock()
@@ -191,6 +194,12 @@ func (m *RunManager) Start(req StartRequest) (string, error) {
 	defer m.lock.Release(runID)
 
 	if err := m.persistStart(req, runID); err != nil {
+		// persistStart failed: the goroutine never starts, so release the
+		// per-user running slot here (otherwise two failures would lock
+		// the user out with 429s until process restart).
+		m.mu.Lock()
+		m.runningByUser[req.UserID]--
+		m.mu.Unlock()
 		return "", err
 	}
 
@@ -259,8 +268,12 @@ func (m *RunManager) execute(runID string, req StartRequest, cfg RunConfig, engi
 	// Build the decider (kernel adapter by default). The API key is
 	// resolved from the store at execution time (never persisted in the
 	// run snapshot); ModelID in the snapshot points back to the record.
+	// Each run gets its own AI cache so identical-looking contexts from
+	// different runs (same user, different strategy/model) can never
+	// share cached decisions.
 	client := NewAIClientFromSnapshot(m.resolveModelSnapshot(req))
-	decider := m.deciderFor(cfg, req.StrategyConfig, client)
+	runCache := NewAICache(2000)
+	decider := m.deciderFor(cfg, req.StrategyConfig, client, runCache)
 	if decider == nil {
 		m.finish(runID, StatusFailed, "decider init failed", nil)
 		return
@@ -333,14 +346,14 @@ func (m *RunManager) execute(runID string, req StartRequest, cfg RunConfig, engi
 	m.finish(runID, StatusCompleted, "", &metrics)
 }
 
-func (m *RunManager) deciderFor(cfg RunConfig, strCfg *store.StrategyConfig, client mcp.AIClient) Decider {
+func (m *RunManager) deciderFor(cfg RunConfig, strCfg *store.StrategyConfig, client mcp.AIClient, cache *AICache) Decider {
 	m.mu.Lock()
 	db := m.decider
 	m.mu.Unlock()
 	if db == nil {
 		return nil
 	}
-	return db(cfg, strCfg, client, m.cache)
+	return db(cfg, strCfg, client, cache)
 }
 
 // persistResult writes equity, trades and metrics for a finished run.
@@ -396,6 +409,13 @@ func (m *RunManager) finish(runID, status, errMsg string, metrics *Metrics) {
 		rec.EndedAt = time.Now()
 		rec.Err = errMsg
 	})
+	// Bound per-run trace memory once the run is terminal: keep the last
+	// 1000 entries for the trace API, drop the rest.
+	m.traceMu.Lock()
+	if buf := m.traces[runID]; len(buf) > 1000 {
+		m.traces[runID] = append(buf[:0], buf[len(buf)-1000:]...)
+	}
+	m.traceMu.Unlock()
 	if m.st.GormDB() == nil {
 		return
 	}

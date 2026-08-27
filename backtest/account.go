@@ -189,13 +189,18 @@ func (a *BacktestAccount) Close(symbol string, price float64, t time.Time) (Back
 	}
 	notional := p.Qty * price
 	fee := notional * a.feeTaker
-	pnl := p.UnrealizedPnL(price) - fee - p.FundingPaid
-	// Return locked margin plus net PnL (fees and funding already inside pnl).
-	a.balance += p.MarginUsed() + pnl
-	a.realizedPnL += pnl
+	pricePnL := p.UnrealizedPnL(price)
+	// Funding was already applied to cash incrementally by ApplyFunding, so
+	// only the price PnL and the close fee move the balance here — adding
+	// FundingPaid again would double-count it.
+	a.balance += p.MarginUsed() + pricePnL - fee
+	// The trade's reported PnL keeps funding attribution (what the user
+	// expects a trade result to include).
+	tradePnL := pricePnL - fee - p.FundingPaid
+	a.realizedPnL += tradePnL
 
 	trade := BacktestTrade{
-		Time: t, Symbol: symbol, Side: closeSide, Position: "close", Price: price, Size: p.Qty, Fee: fee, PnL: pnl,
+		Time: t, Symbol: symbol, Side: closeSide, Position: "close", Price: price, Size: p.Qty, Fee: fee, PnL: tradePnL,
 	}
 	a.trades = append(a.trades, trade)
 	delete(a.positions, symbol)

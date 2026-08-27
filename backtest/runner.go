@@ -99,6 +99,7 @@ func (r *KernelRunner) SetDecisionHook(fn func(t time.Time, contextJSON, decisio
 
 // Decide implements backtest.Decider (§2.3: one call per bar event).
 func (r *KernelRunner) Decide(dc *DecisionContext) []Decision {
+	r.callCount++
 	ctx, ok := r.buildContext(dc)
 	if !ok {
 		return nil
@@ -149,6 +150,13 @@ func (r *KernelRunner) buildContext(dc *DecisionContext) (*kernel.Context, bool)
 		bars := dc.Feed.History(sym, dc.Time)
 		if len(bars) == 0 {
 			continue // no data at this point; pruneCandidateCoins drops it
+		}
+		// Trim to the trailing kline window so the prompt and the indicator
+		// series match the live GetWithTimeframes(symbol, tfs, primary,
+		// klineCount) semantics; without this the full run history would
+		// enter the prompt and indicators would be O(n²) per cycle.
+		if len(bars) > r.klineCount {
+			bars = bars[len(bars)-r.klineCount:]
 		}
 		klines := toKlines(bars, r.tf)
 		data, err := market.BuildDataFromKlines(sym, r.timeframe, klines, nil)
@@ -222,8 +230,9 @@ func (r *KernelRunner) klineDigest(dc *DecisionContext) string {
 	h := sha256.New()
 	for _, sym := range dc.Feed.Symbols() {
 		bars := dc.Feed.History(sym, dc.Time)
-		// Include only the trailing window (same as the prompt) plus the
-		// window size; bars are consumed monotonically so this is exact.
+		// Superset of the prompt window (klineCount + 8): the digest changes
+		// slightly before the window slides, which only costs an occasional
+		// extra cache miss, never a stale hit. Bars are consumed monotonically.
 		n := len(bars)
 		if n > r.klineCount+8 {
 			n = r.klineCount + 8

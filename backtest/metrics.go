@@ -52,7 +52,9 @@ func ComputeMetrics(equity []EquityPoint, trades []BacktestTrade, initialBalance
 	m.MaxDrawdownPct = maxDD
 
 	// Sharpe: mean(period return)/std(period return) * sqrt(periods/year).
-	// Use only periods with more than one point.
+	// ponytail: mixed interval+forced sampling makes the average spacing
+	// an approximation — fine for a reference metric, not a research
+	// grade Sharpe. Use only periods with more than one point.
 	returns := make([]float64, 0, len(equity)-1)
 	for i := 1; i < len(equity); i++ {
 		prev := equity[i-1].Equity
