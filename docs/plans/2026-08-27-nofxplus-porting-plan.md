@@ -143,7 +143,10 @@
 - 移除 Lighter、PostgreSQL、Telegram 的改动：与当前功能目标相反。
 - nofxplus 中多次 rollback、debug、临时验证和重复 README commit：不具备可移植价值。
 
-## P2 实施进度
+### P2.2：盘口异常监控
+
+**Status:** 已移植。只读检测盘口不平衡、成交量 spike、快速价格变化；增加阈值输入校验和诊断字段，暂不连接下单触发。
+
 
 ### P2.1：市场微结构分析
 
