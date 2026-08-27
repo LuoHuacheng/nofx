@@ -30,6 +30,7 @@ type Store struct {
 	grid           *GridStore
 	aiCharge       *AIChargeStore
 	telegramConfig TelegramConfigStore
+	backtest       *BacktestStore
 
 	mu sync.RWMutex
 }
@@ -163,6 +164,9 @@ func (s *Store) initTables() error {
 	}
 	if err := s.AICharge().initTables(); err != nil {
 		return fmt.Errorf("failed to initialize AI charge tables: %w", err)
+	}
+	if err := s.Backtest().initTables(); err != nil {
+		return fmt.Errorf("failed to initialize backtest tables: %w", err)
 	}
 	return nil
 }
@@ -305,6 +309,16 @@ func (s *Store) TelegramConfig() TelegramConfigStore {
 		s.telegramConfig = NewTelegramConfigStore(s.gdb)
 	}
 	return s.telegramConfig
+}
+
+// Backtest gets backtest run storage
+func (s *Store) Backtest() *BacktestStore {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.backtest == nil {
+		s.backtest = NewBacktestStore(s.gdb)
+	}
+	return s.backtest
 }
 
 // Close closes database connection
