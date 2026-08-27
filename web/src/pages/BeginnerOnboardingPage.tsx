@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Copy, RefreshCw, Shield, Wallet, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
-import { useLanguage } from '../contexts/LanguageContext'
 import { api } from '../lib/api'
 import type { BeginnerOnboardingResponse } from '../types'
 import {
@@ -12,14 +11,12 @@ import {
 } from '../lib/onboarding'
 
 export function BeginnerOnboardingPage() {
-  const { language } = useLanguage()
   const navigate = useNavigate()
   const [data, setData] = useState<BeginnerOnboardingResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshingBalance, setRefreshingBalance] = useState(false)
   const hasRequestedRef = useRef(false)
-  const isZh = language === 'zh'
 
   const loadOnboarding = async (showLoading: boolean) => {
     if (showLoading) {
@@ -35,11 +32,7 @@ export function BeginnerOnboardingPage() {
       setBeginnerWalletAddress(result.address)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : isZh
-            ? 'Failed to prepare beginner wallet'
-            : 'Failed to prepare beginner wallet'
+        err instanceof Error ? err.message : 'Failed to prepare beginner wallet'
       )
     } finally {
       if (showLoading) {
@@ -88,18 +81,18 @@ export function BeginnerOnboardingPage() {
 
   const noticeText = useMemo(
     () =>
-      isZh
-        ? 'This wallet only pays for model calls. It does not fund your exchange automatically. The private key cannot be recovered, and you should only deposit Base USDC.'
-        : 'This wallet only pays for model calls. It does not fund your exchange automatically. The private key cannot be recovered, and you should only deposit Base USDC.',
-    [isZh]
+      'This wallet only pays for model calls. It does not fund your exchange automatically. The private key cannot be recovered, and you should only deposit Base USDC.',
+    []
   )
+
+  // ponytail: en-only since LanguageContext hardcodes language=en
 
   const copyText = async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value)
-      toast.success(isZh ? `${label} copied` : `${label} copied`)
+      toast.success(`${label} copied`)
     } catch {
-      toast.error(isZh ? 'Copy failed' : 'Copy failed')
+      toast.error('Copy failed')
     }
   }
 
@@ -116,7 +109,7 @@ export function BeginnerOnboardingPage() {
           type="button"
           onClick={handleContinue}
           className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(26,24,19,0.14)] bg-nofx-text/5 text-nofx-text-muted transition hover:border-[rgba(26,24,19,0.24)] hover:bg-nofx-text/10 hover:text-nofx-text"
-          aria-label={isZh ? 'Skip' : 'Skip'}
+          aria-label="Skip"
         >
           <X className="h-5 w-5" />
         </button>
@@ -127,45 +120,26 @@ export function BeginnerOnboardingPage() {
                 <Shield className="h-6 w-6" />
               </div>
               <div>
-                <div
-                  className={`font-semibold uppercase text-nofx-gold/80 ${
-                    isZh
-                      ? 'text-[11px] tracking-[0.34em]'
-                      : 'text-[10px] tracking-[0.2em]'
-                  }`}
-                >
-                  {isZh ? 'Beginner Guard' : 'Beginner Guard'}
+                <div className="font-semibold uppercase text-nofx-gold/80 text-[10px] tracking-[0.2em]">
+                  Beginner Guard
                 </div>
-                <h1
-                  className={`mt-2 font-bold leading-[1.04] text-nofx-text ${
-                    isZh
-                      ? 'text-[34px] tracking-tight sm:text-[44px] xl:text-[52px] xl:whitespace-nowrap'
-                      : 'max-w-[720px] text-[27px] tracking-[-0.03em] sm:text-[35px] xl:text-[42px]'
-                  }`}
-                >
-                  {isZh ? 'Your wallet is ready' : 'Your wallet is ready'}
+                <h1 className="mt-2 max-w-[720px] text-[27px] font-bold leading-[1.04] tracking-[-0.03em] text-nofx-text sm:text-[35px] xl:text-[42px]">
+                  Your wallet is ready
                 </h1>
               </div>
             </div>
 
-            <div
-              className={`pb-2 text-nofx-text-muted lg:text-right ${
-                isZh
-                  ? 'text-sm tracking-[0.18em] lg:whitespace-nowrap'
-                  : 'text-[13px] tracking-[0.12em] lg:whitespace-nowrap'
-              }`}
-            >
-              Claw402 + DeepSeek <span className="mx-2 text-nofx-text-muted">·</span>
-              {isZh ? 'Pay per call' : 'Pay per call'}
+            <div className="pb-2 text-[13px] tracking-[0.12em] text-nofx-text-muted lg:whitespace-nowrap lg:text-right">
+              Claw402 + DeepSeek{' '}
+              <span className="mx-2 text-nofx-text-muted">·</span>
+              Pay per call
             </div>
           </div>
 
           <div className="overflow-hidden rounded-[32px] border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter shadow-lg backdrop-blur-2xl">
             {loading ? (
               <div className="flex min-h-[390px] items-center justify-center px-6 text-sm text-nofx-text-muted">
-                {isZh
-                  ? 'Preparing your Base wallet...'
-                  : 'Preparing your Base wallet...'}
+                Preparing your Base wallet...
               </div>
             ) : data ? (
               <div className="grid lg:grid-cols-[0.82fr_1.18fr]">
@@ -176,9 +150,7 @@ export function BeginnerOnboardingPage() {
                     </div>
 
                     <div className="mt-4 text-[15px] font-medium text-nofx-text">
-                      {isZh
-                        ? 'Deposit address (Base USDC)'
-                        : 'Deposit address (Base USDC)'}
+                      Deposit address (Base USDC)
                     </div>
 
                     <div className="mt-4 flex items-center justify-between gap-3 rounded-[24px] border border-nofx-success/20 bg-nofx-success/10 px-5 py-3.5">
@@ -195,7 +167,7 @@ export function BeginnerOnboardingPage() {
                         onClick={() => void loadOnboarding(false)}
                         disabled={refreshingBalance}
                         className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-nofx-success/20 bg-nofx-bg-deeper text-nofx-success transition hover:bg-nofx-success/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        aria-label={isZh ? 'Refresh balance' : 'Refresh balance'}
+                        aria-label="Refresh balance"
                       >
                         <RefreshCw
                           className={`h-4 w-4 ${refreshingBalance ? 'animate-spin' : ''}`}
@@ -214,9 +186,9 @@ export function BeginnerOnboardingPage() {
                         Don&apos;t have USDC yet?
                       </div>
                       Buy USDC on Binance, OKX or Coinbase, then withdraw it to
-                      the address above — and pick the{' '}
-                      <b>Base network</b> when the exchange asks. It usually
-                      arrives in about a minute. Only send USDC on Base.
+                      the address above — and pick the <b>Base network</b> when
+                      the exchange asks. It usually arrives in about a minute.
+                      Only send USDC on Base.
                     </div>
                   </div>
                 </section>
@@ -226,7 +198,7 @@ export function BeginnerOnboardingPage() {
                     <div>
                       <div className="mb-3 flex items-center gap-2 text-sm font-medium text-nofx-gold">
                         <Wallet className="h-4 w-4" />
-                        <span>{isZh ? 'Wallet address' : 'Wallet address'}</span>
+                        <span>Wallet address</span>
                       </div>
                       <div className="flex items-stretch gap-3">
                         <div className="min-w-0 flex-1 rounded-2xl border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-5 py-3 font-mono text-[14px] text-nofx-text">
@@ -234,11 +206,9 @@ export function BeginnerOnboardingPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            copyText(data.address, isZh ? 'Address' : 'Address')
-                          }
+                          onClick={() => copyText(data.address, 'Address')}
                           className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[rgba(26,24,19,0.14)] bg-nofx-text/5 text-nofx-text transition hover:border-[rgba(26,24,19,0.24)] hover:bg-nofx-text/10 hover:text-nofx-text"
-                          aria-label={isZh ? 'Copy address' : 'Copy address'}
+                          aria-label="Copy address"
                         >
                           <Copy className="h-5 w-5" />
                         </button>
@@ -248,11 +218,7 @@ export function BeginnerOnboardingPage() {
                     <div className="pt-1">
                       <div className="mb-3 flex items-center gap-2 text-sm font-medium text-nofx-gold">
                         <Shield className="h-4 w-4" />
-                        <span>
-                          {isZh
-                            ? 'Private key, back it up now'
-                            : 'Private key, back it up now'}
-                        </span>
+                        <span>Private key, back it up now</span>
                       </div>
                       <div className="flex items-stretch gap-3">
                         <div className="min-w-0 flex-1 rounded-[24px] border border-nofx-gold/20 bg-nofx-gold/10 px-5 py-3 font-mono text-[13px] leading-6 text-nofx-text">
@@ -264,13 +230,10 @@ export function BeginnerOnboardingPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              copyText(
-                                data.private_key,
-                                isZh ? 'Private key' : 'Private key'
-                              )
+                              copyText(data.private_key, 'Private key')
                             }
                             className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-nofx-gold/20 bg-nofx-gold/10 text-nofx-gold transition hover:bg-nofx-gold/15"
-                            aria-label={isZh ? 'Copy private key' : 'Copy private key'}
+                            aria-label="Copy private key"
                           >
                             <Copy className="h-5 w-5" />
                           </button>
@@ -278,13 +241,7 @@ export function BeginnerOnboardingPage() {
                       </div>
                     </div>
 
-                    <div
-                      className={`rounded-[24px] border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-5 py-3.5 text-nofx-text-muted ${
-                        isZh
-                          ? 'text-xs lg:whitespace-nowrap'
-                          : 'text-[11px] leading-6'
-                      }`}
-                    >
+                    <div className="rounded-[24px] border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-5 py-3.5 text-[11px] leading-6 text-nofx-text-muted">
                       <span className="mr-2 text-nofx-text-muted">•</span>
                       {noticeText}
                     </div>
@@ -304,9 +261,7 @@ export function BeginnerOnboardingPage() {
                     <button
                       type="button"
                       onClick={handleContinue}
-                      className={`mt-1 flex w-full items-center justify-center gap-3 rounded-[24px] bg-nofx-gold px-5 py-3.5 font-bold text-nofx-bg transition hover:bg-nofx-gold-highlight ${
-                        isZh ? 'text-[20px]' : 'text-[16px] sm:text-[18px]'
-                      }`}
+                      className="mt-1 flex w-full items-center justify-center gap-3 rounded-[24px] bg-nofx-gold px-5 py-3.5 text-[16px] font-bold text-nofx-bg transition hover:bg-nofx-gold-highlight sm:text-[18px]"
                     >
                       <span>Continue setup</span>
                       <ArrowRight className="h-5 w-5" />
@@ -314,9 +269,7 @@ export function BeginnerOnboardingPage() {
 
                     {data.env_saved ? (
                       <div className="pt-1 text-xs text-nofx-text-muted">
-                        {isZh
-                          ? `Wallet details were also saved to ${data.env_path || '.env'}`
-                          : `Wallet details were also saved to ${data.env_path || '.env'}`}
+                        {`Wallet details were also saved to ${data.env_path || '.env'}`}
                       </div>
                     ) : null}
                   </div>

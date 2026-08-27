@@ -7,12 +7,11 @@ interface OnboardingModeSelectorProps {
 }
 
 export function OnboardingModeSelector({
-  language,
   mode,
   onChange,
 }: OnboardingModeSelectorProps) {
-  const isZh = language === 'zh'
-
+  // ponytail: was isZh-branched but the en text was identical on both branches;
+  // collapsed to en since LanguageContext is English-only.
   const options: Array<{
     id: UserMode
     title: string
@@ -21,25 +20,23 @@ export function OnboardingModeSelector({
   }> = [
     {
       id: 'beginner',
-      title: isZh ? 'Beginner Mode' : 'Beginner Mode',
-      badge: isZh ? 'Recommended' : 'Recommended',
-      description: isZh
-        ? 'Generate a Base wallet automatically and start with Claw402 + GLM by default.'
-        : 'Generate a Base wallet automatically and start with Claw402 + GLM by default.',
+      title: 'Beginner Mode',
+      badge: 'Recommended',
+      description:
+        'Generate a Base wallet automatically and start with Claw402 + GLM by default.',
     },
     {
       id: 'advanced',
-      title: isZh ? 'Advanced Mode' : 'Advanced Mode',
-      description: isZh
-        ? 'Keep the full manual flow and configure models, wallets, and exchanges yourself.'
-        : 'Keep the full manual flow and configure models, wallets, and exchanges yourself.',
+      title: 'Advanced Mode',
+      description:
+        'Keep the full manual flow and configure models, wallets, and exchanges yourself.',
     },
   ]
 
   return (
     <div className="space-y-2">
       <div className="text-xs font-medium text-nofx-text-muted">
-        {isZh ? 'Experience' : 'Experience'}
+        Experience
       </div>
       <div className="grid grid-cols-1 gap-2">
         {options.map((option) => {

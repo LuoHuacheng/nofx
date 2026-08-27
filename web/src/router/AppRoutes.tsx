@@ -29,6 +29,7 @@ import { TerminalDashboard } from '../components/terminal/TerminalDashboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useSystemConfig } from '../hooks/useSystemConfig'
+import { isClaw402GuideEnabled } from '../lib/config'
 import { t } from '../i18n/translations'
 import { api } from '../lib/api'
 import type {
@@ -447,9 +448,12 @@ export function AppRoutes() {
           element={
             // The welcome overlay is the AI-wallet deposit page (QR +
             // auto-refreshing balance) — useful to every signed-in user, so
-            // no legacy "beginner mode" gate here.
+            // no legacy "beginner mode" gate here. Hidden entirely when the
+            // Claw402 guide is disabled via CLAW402_GUIDE_ENABLED.
             isAuthenticated ? (
-              <TradersRoute showBeginnerOnboarding />
+              <TradersRoute
+                showBeginnerOnboarding={isClaw402GuideEnabled(systemConfig)}
+              />
             ) : (
               <Navigate to={ROUTES.login} replace />
             )

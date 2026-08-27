@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
+  Bot,
   CheckCircle2,
   CircleDollarSign,
   Download,
@@ -11,8 +12,21 @@ import {
   Zap,
 } from 'lucide-react'
 import { ROUTES } from '../../router/paths'
+import { getCachedSystemConfig, isClaw402GuideEnabled } from '../../lib/config'
 
-const setupSteps = [
+interface SetupStep {
+  title: string
+  detail: string
+  icon: typeof KeyRound
+  action: string
+  to?: string
+  href?: string
+  returnUrl?: string
+  /** Only shown when the Claw402 guide is enabled (CLAW402_GUIDE_ENABLED) */
+  claw402Only?: boolean
+}
+
+const setupSteps: SetupStep[] = [
   {
     title: 'Create your NOFX account',
     detail:
@@ -29,6 +43,7 @@ const setupSteps = [
     action: 'Open deposit QR',
     to: ROUTES.login,
     returnUrl: `${ROUTES.traders}?setup=claw402`,
+    claw402Only: true,
   },
   {
     title: 'Authorize Hyperliquid',
@@ -55,7 +70,25 @@ const pipeline = [
   'Confirm with raw OHLCV candles, then trade full-size 10x only when the setup is strong enough.',
 ]
 
+/** Shown instead of the Claw402 funding step when the guide is disabled */
+const modelSetupStep: SetupStep = {
+  title: 'Configure an AI model',
+  detail:
+    'Add an API key from DeepSeek, OpenAI, or any supported provider after signing in. The AI reads markets and decides through it.',
+  icon: Bot,
+  action: 'Add model key',
+  to: ROUTES.login,
+  returnUrl: `${ROUTES.traders}?setup=model`,
+}
+
 export function TraderLaunchGuestPage() {
+  // ponytail: read once per mount; config is fetched at app bootstrap so the
+  // cache is warm in practice
+  const claw402GuideEnabled = isClaw402GuideEnabled(getCachedSystemConfig())
+  const visibleSteps = claw402GuideEnabled
+    ? setupSteps
+    : [...setupSteps.filter((step) => !step.claw402Only), modelSetupStep]
+
   return (
     <div className="min-h-[calc(100vh-4rem)] overflow-hidden bg-nofx-bg px-4 py-10 md:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
@@ -77,6 +110,7 @@ export function TraderLaunchGuestPage() {
               <Link
                 to={ROUTES.login}
                 onClick={() =>
+                  claw402GuideEnabled &&
                   sessionStorage.setItem(
                     'returnUrl',
                     `${ROUTES.traders}?setup=claw402`
@@ -97,7 +131,7 @@ export function TraderLaunchGuestPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            {setupSteps.map((step, index) => {
+            {visibleSteps.map((step, index) => {
               const Icon = step.icon
               const cardClass =
                 'group rounded-xl border border-nofx-gold/20 bg-nofx-bg-deeper p-4 text-left transition hover:border-nofx-gold/35 hover:bg-nofx-gold/[0.06]'

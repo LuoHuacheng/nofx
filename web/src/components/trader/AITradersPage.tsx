@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { api } from '../../lib/api'
+import { getCachedSystemConfig, isClaw402GuideEnabled } from '../../lib/config'
 import { ApiError } from '../../lib/httpClient'
 import { ROUTES } from '../../router/paths'
 import type {
@@ -670,9 +671,15 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     if (setupTarget === 'claw402') {
       // The welcome page shows the deposit QR, auto-creates the wallet if
       // needed, and polls the balance — friendlier than the key-config modal.
-      navigate(ROUTES.welcome)
+      if (isClaw402GuideEnabled(getCachedSystemConfig())) {
+        navigate(ROUTES.welcome)
+      }
     } else if (setupTarget === 'hyperliquid') {
       handleOpenHyperliquidConfig()
+    } else if (setupTarget === 'model') {
+      // Entry for configuring a non-Claw402 provider (e.g. from the guest
+      // page when the Claw402 guide is disabled).
+      handleAddModel()
     } else if (setupTarget === 'hyperliquid-funds') {
       // Funding shortfall: bring the guided launch panel (with the trading
       // balance step and live preflight polling) into view.
@@ -689,7 +696,15 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     const nextParams = new URLSearchParams(searchParams)
     nextParams.delete('setup')
     setSearchParams(nextParams, { replace: true })
-  }, [allExchanges, allModels, searchParams, setSearchParams, supportedModels, token, user])
+  }, [
+    allExchanges,
+    allModels,
+    searchParams,
+    setSearchParams,
+    supportedModels,
+    token,
+    user,
+  ])
 
   const refreshLaunchState = async () => {
     await Promise.all([loadConfigs(), mutateTraders()])
