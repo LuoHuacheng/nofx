@@ -63,6 +63,7 @@
    - 作用：以交易所实际成交价而不是本地估算价重新计算 PnL，修正滑点、部分成交和交易所撮合差异导致的收益统计偏差。
    - 当前差距：当前已有仓位和订单同步，但需要确认实际成交价是否贯穿本地 position/equity 统计。
    - 风险：中。不能覆盖原始审计数据，只能追加交易所校准字段或在统计读取层使用已确认的成交记录。
+   - **审计结论：无需重复移植。** 当前各交易所 `order_sync.go` 已将实际 fill price、filled quantity、fee 和 realized PnL 写入 `TraderFill`，`ClosePositionWithAccurateData` 也已持久化真实成交数据；nofxplus 版本依赖旧 SQLite schema 和旧 AutoTrader 结构，直接搬会重复并破坏当前 GORM 数据流。
 
 3. **自适应扫描间隔**
    - 来源：nofxplus commit `59ccc09b`。
@@ -146,6 +147,8 @@
 
 ### Task 1：Provider 抽象与 DIY fallback
 
+**Status:** Completed in commit `50c66af`.
+
 **Files:**
 - Create or adapt: `provider/data_provider.go`
 - Create or adapt: `provider/diy_quant.go`
@@ -174,6 +177,8 @@ func GetWithProviderFallback(ctx context.Context, primary, fallback DataProvider
 
 ### Task 2：真实成交价校准 PnL
 
+**Status:** Audited; no code ported because the current code already persists exchange fill prices/PnL through each exchange sync path and `ClosePositionWithAccurateData`.
+
 **Files:**
 - Inspect and modify: `trader/auto_trader.go`
 - Inspect and modify: `store/position.go`, `store/order.go`, `store/equity.go`
@@ -189,6 +194,8 @@ func GetWithProviderFallback(ctx context.Context, primary, fallback DataProvider
 
 ### Task 3：自适应扫描间隔
 
+**Status:** Completed together with Task 4 in the current P1 implementation. Feature flag defaults to false.
+
 **Files:**
 - Inspect and modify: `trader/auto_trader_loop.go` and the owning scan configuration type
 - Modify: `config/config.go` or the narrowest existing runtime config file
@@ -203,6 +210,8 @@ func GetWithProviderFallback(ctx context.Context, primary, fallback DataProvider
 - 增加冷却，避免 interval 在相邻周期剧烈抖动。
 
 ### Task 4：订单同步间隔配置
+
+**Status:** Completed together with Task 3 in the current P1 implementation. Default remains 30 seconds; `ORDER_SYNC_INTERVAL_SECONDS` is bounded to 5 seconds–15 minutes.
 
 **Files:**
 - Inspect and modify: the existing trader order/position sync loop

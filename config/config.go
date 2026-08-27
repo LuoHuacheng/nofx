@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // insecureDefaultJWTSecret is the historical fallback value. Refusing to boot when
@@ -48,6 +49,9 @@ type Config struct {
 	// Set EXPERIENCE_IMPROVEMENT=false to disable
 	ExperienceImprovement bool
 
+	// Order synchronization interval for exchange fallback polling.
+	OrderSyncInterval time.Duration
+
 	// Market data provider API keys
 	AlpacaAPIKey    string // Alpaca API key for US stocks
 	AlpacaSecretKey string // Alpaca secret key
@@ -77,13 +81,14 @@ func initConfig() error {
 		APIServerPort:         8080,
 		ExperienceImprovement: true, // Default: enabled to help improve the product
 		// Database defaults
-		DBType:    "sqlite",
-		DBPath:    "data/data.db",
-		DBHost:    "localhost",
-		DBPort:    5432,
-		DBUser:    "postgres",
-		DBName:    "nofx",
-		DBSSLMode: "disable",
+		DBType:            "sqlite",
+		DBPath:            "data/data.db",
+		DBHost:            "localhost",
+		DBPort:            5432,
+		DBUser:            "postgres",
+		DBName:            "nofx",
+		DBSSLMode:         "disable",
+		OrderSyncInterval: defaultOrderSyncInterval,
 	}
 
 	// Load from environment variables
@@ -119,6 +124,7 @@ func initConfig() error {
 	}
 
 	// Market data provider API keys
+	cfg.OrderSyncInterval = parseOrderSyncInterval(os.Getenv("ORDER_SYNC_INTERVAL_SECONDS"))
 	cfg.AlpacaAPIKey = os.Getenv("ALPACA_API_KEY")
 	cfg.AlpacaSecretKey = os.Getenv("ALPACA_SECRET_KEY")
 	cfg.TwelveDataKey = os.Getenv("TWELVEDATA_API_KEY")

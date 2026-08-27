@@ -30,6 +30,10 @@ type FeatureFlags struct {
 	// open-interest source is unavailable. Disabled by default because the OI
 	// change value is a proxy, not historical exchange data.
 	EnableDIYQuantFallback bool
+
+	// EnableAdaptiveScanInterval shortens scan intervals during volatile markets.
+	// Disabled by default to preserve current live-trading cadence.
+	EnableAdaptiveScanInterval bool
 }
 
 // DefaultFeatureFlags returns sensible defaults
@@ -40,6 +44,7 @@ func DefaultFeatureFlags() FeatureFlags {
 		DriftAlertThresholdPct:       10.0, // Alert on >10% drift
 		VerboseDriftLogging:          false,
 		EnableDIYQuantFallback:       false,
+		EnableAdaptiveScanInterval:   false,
 	}
 }
 
@@ -49,6 +54,8 @@ func DefaultFeatureFlags() FeatureFlags {
 //	FEATURE_CALIBRATE_STARTUP=true/false
 //	FEATURE_DRIFT_ALERT_PCT=<float>
 //	FEATURE_VERBOSE_DRIFT_LOGGING=true/false
+//	FEATURE_DIY_QUANT_FALLBACK=true/false
+//	FEATURE_ADAPTIVE_SCAN_INTERVAL=true/false
 func LoadFeatureFlagsFromEnv() FeatureFlags {
 	flags := DefaultFeatureFlags()
 
@@ -82,18 +89,25 @@ func LoadFeatureFlagsFromEnv() FeatureFlags {
 		}
 	}
 
+	if val := os.Getenv("FEATURE_ADAPTIVE_SCAN_INTERVAL"); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			flags.EnableAdaptiveScanInterval = b
+		}
+	}
+
 	return flags
 }
 
 // String returns human-readable summary of enabled features
 func (ff FeatureFlags) String() string {
 	return fmt.Sprintf(
-		"[AdaptiveMicrostructure: %v, CalibrateStartup: %v, DriftAlertPct: %.1f%%, VerboseDriftLogging: %v, DIYQuantFallback: %v]",
+		"[AdaptiveMicrostructure: %v, CalibrateStartup: %v, DriftAlertPct: %.1f%%, VerboseDriftLogging: %v, DIYQuantFallback: %v, AdaptiveScanInterval: %v]",
 		ff.EnableAdaptiveMicrostructure,
 		ff.CalibrateOnStartup,
 		ff.DriftAlertThresholdPct,
 		ff.VerboseDriftLogging,
 		ff.EnableDIYQuantFallback,
+		ff.EnableAdaptiveScanInterval,
 	)
 }
 
@@ -132,4 +146,9 @@ func IsAdaptiveMicrostructureEnabled() bool {
 // IsDIYQuantFallbackEnabled returns whether Binance-derived OI fallback is on.
 func IsDIYQuantFallbackEnabled() bool {
 	return Features().EnableDIYQuantFallback
+}
+
+// IsAdaptiveScanIntervalEnabled returns whether scan intervals adjust to activity.
+func IsAdaptiveScanIntervalEnabled() bool {
+	return Features().EnableAdaptiveScanInterval
 }

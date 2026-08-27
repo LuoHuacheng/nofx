@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"nofx/config"
 	"nofx/logger"
 	"nofx/store"
 	"nofx/trader"
@@ -699,6 +700,7 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		CustomAPIURL:          aiModelCfg.CustomAPIURL,
 		CustomModelName:       aiModelCfg.CustomModelName,
 		ScanInterval:          time.Duration(traderCfg.ScanIntervalMinutes) * time.Minute,
+		OrderSyncInterval:     config.OrderSyncInterval(),
 		InitialBalance:        traderCfg.InitialBalance,
 		IsCrossMargin:         traderCfg.IsCrossMargin,
 		ShowInCompetition:     traderCfg.ShowInCompetition,

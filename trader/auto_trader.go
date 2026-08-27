@@ -3,6 +3,7 @@ package trader
 import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "nofx/config"
 	"nofx/kernel"
 	"nofx/logger"
 	"nofx/mcp"
@@ -142,7 +143,8 @@ type AutoTraderConfig struct {
 	Claw402WalletKey string
 
 	// Scan configuration
-	ScanInterval time.Duration // Scan interval (recommended 15 minutes)
+	ScanInterval      time.Duration // Scan interval (recommended 15 minutes)
+	OrderSyncInterval time.Duration // Order sync interval (default 30 seconds)
 
 	// Account configuration
 	InitialBalance float64 // Initial balance (for P&L calculation, must be set manually)
@@ -476,74 +478,75 @@ func (at *AutoTrader) Run() error {
 	at.startDrawdownMonitor()
 
 	// Start Lighter order sync if using Lighter exchange
+	orderSyncInterval := resolveOrderSyncInterval(at.config.OrderSyncInterval)
 	if at.exchange == "lighter" {
 		if lighterTrader, ok := at.trader.(*lighter.LighterTraderV2); ok && at.store != nil {
-			lighterTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Lighter order+position sync enabled (every 30s)")
+			lighterTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Lighter order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start Hyperliquid order sync if using Hyperliquid exchange
 	if at.exchange == "hyperliquid" {
 		if hyperliquidTrader, ok := at.trader.(*hyperliquid.HyperliquidTrader); ok && at.store != nil {
-			hyperliquidTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Hyperliquid order+position sync enabled (every 30s)")
+			hyperliquidTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Hyperliquid order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start Bybit order sync if using Bybit exchange
 	if at.exchange == "bybit" {
 		if bybitTrader, ok := at.trader.(*bybit.BybitTrader); ok && at.store != nil {
-			bybitTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Bybit order+position sync enabled (every 30s)")
+			bybitTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Bybit order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start OKX order sync if using OKX exchange
 	if at.exchange == "okx" {
 		if okxTrader, ok := at.trader.(*okx.OKXTrader); ok && at.store != nil {
-			okxTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 OKX order+position sync enabled (every 30s)")
+			okxTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 OKX order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start Bitget order sync if using Bitget exchange
 	if at.exchange == "bitget" {
 		if bitgetTrader, ok := at.trader.(*bitget.BitgetTrader); ok && at.store != nil {
-			bitgetTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Bitget order+position sync enabled (every 30s)")
+			bitgetTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Bitget order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start Aster order sync if using Aster exchange
 	if at.exchange == "aster" {
 		if asterTrader, ok := at.trader.(*aster.AsterTrader); ok && at.store != nil {
-			asterTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Aster order+position sync enabled (every 30s)")
+			asterTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Aster order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start Binance order sync if using Binance exchange
 	if at.exchange == "binance" {
 		if binanceTrader, ok := at.trader.(*binance.FuturesTrader); ok && at.store != nil {
-			binanceTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Binance order+position sync enabled (every 30s)")
+			binanceTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Binance order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start Gate order sync if using Gate exchange
 	if at.exchange == "gate" {
 		if gateTrader, ok := at.trader.(*gate.GateTrader); ok && at.store != nil {
-			gateTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 Gate order+position sync enabled (every 30s)")
+			gateTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 Gate order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
 	// Start KuCoin order sync if using KuCoin exchange
 	if at.exchange == "kucoin" {
 		if kucoinTrader, ok := at.trader.(*kucoin.KuCoinTrader); ok && at.store != nil {
-			kucoinTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, 30*time.Second, at.stopMonitorCh)
-			at.logInfof("🔄 KuCoin order+position sync enabled (every 30s)")
+			kucoinTrader.StartOrderSync(at.id, at.exchangeID, at.exchange, at.store, orderSyncInterval, at.stopMonitorCh)
+			at.logInfof("🔄 KuCoin order+position sync enabled (every %v)", orderSyncInterval)
 		}
 	}
 
@@ -557,8 +560,18 @@ func (at *AutoTrader) Run() error {
 		}
 	}
 
+	// Start with the configured interval. Adaptive mode is opt-in and
+	// recomputes it from recent activity every five minutes.
+	currentInterval := at.config.ScanInterval
+	if appconfig.IsAdaptiveScanIntervalEnabled() {
+		currentInterval = at.calculateAdaptiveScanInterval()
+	}
+	if currentInterval <= 0 {
+		currentInterval = 3 * time.Minute
+	}
+
 	// Execute immediately on first run
-	at.logInfof("▶️ Running first trading cycle immediately; next cycle starts after %v", at.config.ScanInterval)
+	at.logInfof("▶️ Running first trading cycle immediately; next cycle starts after %v", currentInterval)
 	if isGridStrategy {
 		if err := at.RunGridCycle(); err != nil {
 			at.logErrorf("❌ Grid execution failed: %v", err)
@@ -569,8 +582,9 @@ func (at *AutoTrader) Run() error {
 		}
 	}
 
-	ticker := time.NewTicker(at.config.ScanInterval)
+	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
+	lastIntervalAdjustment := time.Now()
 
 	for {
 		at.isRunningMutex.RLock()
@@ -591,6 +605,14 @@ func (at *AutoTrader) Run() error {
 				if err := at.runCycle(); err != nil {
 					at.logErrorf("❌ Execution failed: %v", err)
 				}
+			}
+			if appconfig.IsAdaptiveScanIntervalEnabled() && time.Since(lastIntervalAdjustment) >= 5*time.Minute {
+				if nextInterval := at.calculateAdaptiveScanInterval(); nextInterval != currentInterval {
+					at.logInfof("🔄 Adjusting scan interval from %v to %v based on recent activity", currentInterval, nextInterval)
+					currentInterval = nextInterval
+					ticker.Reset(currentInterval)
+				}
+				lastIntervalAdjustment = time.Now()
 			}
 		case <-at.stopMonitorCh:
 			at.logInfof("⏹ Stop signal received, exiting automatic trading main loop")
