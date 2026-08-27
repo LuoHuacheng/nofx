@@ -559,7 +559,8 @@ export const faqCategories: FAQCategory[] = [
       },
       {
         id: 'exchange-unreachable',
-        question: 'The exchange account shows "invalid credentials" or "unavailable".',
+        question:
+          'The exchange account shows "invalid credentials" or "unavailable".',
         blocks: [
           {
             type: 'list',

@@ -59,7 +59,10 @@ export function ResetPasswordPage() {
           {/* CLI recovery instructions */}
           <div
             className="rounded-lg p-6"
-            style={{ background: '#F7F4EC', border: '1px solid rgba(26,24,19,0.14)' }}
+            style={{
+              background: '#F7F4EC',
+              border: '1px solid rgba(26,24,19,0.14)',
+            }}
           >
             <p
               className="text-sm leading-relaxed mb-4"
@@ -70,12 +73,12 @@ export function ResetPasswordPage() {
 
             <div
               className="flex items-center justify-between gap-3 rounded px-3 py-3 font-mono text-xs"
-              style={{ background: '#E8E2D5', border: '1px solid rgba(26,24,19,0.14)' }}
+              style={{
+                background: '#E8E2D5',
+                border: '1px solid rgba(26,24,19,0.14)',
+              }}
             >
-              <code
-                className="break-all"
-                style={{ color: '#E0483B' }}
-              >
+              <code className="break-all" style={{ color: '#E0483B' }}>
                 {RESET_PASSWORD_COMMAND}
               </code>
               <button

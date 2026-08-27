@@ -121,7 +121,10 @@ export async function launchAutopilot(
   } catch (err) {
     // The server re-runs preflight on start; surface its structured result if
     // readiness changed between our check and the start call.
-    if (err instanceof ApiError && err.errorKey === 'trader.start.preflight_failed') {
+    if (
+      err instanceof ApiError &&
+      err.errorKey === 'trader.start.preflight_failed'
+    ) {
       const preflight = err.errorData?.preflight
       if (preflight) {
         return {

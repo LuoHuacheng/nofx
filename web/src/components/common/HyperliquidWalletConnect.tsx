@@ -1217,7 +1217,7 @@ export function HyperliquidWalletConnect({
 
       {(open || inline) && (
         <div
-          className={`${inline ? 'relative w-full' : 'absolute right-0 top-full mt-2 w-[min(420px,calc(100vw-2rem))] shadow-2xl shadow-black/10'} max-h-[calc(100vh-5.5rem)] overflow-y-auto rounded-2xl border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter z-[80]`}
+          className={`${inline ? 'relative w-full' : 'absolute right-0 top-full mt-2 w-[min(420px,calc(100vw-2rem))] shadow-2xl shadow-black/10'} max-h-[calc(100vh-5.5rem)] overflow-y-auto rounded-2xl border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter`}
         >
           <div className="flex items-start justify-between gap-4 border-b border-[rgba(26,24,19,0.14)] p-4 sm:p-5">
             <div className="min-w-0">

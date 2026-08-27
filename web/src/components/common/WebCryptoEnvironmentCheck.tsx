@@ -4,12 +4,7 @@ import { CryptoService, diagnoseWebCryptoEnvironment } from '../../lib/crypto'
 import { t, type Language } from '../../i18n/translations'
 
 export type WebCryptoCheckStatus =
-  | 'idle'
-  | 'checking'
-  | 'secure'
-  | 'insecure'
-  | 'unsupported'
-  | 'disabled' // Transport encryption disabled
+  'idle' | 'checking' | 'secure' | 'insecure' | 'unsupported' | 'disabled' // Transport encryption disabled
 
 interface WebCryptoEnvironmentCheckProps {
   language: Language

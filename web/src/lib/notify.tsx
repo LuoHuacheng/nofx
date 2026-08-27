@@ -10,8 +10,8 @@ export interface ConfirmOptions {
 
 // Reference to the global confirm function, set inside ConfirmDialogProvider
 let globalConfirm:
-  | ((options: ConfirmOptions & { message: string }) => Promise<boolean>)
-  | null = null
+  ((options: ConfirmOptions & { message: string }) => Promise<boolean>) | null =
+  null
 
 export function setGlobalConfirm(
   confirmFn: (options: ConfirmOptions & { message: string }) => Promise<boolean>

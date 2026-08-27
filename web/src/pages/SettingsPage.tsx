@@ -368,7 +368,9 @@ export function SettingsPage() {
             <div className="space-y-6">
               <div>
                 <p className="text-xs text-nofx-text-muted mb-1">Email</p>
-                <p className="text-sm text-nofx-text font-medium">{user?.email}</p>
+                <p className="text-sm text-nofx-text font-medium">
+                  {user?.email}
+                </p>
               </div>
 
               <div className="border-t border-[rgba(26,24,19,0.14)] pt-6">

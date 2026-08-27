@@ -73,10 +73,7 @@ export default function AgentGrid() {
               <Crosshair className="w-4 h-4" /> ASSET CLASS SELECT
             </div>
             <h2 className="text-4xl md:text-5xl font-black text-nofx-text uppercase tracking-tighter">
-              PROFESSIONAL{' '}
-              <span className="text-nofx-gold">
-                TRADERS
-              </span>
+              PROFESSIONAL <span className="text-nofx-gold">TRADERS</span>
             </h2>
           </div>
           <div className="font-mono text-right text-xs text-nofx-text-muted max-w-xs">

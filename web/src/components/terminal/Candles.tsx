@@ -14,7 +14,12 @@ interface CandlesProps {
  * (GET /api/klines). Up candles use the terminal's profit green, down candles
  * the loss red. Purely presentational — the parent fetches the real series.
  */
-export function Candles({ data, width = 640, height = 150, fill = false }: CandlesProps) {
+export function Candles({
+  data,
+  width = 640,
+  height = 150,
+  fill = false,
+}: CandlesProps) {
   const candles = useMemo(() => {
     if (!data || data.length === 0) return []
     const slice = data.slice(-40)
@@ -58,7 +63,13 @@ export function Candles({ data, width = 640, height = 150, fill = false }: Candl
         const color = c.up ? 'var(--tm-up)' : 'var(--tm-dn)'
         return (
           <g key={i} stroke={color} fill={color}>
-            <line x1={c.cx} y1={c.wickTop} x2={c.cx} y2={c.wickBot} strokeWidth={1} />
+            <line
+              x1={c.cx}
+              y1={c.wickTop}
+              x2={c.cx}
+              y2={c.wickBot}
+              strokeWidth={1}
+            />
             <rect
               x={c.cx - c.bodyW / 2}
               y={c.bodyTop}

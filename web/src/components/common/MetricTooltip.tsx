@@ -20,7 +20,8 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     key: 'total_return',
     nameEn: 'Total Return',
     nameZh: 'Total Return',
-    formula: 'R_{total} = \\frac{V_{end} - V_{start}}{V_{start}} \\times 100\\%',
+    formula:
+      'R_{total} = \\frac{V_{end} - V_{start}}{V_{start}} \\times 100\\%',
     descriptionEn: 'Measures overall portfolio performance from start to end',
     descriptionZh: 'Measures overall portfolio performance from start to end',
   },
@@ -36,7 +37,8 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     key: 'max_drawdown',
     nameEn: 'Maximum Drawdown',
     nameZh: 'Maximum Drawdown',
-    formula: 'MDD = \\max_{t} \\left( \\frac{Peak_t - Trough_t}{Peak_t} \\right)',
+    formula:
+      'MDD = \\max_{t} \\left( \\frac{Peak_t - Trough_t}{Peak_t} \\right)',
     descriptionEn: 'Largest peak-to-trough decline during the period',
     descriptionZh: 'Largest peak-to-trough decline during the period',
   },
@@ -45,8 +47,10 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     nameEn: 'Sharpe Ratio',
     nameZh: 'Sharpe Ratio',
     formula: 'SR = \\frac{\\bar{r} - r_f}{\\sigma}',
-    descriptionEn: 'Risk-adjusted return per unit of volatility (r̄=avg return, rf=risk-free rate, σ=std dev)',
-    descriptionZh: 'Risk-adjusted return per unit of volatility (r̄=avg return, rf=risk-free rate, σ=std dev)',
+    descriptionEn:
+      'Risk-adjusted return per unit of volatility (r̄=avg return, rf=risk-free rate, σ=std dev)',
+    descriptionZh:
+      'Risk-adjusted return per unit of volatility (r̄=avg return, rf=risk-free rate, σ=std dev)',
   },
   sortino_ratio: {
     key: 'sortino_ratio',
@@ -143,7 +147,10 @@ interface FormulaRendererProps {
   displayMode?: boolean
 }
 
-function FormulaRenderer({ formula, displayMode = true }: FormulaRendererProps) {
+function FormulaRenderer({
+  formula,
+  displayMode = true,
+}: FormulaRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -184,7 +191,11 @@ export function MetricTooltip({
   className = '',
 }: MetricTooltipProps) {
   const [show, setShow] = useState(false)
-  const [position, setPosition] = useState<TooltipPosition>({ top: 100, left: 100, placement: 'bottom' })
+  const [position, setPosition] = useState<TooltipPosition>({
+    top: 100,
+    left: 100,
+    placement: 'bottom',
+  })
   const buttonRef = useRef<HTMLButtonElement>(null)
   const tooltipWidth = 340
   const tooltipHeight = 220
@@ -203,7 +214,10 @@ export function MetricTooltip({
 
     // Clamp to viewport bounds with padding
     const padding = 16
-    left = Math.max(padding, Math.min(left, viewportWidth - tooltipWidth - padding))
+    left = Math.max(
+      padding,
+      Math.min(left, viewportWidth - tooltipWidth - padding)
+    )
 
     // Decide placement: prefer bottom for reliability
     const spaceBelow = viewportHeight - rect.bottom
@@ -241,8 +255,12 @@ export function MetricTooltip({
   }
 
   const name = language === 'zh' ? metric.nameZh : metric.nameEn
-  const description = language === 'zh' ? metric.descriptionZh : metric.descriptionEn
-  const formulaLabel = t('metricTooltip.formula', language as 'en' | 'zh' | 'id')
+  const description =
+    language === 'zh' ? metric.descriptionZh : metric.descriptionEn
+  const formulaLabel = t(
+    'metricTooltip.formula',
+    language as 'en' | 'zh' | 'id'
+  )
 
   const tooltipContent = (
     <div
@@ -267,52 +285,71 @@ export function MetricTooltip({
         }}
       >
         {/* Header */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          marginBottom: '12px',
-          paddingBottom: '8px',
-          borderBottom: '1px solid rgba(26,24,19,0.14)'
-        }}>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: '#E0483B'
-          }} />
-          <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#1A1813' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '12px',
+            paddingBottom: '8px',
+            borderBottom: '1px solid rgba(26,24,19,0.14)',
+          }}
+        >
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: '#E0483B',
+            }}
+          />
+          <span
+            style={{ fontWeight: 'bold', fontSize: '14px', color: '#1A1813' }}
+          >
             {name}
           </span>
         </div>
 
         {/* Formula */}
-        <div style={{
-          background: '#E8E2D5',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '12px'
-        }}>
-          <div style={{ fontSize: '12px', color: '#8A8478', marginBottom: '8px' }}>
+        <div
+          style={{
+            background: '#E8E2D5',
+            borderRadius: '8px',
+            padding: '12px',
+            marginBottom: '12px',
+          }}
+        >
+          <div
+            style={{ fontSize: '12px', color: '#8A8478', marginBottom: '8px' }}
+          >
             {formulaLabel}
           </div>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: '8px 4px',
-            color: '#1A1813',
-            overflowX: 'auto',
-            overflowY: 'hidden',
-            maxWidth: '100%',
-            WebkitOverflowScrolling: 'touch',
-          }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '8px 4px',
+              color: '#1A1813',
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              maxWidth: '100%',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
             <FormulaRenderer formula={metric.formula} displayMode={false} />
           </div>
         </div>
 
         {/* Description */}
-        <p style={{ fontSize: '12px', lineHeight: '1.5', color: '#8A8478', margin: 0 }}>
+        <p
+          style={{
+            fontSize: '12px',
+            lineHeight: '1.5',
+            color: '#8A8478',
+            margin: 0,
+          }}
+        >
           {description}
         </p>
       </div>
@@ -353,9 +390,15 @@ interface MetricLabelProps {
   className?: string
 }
 
-export function MetricLabel({ metricKey, label, language = 'en', className = '' }: MetricLabelProps) {
+export function MetricLabel({
+  metricKey,
+  label,
+  language = 'en',
+  className = '',
+}: MetricLabelProps) {
   const metric = METRIC_DEFINITIONS[metricKey]
-  const displayLabel = label || (language === 'zh' ? metric?.nameZh : metric?.nameEn) || metricKey
+  const displayLabel =
+    label || (language === 'zh' ? metric?.nameZh : metric?.nameEn) || metricKey
 
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>

@@ -9,7 +9,10 @@ export const telegramApi = {
   },
 
   async updateTelegramConfig(token: string, modelId?: string): Promise<void> {
-    const result = await httpClient.post(`${API_BASE}/telegram`, { bot_token: token, model_id: modelId ?? '' })
+    const result = await httpClient.post(`${API_BASE}/telegram`, {
+      bot_token: token,
+      model_id: modelId ?? '',
+    })
     if (!result.success) throw new Error('Failed to save Telegram config')
   },
 
@@ -19,7 +22,9 @@ export const telegramApi = {
   },
 
   async updateTelegramModel(modelId: string): Promise<void> {
-    const result = await httpClient.post(`${API_BASE}/telegram/model`, { model_id: modelId })
+    const result = await httpClient.post(`${API_BASE}/telegram/model`, {
+      model_id: modelId,
+    })
     if (!result.success) throw new Error('Failed to update Telegram model')
   },
 }

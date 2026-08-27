@@ -90,7 +90,9 @@ describe('RegistrationDisabled Component', () => {
       const { container } = renderComponent()
       const mainDiv = container.firstChild as HTMLElement
       // Browser converts hex to rgb (cream paper theme)
-      expect(mainDiv.style.background).toMatch(/rgb\(241,\s*236,\s*226\)|#F1ECE2/i)
+      expect(mainDiv.style.background).toMatch(
+        /rgb\(241,\s*236,\s*226\)|#F1ECE2/i
+      )
     })
 
     it('should have correct text color', () => {

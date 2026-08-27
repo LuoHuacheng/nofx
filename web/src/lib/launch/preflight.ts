@@ -1,9 +1,5 @@
 import { API_BASE, httpClient } from '../api/helpers'
-import type {
-  LaunchCheck,
-  LaunchPreflightResult,
-  SetupTarget,
-} from './types'
+import type { LaunchCheck, LaunchPreflightResult, SetupTarget } from './types'
 
 export interface LaunchPreflightRequest {
   ai_model_id: string

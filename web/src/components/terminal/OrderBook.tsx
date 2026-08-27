@@ -43,7 +43,8 @@ function resolveCoin(base: string, xyzSet: Set<string>): string {
 }
 
 function fmtPx(px: number): string {
-  if (px >= 1000) return px.toLocaleString('en-US', { maximumFractionDigits: 1 })
+  if (px >= 1000)
+    return px.toLocaleString('en-US', { maximumFractionDigits: 1 })
   if (px >= 1) return px.toLocaleString('en-US', { maximumFractionDigits: 3 })
   return px.toLocaleString('en-US', { maximumFractionDigits: 5 })
 }
@@ -66,7 +67,9 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
   const base = useMemo(() => baseSymbol(symbol || ''), [symbol])
   const [xyzSet, setXyzSet] = useState<Set<string>>(new Set())
   const [book, setBook] = useState<BookState | null>(null)
-  const [status, setStatus] = useState<'connecting' | 'live' | 'down'>('connecting')
+  const [status, setStatus] = useState<'connecting' | 'live' | 'down'>(
+    'connecting'
+  )
 
   // one-time: fetch the xyz dex coin universe so we can resolve symbols
   useEffect(() => {
@@ -80,7 +83,8 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
       .then((mids: Record<string, string>) => {
         if (!alive) return
         const set = new Set<string>()
-        for (const k of Object.keys(mids || {})) set.add(k.replace(/^xyz:/, '').toUpperCase())
+        for (const k of Object.keys(mids || {}))
+          set.add(k.replace(/^xyz:/, '').toUpperCase())
         setXyzSet(set)
       })
       .catch(() => {
@@ -103,12 +107,21 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
     let mid = seed
     let frame = 0
     const mkSizes = () =>
-      Array.from({ length: DEPTH }, (_, i) => +(rnd(0.4, 6) * (1 + i * 0.12)).toFixed(3))
+      Array.from(
+        { length: DEPTH },
+        (_, i) => +(rnd(0.4, 6) * (1 + i * 0.12)).toFixed(3)
+      )
     const askSz = mkSizes()
     const bidSz = mkSizes()
     const emit = () => {
-      const asks: Level[] = askSz.map((sz, i) => ({ px: +(mid + tickSz * (i + 1)).toFixed(dp), sz }))
-      const bids: Level[] = bidSz.map((sz, i) => ({ px: +(mid - tickSz * (i + 1)).toFixed(dp), sz }))
+      const asks: Level[] = askSz.map((sz, i) => ({
+        px: +(mid + tickSz * (i + 1)).toFixed(dp),
+        sz,
+      }))
+      const bids: Level[] = bidSz.map((sz, i) => ({
+        px: +(mid - tickSz * (i + 1)).toFixed(dp),
+        sz,
+      }))
       setBook({ coin: `xyz:${base}`, bids, asks })
     }
     setStatus('live')
@@ -124,7 +137,11 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
       // gentle mean-reverting wiggle around the seed (NO unbounded drift, so the
       // order book stays aligned with the cost/liq map + candle over a long run)
       if (frame % 5 === 0) {
-        mid = +(mid + (seed - mid) * 0.3 + (Math.random() - 0.5) * tickSz * 2).toFixed(dp)
+        mid = +(
+          mid +
+          (seed - mid) * 0.3 +
+          (Math.random() - 0.5) * tickSz * 2
+        ).toFixed(dp)
       }
       emit()
     }, 130)
@@ -144,7 +161,12 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
       setStatus('connecting')
       ws = new WebSocket(HL_WS)
       ws.onopen = () => {
-        ws?.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'l2Book', coin } }))
+        ws?.send(
+          JSON.stringify({
+            method: 'subscribe',
+            subscription: { type: 'l2Book', coin },
+          })
+        )
       }
       ws.onmessage = (ev) => {
         try {
@@ -153,8 +175,14 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
           const lv = msg.data.levels
           if (!Array.isArray(lv) || lv.length < 2) return
           const toLevels = (arr: { px: string; sz: string }[]): Level[] =>
-            arr.slice(0, DEPTH).map((l) => ({ px: parseFloat(l.px), sz: parseFloat(l.sz) }))
-          pending.current = { coin: msg.data.coin, bids: toLevels(lv[0]), asks: toLevels(lv[1]) }
+            arr
+              .slice(0, DEPTH)
+              .map((l) => ({ px: parseFloat(l.px), sz: parseFloat(l.sz) }))
+          pending.current = {
+            coin: msg.data.coin,
+            bids: toLevels(lv[0]),
+            asks: toLevels(lv[1]),
+          }
           setStatus('live')
         } catch {
           /* ignore malformed frame */
@@ -185,7 +213,12 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
       if (raf) cancelAnimationFrame(raf)
       if (retry) clearTimeout(retry)
       try {
-        ws?.send(JSON.stringify({ method: 'unsubscribe', subscription: { type: 'l2Book', coin } }))
+        ws?.send(
+          JSON.stringify({
+            method: 'unsubscribe',
+            subscription: { type: 'l2Book', coin },
+          })
+        )
       } catch {
         /* socket already gone */
       }
@@ -224,30 +257,65 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
         }
       }
     }
-    return { askRows: askRows.reverse(), bidRows, maxCum, mid, spread, spreadBps, bidPct, markLevel }
+    return {
+      askRows: askRows.reverse(),
+      bidRows,
+      maxCum,
+      mid,
+      spread,
+      spreadBps,
+      bidPct,
+      markLevel,
+    }
   }, [book, markPrice])
 
   const rowH = 16
 
   return (
     <div style={{ fontFamily: 'var(--tm-mono)' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-        <span className="tm-px" style={{ fontSize: 11 }}>Order book</span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
+          marginBottom: 6,
+        }}
+      >
+        <span className="tm-px" style={{ fontSize: 11 }}>
+          Order book
+        </span>
         <span className="tm-sc">L2 · {coin || base || '—'}</span>
         <span
           className="tm-sc"
-          style={{ marginLeft: 'auto', color: status === 'live' ? 'var(--tm-up)' : 'var(--tm-muted)' }}
+          style={{
+            marginLeft: 'auto',
+            color: status === 'live' ? 'var(--tm-up)' : 'var(--tm-muted)',
+          }}
         >
-          {status === 'live' ? '● live' : status === 'connecting' ? '○ sync' : '○ down'}
+          {status === 'live'
+            ? '● live'
+            : status === 'connecting'
+              ? '○ sync'
+              : '○ down'}
         </span>
       </div>
 
       {!view ? (
-        <div className="tm-sc" style={{ padding: '16px 0' }}>Connecting to Hyperliquid…</div>
+        <div className="tm-sc" style={{ padding: '16px 0' }}>
+          Connecting to Hyperliquid…
+        </div>
       ) : (
         <div style={{ fontSize: 11 }}>
           {/* column header */}
-          <div className="tm-sc" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 2 }}>
+          <div
+            className="tm-sc"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr',
+              gap: 4,
+              marginBottom: 2,
+            }}
+          >
             <span>price</span>
             <span style={{ textAlign: 'right' }}>size</span>
             <span style={{ textAlign: 'right' }}>cum $</span>
@@ -256,7 +324,16 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
           {/* asks (red), best ask nearest the mid — keyed by PRICE so each level
               keeps its identity and flashes independently when its size changes */}
           {view.askRows.map((l) => (
-            <Row key={`a-${l.px}`} px={l.px} sz={l.sz} cum={l.cum} maxCum={view.maxCum} side="ask" h={rowH} mark={view.markLevel} />
+            <Row
+              key={`a-${l.px}`}
+              px={l.px}
+              sz={l.sz}
+              cum={l.cum}
+              maxCum={view.maxCum}
+              side="ask"
+              h={rowH}
+              mark={view.markLevel}
+            />
           ))}
 
           {/* mid / spread */}
@@ -272,24 +349,51 @@ export function OrderBook({ symbol, markPrice, demo = false }: OrderBookProps) {
               borderBottom: '1px solid var(--tm-hair)',
             }}
           >
-            <span className="tm-px" style={{ fontSize: 12, color: 'var(--tm-red)' }}>{fmtPx(view.mid)}</span>
-            <span className="tm-sc" style={{ marginLeft: 'auto' }}>spread {fmtPx(view.spread)} · {view.spreadBps.toFixed(1)}bps</span>
+            <span
+              className="tm-px"
+              style={{ fontSize: 12, color: 'var(--tm-red)' }}
+            >
+              {fmtPx(view.mid)}
+            </span>
+            <span className="tm-sc" style={{ marginLeft: 'auto' }}>
+              spread {fmtPx(view.spread)} · {view.spreadBps.toFixed(1)}bps
+            </span>
           </div>
 
           {/* bids (green) — keyed by price, same independent-flash behavior */}
           {view.bidRows.map((l) => (
-            <Row key={`b-${l.px}`} px={l.px} sz={l.sz} cum={l.cum} maxCum={view.maxCum} side="bid" h={rowH} mark={view.markLevel} />
+            <Row
+              key={`b-${l.px}`}
+              px={l.px}
+              sz={l.sz}
+              cum={l.cum}
+              maxCum={view.maxCum}
+              side="bid"
+              h={rowH}
+              mark={view.markLevel}
+            />
           ))}
 
           {/* buy/sell pressure across the visible book */}
           <div style={{ marginTop: 7 }}>
             <div style={{ display: 'flex', height: 6 }}>
-              <div style={{ width: `${view.bidPct}%`, background: 'var(--tm-up)', transition: 'width 0.2s ease-out' }} />
+              <div
+                style={{
+                  width: `${view.bidPct}%`,
+                  background: 'var(--tm-up)',
+                  transition: 'width 0.2s ease-out',
+                }}
+              />
               <div style={{ flex: 1, background: 'var(--tm-dn)' }} />
             </div>
-            <div className="tm-sc" style={{ display: 'flex', fontSize: 9, marginTop: 2 }}>
+            <div
+              className="tm-sc"
+              style={{ display: 'flex', fontSize: 9, marginTop: 2 }}
+            >
               <span className="tm-up">B {view.bidPct.toFixed(1)}%</span>
-              <span style={{ marginLeft: 'auto' }} className="tm-dn">{(100 - view.bidPct).toFixed(1)}% S</span>
+              <span style={{ marginLeft: 'auto' }} className="tm-dn">
+                {(100 - view.bidPct).toFixed(1)}% S
+              </span>
             </div>
           </div>
         </div>
@@ -318,9 +422,10 @@ function Row({ px, sz, cum, maxCum, side, h, mark }: RowProps) {
   const color = side === 'ask' ? 'var(--tm-dn)' : 'var(--tm-up)'
   // bold cumulative-depth bar, saturated toward the edge, that animates its
   // width as the book updates (the live "growing ladder" effect)
-  const bar = side === 'ask'
-    ? 'linear-gradient(to left, rgba(214,67,58,0.36), rgba(214,67,58,0.05))'
-    : 'linear-gradient(to left, rgba(46,139,87,0.36), rgba(46,139,87,0.05))'
+  const bar =
+    side === 'ask'
+      ? 'linear-gradient(to left, rgba(214,67,58,0.36), rgba(214,67,58,0.05))'
+      : 'linear-gradient(to left, rgba(46,139,87,0.36), rgba(46,139,87,0.05))'
   const isMark = mark != null && px === mark
 
   // this Row instance is keyed by price, so these refs persist across updates —
@@ -335,17 +440,52 @@ function Row({ px, sz, cum, maxCum, side, h, mark }: RowProps) {
   }
 
   return (
-    <div style={{ position: 'relative', height: h, display: 'flex', alignItems: 'center' }}>
+    <div
+      style={{
+        position: 'relative',
+        height: h,
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
       {/* per-row flash overlay — keyed by size so it remounts (replays the
           animation) exactly when this level's size changes */}
-      <div key={sz} className={dirRef.current} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${pct}%`, background: bar, transition: 'width 0.16s ease-out' }} />
-      <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, width: '100%', alignItems: 'center' }}>
+      <div
+        key={sz}
+        className={dirRef.current}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: `${pct}%`,
+          background: bar,
+          transition: 'width 0.16s ease-out',
+        }}
+      />
+      <div
+        style={{
+          position: 'relative',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: 4,
+          width: '100%',
+          alignItems: 'center',
+        }}
+      >
         <span style={{ color, fontWeight: isMark ? 700 : 500 }}>
-          {isMark ? '▸ ' : ''}{fmtPx(px)}
+          {isMark ? '▸ ' : ''}
+          {fmtPx(px)}
         </span>
-        <span style={{ textAlign: 'right', color: 'var(--tm-ink)' }}>{fmtSz(sz)}</span>
-        <span style={{ textAlign: 'right', color: 'var(--tm-muted)' }}>{fmtNotional(cum * px)}</span>
+        <span style={{ textAlign: 'right', color: 'var(--tm-ink)' }}>
+          {fmtSz(sz)}
+        </span>
+        <span style={{ textAlign: 'right', color: 'var(--tm-muted)' }}>
+          {fmtNotional(cum * px)}
+        </span>
       </div>
     </div>
   )

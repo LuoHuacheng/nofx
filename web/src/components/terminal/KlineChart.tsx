@@ -23,7 +23,10 @@ const INTERVAL = '1m'
 const MAX_BARS = 90
 
 function baseSymbol(raw: string): string {
-  return raw.toUpperCase().replace(/^XYZ:/, '').replace(/(USDT|USDC|USD)$/, '')
+  return raw
+    .toUpperCase()
+    .replace(/^XYZ:/, '')
+    .replace(/(USDT|USDC|USD)$/, '')
 }
 
 interface KlineChartProps {
@@ -36,14 +39,24 @@ interface KlineChartProps {
   demo?: boolean
 }
 
-export function KlineChart({ symbol, height = 360, fill = false, demo = false }: KlineChartProps) {
+export function KlineChart({
+  symbol,
+  height = 360,
+  fill = false,
+  demo = false,
+}: KlineChartProps) {
   const base = baseSymbol(symbol || '')
 
   // history seed (resynced occasionally; the WS carries the live bar)
   const { data: seed, isLoading } = useSWR(
     base && !demo ? ['kline', base, INTERVAL] : null,
     () => api.getKlines(base, INTERVAL, 'hyperliquid', MAX_BARS, true),
-    { refreshInterval: 60000, revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
+    {
+      refreshInterval: 60000,
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
+    }
   )
 
   // synthetic showcase candles — a fast, gently rising series
@@ -65,7 +78,11 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
       let prevClose = start
       for (let i = 0; i < MAX_BARS; i++) {
         const t01 = i / (MAX_BARS - 1)
-        const close = start + span * t01 + span * 0.13 * Math.sin(t01 * 6.5 + phase) + (Math.random() - 0.5) * target * 0.0008
+        const close =
+          start +
+          span * t01 +
+          span * 0.13 * Math.sin(t01 * 6.5 + phase) +
+          (Math.random() - 0.5) * target * 0.0008
         const open = i === 0 ? start : prevClose
         const wick = target * drnd(0.0003, 0.0009)
         const tt = now - (MAX_BARS - i) * 60_000
@@ -117,12 +134,17 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
   const [xyzSet, setXyzSet] = useState<Set<string>>(new Set())
   useEffect(() => {
     let alive = true
-    fetch(HL_INFO, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'allMids', dex: 'xyz' }) })
+    fetch(HL_INFO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'allMids', dex: 'xyz' }),
+    })
       .then((r) => r.json())
       .then((mids: Record<string, string>) => {
         if (!alive) return
         const set = new Set<string>()
-        for (const k of Object.keys(mids || {})) set.add(k.replace(/^xyz:/, '').toUpperCase())
+        for (const k of Object.keys(mids || {}))
+          set.add(k.replace(/^xyz:/, '').toUpperCase())
         setXyzSet(set)
       })
       .catch(() => {})
@@ -130,7 +152,10 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
       alive = false
     }
   }, [])
-  const coin = useMemo(() => (base ? (xyzSet.has(base) ? `xyz:${base}` : base) : ''), [base, xyzSet])
+  const coin = useMemo(
+    () => (base ? (xyzSet.has(base) ? `xyz:${base}` : base) : ''),
+    [base, xyzSet]
+  )
 
   // live bar from the candle WS
   const [liveBar, setLiveBar] = useState<Kline | null>(null)
@@ -146,13 +171,27 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
 
     const connect = () => {
       ws = new WebSocket(HL_WS)
-      ws.onopen = () => ws?.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'candle', coin, interval: INTERVAL } }))
+      ws.onopen = () =>
+        ws?.send(
+          JSON.stringify({
+            method: 'subscribe',
+            subscription: { type: 'candle', coin, interval: INTERVAL },
+          })
+        )
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data)
           if (msg.channel !== 'candle' || !msg.data) return
           const d = msg.data
-          pending.current = { openTime: d.t, closeTime: d.T, open: +d.o, high: +d.h, low: +d.l, close: +d.c, volume: +d.v }
+          pending.current = {
+            openTime: d.t,
+            closeTime: d.T,
+            open: +d.o,
+            high: +d.h,
+            low: +d.l,
+            close: +d.c,
+            volume: +d.v,
+          }
           setWsLive(true)
         } catch {
           /* ignore */
@@ -180,7 +219,12 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
       if (raf) cancelAnimationFrame(raf)
       if (retry) clearTimeout(retry)
       try {
-        ws?.send(JSON.stringify({ method: 'unsubscribe', subscription: { type: 'candle', coin, interval: INTERVAL } }))
+        ws?.send(
+          JSON.stringify({
+            method: 'unsubscribe',
+            subscription: { type: 'candle', coin, interval: INTERVAL },
+          })
+        )
       } catch {
         /* socket gone */
       }
@@ -194,7 +238,8 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
     if (!liveBar) return hist
     const arr = [...hist]
     const last = arr[arr.length - 1]
-    if (last && liveBar.openTime === last.openTime) arr[arr.length - 1] = liveBar
+    if (last && liveBar.openTime === last.openTime)
+      arr[arr.length - 1] = liveBar
     else if (!last || liveBar.openTime > last.openTime) arr.push(liveBar)
     return arr.slice(-MAX_BARS)
   }, [seed, liveBar])
@@ -206,19 +251,65 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
   const live = (demo || wsLive) && candles.length > 0
 
   return (
-    <div style={{ fontFamily: 'var(--tm-mono)', ...(fill ? { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 } : {}) }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-        <span className="tm-px" style={{ fontSize: 11 }}>{base || 'MARKET'}</span>
+    <div
+      style={{
+        fontFamily: 'var(--tm-mono)',
+        ...(fill
+          ? {
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              minHeight: 0,
+            }
+          : {}),
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
+          marginBottom: 6,
+        }}
+      >
+        <span className="tm-px" style={{ fontSize: 11 }}>
+          {base || 'MARKET'}
+        </span>
         <span className="tm-sc">{INTERVAL} · Live candles</span>
-        <span className="tm-sc" style={{ marginLeft: 'auto', color: live ? 'var(--tm-up)' : 'var(--tm-muted)' }}>
+        <span
+          className="tm-sc"
+          style={{
+            marginLeft: 'auto',
+            color: live ? 'var(--tm-up)' : 'var(--tm-muted)',
+          }}
+        >
           {live ? '● live' : isLoading || candles.length ? '○ sync' : '○ —'}
         </span>
       </div>
       {last > 0 && (
-        <div className="tm-mono" style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4, fontSize: 12 }}>
-          <span style={{ fontWeight: 600 }}>${last.toLocaleString('en-US', { maximumFractionDigits: 4 })}</span>
-          <span className={chg >= 0 ? 'tm-up' : 'tm-dn'} style={{ fontSize: 11 }}>{chg >= 0 ? '+' : ''}{chg.toFixed(2)}%</span>
-          <span className="tm-sc" style={{ marginLeft: 'auto' }}>{candles.length} bars · {INTERVAL}</span>
+        <div
+          className="tm-mono"
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 8,
+            marginBottom: 4,
+            fontSize: 12,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>
+            ${last.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+          </span>
+          <span
+            className={chg >= 0 ? 'tm-up' : 'tm-dn'}
+            style={{ fontSize: 11 }}
+          >
+            {chg >= 0 ? '+' : ''}
+            {chg.toFixed(2)}%
+          </span>
+          <span className="tm-sc" style={{ marginLeft: 'auto' }}>
+            {candles.length} bars · {INTERVAL}
+          </span>
         </div>
       )}
       {candles.length > 0 ? (
@@ -230,7 +321,9 @@ export function KlineChart({ symbol, height = 360, fill = false, demo = false }:
           <Candles data={candles} width={380} height={height} />
         )
       ) : (
-        <div className="tm-sc" style={{ padding: '20px 0' }}>Loading market…</div>
+        <div className="tm-sc" style={{ padding: '20px 0' }}>
+          Loading market…
+        </div>
       )}
     </div>
   )

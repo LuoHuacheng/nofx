@@ -28,7 +28,8 @@ export function FAQLayout() {
   }, [searchTerm])
 
   const totalItems = useMemo(
-    () => faqCategories.reduce((sum, category) => sum + category.items.length, 0),
+    () =>
+      faqCategories.reduce((sum, category) => sum + category.items.length, 0),
     []
   )
 
@@ -56,7 +57,8 @@ export function FAQLayout() {
                   FAQ
                 </h1>
                 <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-nofx-text-muted">
-                  {totalItems} answers · wallets · launch · trading · self-hosting
+                  {totalItems} answers · wallets · launch · trading ·
+                  self-hosting
                 </p>
               </div>
             </div>

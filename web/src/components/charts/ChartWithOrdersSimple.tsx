@@ -21,7 +21,13 @@ export function ChartWithOrdersSimple({
 
   useEffect(() => {
     const loadData = async () => {
-      console.log('[ChartSimple] Loading data for', symbol, interval, 'trader:', traderID)
+      console.log(
+        '[ChartSimple] Loading data for',
+        symbol,
+        interval,
+        'trader:',
+        traderID
+      )
       setLoading(true)
       setError(null)
 
@@ -44,13 +50,22 @@ export function ChartWithOrdersSimple({
         if (traderID) {
           const tradesUrl = `/api/trades?trader_id=${traderID}&symbol=${symbol}&limit=100`
           console.log('[ChartSimple] Fetching trades from:', tradesUrl)
-          const tradesResult = await httpClient.request(tradesUrl, { silent: true })
+          const tradesResult = await httpClient.request(tradesUrl, {
+            silent: true,
+          })
 
           if (tradesResult.success && tradesResult.data) {
-            console.log('[ChartSimple] Received trades:', tradesResult.data.length)
+            console.log(
+              '[ChartSimple] Received trades:',
+              tradesResult.data.length
+            )
             setOrderCount(tradesResult.data.length)
           } else {
-            console.warn('[ChartSimple] Failed to fetch trades:', tradesResult.message || 'Unknown error', tradesResult)
+            console.warn(
+              '[ChartSimple] Failed to fetch trades:',
+              tradesResult.message || 'Unknown error',
+              tradesResult
+            )
           }
         }
 
@@ -66,9 +81,20 @@ export function ChartWithOrdersSimple({
   }, [symbol, interval, traderID])
 
   return (
-    <div className="relative" style={{ background: '#F1ECE2', borderRadius: '8px', overflow: 'hidden', minHeight: height }}>
+    <div
+      className="relative"
+      style={{
+        background: '#F1ECE2',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        minHeight: height,
+      }}
+    >
       {/* Title bar */}
-      <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid rgba(26, 24, 19, 0.14)' }}>
+      <div
+        className="flex items-center justify-between p-4"
+        style={{ borderBottom: '1px solid rgba(26, 24, 19, 0.14)' }}
+      >
         <div className="flex items-center gap-3">
           <span className="text-xl">📈</span>
           <h3 className="text-lg font-bold" style={{ color: '#1A1813' }}>
@@ -91,24 +117,51 @@ export function ChartWithOrdersSimple({
           </div>
         ) : (
           <>
-            <div className="p-4 rounded" style={{ background: '#F7F4EC', border: '1px solid rgba(26, 24, 19, 0.14)' }}>
-              <div className="text-sm mb-2" style={{ color: '#8A8478' }}>Binance Kline Data</div>
+            <div
+              className="p-4 rounded"
+              style={{
+                background: '#F7F4EC',
+                border: '1px solid rgba(26, 24, 19, 0.14)',
+              }}
+            >
+              <div className="text-sm mb-2" style={{ color: '#8A8478' }}>
+                Binance Kline Data
+              </div>
               <div className="text-2xl font-bold" style={{ color: '#2E8B57' }}>
                 {klineCount} klines
               </div>
             </div>
 
             {traderID && (
-              <div className="p-4 rounded" style={{ background: '#F7F4EC', border: '1px solid rgba(26, 24, 19, 0.14)' }}>
-                <div className="text-sm mb-2" style={{ color: '#8A8478' }}>Historical Order Data</div>
-                <div className="text-2xl font-bold" style={{ color: '#E0483B' }}>
+              <div
+                className="p-4 rounded"
+                style={{
+                  background: '#F7F4EC',
+                  border: '1px solid rgba(26, 24, 19, 0.14)',
+                }}
+              >
+                <div className="text-sm mb-2" style={{ color: '#8A8478' }}>
+                  Historical Order Data
+                </div>
+                <div
+                  className="text-2xl font-bold"
+                  style={{ color: '#E0483B' }}
+                >
                   {orderCount} orders
                 </div>
               </div>
             )}
 
-            <div className="p-4 rounded" style={{ background: '#F7F4EC', border: '1px solid rgba(26, 24, 19, 0.14)' }}>
-              <div className="text-sm mb-2" style={{ color: '#8A8478' }}>Status</div>
+            <div
+              className="p-4 rounded"
+              style={{
+                background: '#F7F4EC',
+                border: '1px solid rgba(26, 24, 19, 0.14)',
+              }}
+            >
+              <div className="text-sm mb-2" style={{ color: '#8A8478' }}>
+                Status
+              </div>
               <div className="text-lg" style={{ color: '#1A1813' }}>
                 ✅ Data fetched successfully, chart component in development
               </div>

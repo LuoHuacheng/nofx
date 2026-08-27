@@ -40,7 +40,10 @@ function Block({ block }: { block: FAQBlock }) {
       return (
         <ul className="space-y-1.5">
           {block.items.map((item, i) => (
-            <li key={i} className="flex gap-2 text-sm leading-6 text-nofx-text-muted">
+            <li
+              key={i}
+              className="flex gap-2 text-sm leading-6 text-nofx-text-muted"
+            >
               <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-nofx-gold" />
               <span>
                 <InlineText text={item} />
@@ -53,7 +56,10 @@ function Block({ block }: { block: FAQBlock }) {
       return (
         <ol className="space-y-1.5">
           {block.items.map((item, i) => (
-            <li key={i} className="flex gap-3 text-sm leading-6 text-nofx-text-muted">
+            <li
+              key={i}
+              className="flex gap-3 text-sm leading-6 text-nofx-text-muted"
+            >
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-nofx-gold/30 bg-nofx-gold/10 font-mono text-[11px] font-bold text-nofx-gold">
                 {i + 1}
               </span>
@@ -90,7 +96,10 @@ function Block({ block }: { block: FAQBlock }) {
   }
 }
 
-export function FAQContent({ categories, onActiveItemChange }: FAQContentProps) {
+export function FAQContent({
+  categories,
+  onActiveItemChange,
+}: FAQContentProps) {
   const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
 
   useEffect(() => {
@@ -132,7 +141,8 @@ export function FAQContent({ categories, onActiveItemChange }: FAQContentProps) 
               {category.title}
             </h2>
             <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.12em] text-nofx-text-muted">
-              {category.items.length} {category.items.length === 1 ? 'entry' : 'entries'}
+              {category.items.length}{' '}
+              {category.items.length === 1 ? 'entry' : 'entries'}
             </span>
           </div>
 

@@ -137,7 +137,8 @@ const TEXT = {
     bridgeSubmitting: 'Depositing…',
     bridgeMin: `Minimum deposit ${MIN_BRIDGE_DEPOSIT_USDC} USDC — smaller amounts are lost`,
     bridgeGasHint: 'Requires a little Arbitrum ETH in the wallet for gas.',
-    bridgeSubmitted: 'Deposit submitted, credited to the perp account in ~1 minute',
+    bridgeSubmitted:
+      'Deposit submitted, credited to the perp account in ~1 minute',
     wallet: 'Wallet (Arbitrum)',
     depositable: 'depositable',
     gas: 'Gas',
@@ -231,7 +232,9 @@ export function HyperliquidFundsPanel({
       const signer = normalizeAddress(accounts?.[0] ?? '')
       if (!signer) throw new Error(t.connectFirst)
       if (signer !== address) {
-        throw new Error(t.wrongWallet(shortAddress(address), shortAddress(signer)))
+        throw new Error(
+          t.wrongWallet(shortAddress(address), shortAddress(signer))
+        )
       }
       const nonce = Date.now()
       const action = {
@@ -298,7 +301,9 @@ export function HyperliquidFundsPanel({
       // The bridge credits the SENDER: sending from any other wallet would
       // fund that wallet's Hyperliquid account instead of this one.
       if (signer !== address) {
-        throw new Error(t.wrongWallet(shortAddress(address), shortAddress(signer)))
+        throw new Error(
+          t.wrongWallet(shortAddress(address), shortAddress(signer))
+        )
       }
       await provider.request({
         method: 'wallet_switchEthereumChain',
@@ -440,7 +445,9 @@ export function HyperliquidFundsPanel({
           >
             {walletAddress}
           </button>
-          <p className="text-xs text-nofx-text-muted leading-5">{t.depositHint}</p>
+          <p className="text-xs text-nofx-text-muted leading-5">
+            {t.depositHint}
+          </p>
           <p className="text-xs text-amber-500">{t.depositWarn}</p>
           <div className="rounded-xl border border-[rgba(26,24,19,0.14)] bg-nofx-bg p-3 space-y-2">
             <div className="flex items-center justify-between">
@@ -465,7 +472,9 @@ export function HyperliquidFundsPanel({
                 type="button"
                 onClick={() =>
                   walletUsdc !== undefined &&
-                  setDepositAmount((Math.floor(walletUsdc * 100) / 100).toString())
+                  setDepositAmount(
+                    (Math.floor(walletUsdc * 100) / 100).toString()
+                  )
                 }
                 className="px-3 py-1.5 rounded-xl border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper text-sm text-nofx-text-muted hover:text-nofx-text"
               >

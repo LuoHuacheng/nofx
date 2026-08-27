@@ -10,7 +10,10 @@ export interface Kline {
 }
 
 // Simple Moving Average (SMA)
-export function calculateSMA(data: Kline[], period: number): Array<{ time: number; value: number }> {
+export function calculateSMA(
+  data: Kline[],
+  period: number
+): Array<{ time: number; value: number }> {
   const result: Array<{ time: number; value: number }> = []
 
   for (let i = period - 1; i < data.length; i++) {
@@ -28,7 +31,10 @@ export function calculateSMA(data: Kline[], period: number): Array<{ time: numbe
 }
 
 // Exponential Moving Average (EMA)
-export function calculateEMA(data: Kline[], period: number): Array<{ time: number; value: number }> {
+export function calculateEMA(
+  data: Kline[],
+  period: number
+): Array<{ time: number; value: number }> {
   const result: Array<{ time: number; value: number }> = []
   const multiplier = 2 / (period + 1)
 
@@ -69,7 +75,7 @@ export function calculateMACD(
   // Compute the MACD line
   const macdLine: Array<{ time: number; value: number }> = []
   for (let i = 0; i < slowEMA.length; i++) {
-    const fastValue = fastEMA.find(e => e.time === slowEMA[i].time)
+    const fastValue = fastEMA.find((e) => e.time === slowEMA[i].time)
     if (fastValue) {
       macdLine.push({
         time: slowEMA[i].time,
@@ -84,7 +90,7 @@ export function calculateMACD(
   // Build the MACD data
   const result: MACDData[] = []
   for (let i = 0; i < signalLine.length; i++) {
-    const macdValue = macdLine.find(m => m.time === signalLine[i].time)
+    const macdValue = macdLine.find((m) => m.time === signalLine[i].time)
     if (macdValue) {
       result.push({
         time: signalLine[i].time,
@@ -126,7 +132,10 @@ function calculateEMAFromValues(
 }
 
 // RSI indicator
-export function calculateRSI(data: Kline[], period = 14): Array<{ time: number; value: number }> {
+export function calculateRSI(
+  data: Kline[],
+  period = 14
+): Array<{ time: number; value: number }> {
   const result: Array<{ time: number; value: number }> = []
 
   if (data.length < period + 1) return []

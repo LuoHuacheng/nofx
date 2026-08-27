@@ -12,9 +12,9 @@ html {
 
 :root {
   /* NOFX cream-paper + vermilion terminal design system */
-  --nofx-gold: #E0483B;
-  --nofx-bg: #F1ECE2;
-  --nofx-accent: #E0483B;
+  --nofx-gold: #e0483b;
+  --nofx-bg: #f1ece2;
+  --nofx-accent: #e0483b;
   --nofx-glass: rgba(247, 244, 236, 0.85);
   --nofx-border: rgba(26, 24, 19, 0.14);
 
@@ -23,39 +23,40 @@ html {
   --glow-accent: none;
   --glow-text: none;
 
-  --background: #F1ECE2;
+  --background: #f1ece2;
   --header-bg: rgba(247, 244, 236, 0.85);
 
   --glass-bg: rgba(247, 244, 236, 0.7);
   --glass-border: rgba(26, 24, 19, 0.12);
 
-  --panel-bg: #F7F4EC;
-  --panel-bg-hover: #F2EEE4;
+  --panel-bg: #f7f4ec;
+  --panel-bg-hover: #f2eee4;
   --panel-border: rgba(26, 24, 19, 0.14);
   --panel-border-hover: rgba(224, 72, 59, 0.5);
 
-  --foreground: #1A1813;
-  --text-primary: #1A1813;
-  --text-secondary: #6B6557;
-  --text-tertiary: #8A8478;
-  --text-disabled: #B4B2A9;
+  --foreground: #1a1813;
+  --text-primary: #1a1813;
+  --text-secondary: #6b6557;
+  --text-tertiary: #8a8478;
+  --text-disabled: #b4b2a9;
 
   /* Trading Colors (forest green / crimson on paper) */
-  --binance-green: #2E8B57;
+  --binance-green: #2e8b57;
   --binance-green-bg: rgba(46, 139, 87, 0.12);
   --binance-green-border: rgba(46, 139, 87, 0.35);
-  --binance-red: #D6433A;
+  --binance-red: #d6433a;
   --binance-red-bg: rgba(214, 67, 58, 0.12);
   --binance-red-border: rgba(214, 67, 58, 0.35);
-  --binance-yellow: #E0483B;
+  --binance-yellow: #e0483b;
 
   /* Shadows (subtle on paper) */
   --shadow-sm: 0 1px 2px rgba(26, 24, 19, 0.08);
-  --shadow-md: 0 2px 8px rgba(26, 24, 19, 0.10);
+  --shadow-md: 0 2px 8px rgba(26, 24, 19, 0.1);
   --shadow-lg: 0 6px 24px rgba(26, 24, 19, 0.12);
   --shadow-glow: none;
 
-  font-family: 'IBM Plex Mono', ui-monospace, Menlo, Monaco, 'Courier New', monospace;
+  font-family:
+    'IBM Plex Mono', ui-monospace, Menlo, Monaco, 'Courier New', monospace;
   line-height: 1.6;
   font-weight: 400;
   color-scheme: light;
@@ -139,7 +140,7 @@ body {
 /* Selection — vermilion tint on paper */
 ::selection {
   background: rgba(224, 72, 59, 0.25);
-  color: #1A1813;
+  color: #1a1813;
 }
 
 #root {
@@ -205,7 +206,6 @@ body {
 }
 
 @keyframes pulse-glow {
-
   0%,
   100% {
     opacity: 1;
@@ -229,7 +229,6 @@ body {
 }
 
 @keyframes pulse-scale {
-
   0%,
   100% {
     transform: scale(1);
@@ -388,7 +387,7 @@ button:disabled {
 /* Button Variants */
 .btn-success {
   background: rgba(14, 203, 129, 0.1);
-  color: #0ECB81;
+  color: #0ecb81;
   border: 1px solid rgba(14, 203, 129, 0.3);
 }
 
@@ -399,7 +398,7 @@ button:disabled {
 
 .btn-danger {
   background: rgba(246, 70, 93, 0.1);
-  color: #F6465D;
+  color: #f6465d;
   border: 1px solid rgba(246, 70, 93, 0.3);
 }
 
@@ -410,13 +409,13 @@ button:disabled {
 
 .btn-outline {
   background: transparent;
-  color: #848E9C;
-  border: 1px solid #2B3139;
+  color: #848e9c;
+  border: 1px solid #2b3139;
 }
 
 .btn-outline:hover:not(:disabled) {
-  border-color: #F0B90B;
-  color: #F0B90B;
+  border-color: #f0b90b;
+  color: #f0b90b;
   background: rgba(240, 185, 11, 0.1);
 }
 
@@ -494,7 +493,9 @@ textarea::placeholder {
 
 .premium-input:focus {
   border-color: var(--binance-yellow);
-  box-shadow: 0 0 0 1px rgba(240, 185, 11, 0.2), 0 0 15px rgba(240, 185, 11, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(240, 185, 11, 0.2),
+    0 0 15px rgba(240, 185, 11, 0.1);
   background: rgba(11, 14, 17, 0.9);
 }
 
@@ -508,7 +509,9 @@ textarea::placeholder {
   border-radius: 12px;
   /* More modern radius */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   /* Ensure rounded corners contain content */
 }
@@ -636,15 +639,19 @@ textarea::placeholder {
 
 /* Binance gradient backgrounds */
 .binance-gradient {
-  background: linear-gradient(135deg,
-      var(--binance-yellow) 0%,
-      var(--binance-yellow-light) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--binance-yellow) 0%,
+    var(--binance-yellow-light) 100%
+  );
 }
 
 .binance-gradient-subtle {
-  background: linear-gradient(135deg,
-      rgba(240, 185, 11, 0.15) 0%,
-      rgba(252, 213, 53, 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(240, 185, 11, 0.15) 0%,
+    rgba(252, 213, 53, 0.05) 100%
+  );
   border: 1px solid rgba(240, 185, 11, 0.2);
 }
 
@@ -678,10 +685,12 @@ textarea::placeholder {
 /* Skeleton loading */
 .skeleton {
   background: var(--panel-bg);
-  background-image: linear-gradient(90deg,
-      transparent,
-      rgba(240, 185, 11, 0.05),
-      transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgba(240, 185, 11, 0.05),
+    transparent
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
@@ -811,8 +820,20 @@ tr:hover {
 
 /* Linear Fade Mask for Scrollable Areas */
 .mask-linear-fade {
-  mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 5%,
+    black 95%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 5%,
+    black 95%,
+    transparent 100%
+  );
 }
 
 /* Divider */
@@ -866,10 +887,12 @@ tr:hover {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg,
-      transparent,
-      var(--binance-yellow),
-      transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--binance-yellow),
+    transparent
+  );
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -923,7 +946,6 @@ tr:hover {
 }
 
 @keyframes holo-flicker {
-
   0%,
   100% {
     opacity: 0.7;
@@ -940,7 +962,9 @@ tr:hover {
 
 .animate-holo {
   background-size: 200% 200%;
-  animation: holo-shift 8s ease infinite, holo-flicker 4s infinite;
+  animation:
+    holo-shift 8s ease infinite,
+    holo-flicker 4s infinite;
 }
 
 /* Holographic overlay effect */
@@ -948,11 +972,13 @@ tr:hover {
   /* Complex gradient + noise for texture */
   background:
     url('https://grainy-gradients.vercel.app/noise.svg'),
-    conic-gradient(from 0deg at 50% 50%,
+    conic-gradient(
+      from 0deg at 50% 50%,
       rgba(240, 185, 11, 0.1) 0deg,
       rgba(0, 240, 255, 0.1) 120deg,
       rgba(240, 185, 11, 0.1) 240deg,
-      rgba(240, 185, 11, 0.1) 360deg);
+      rgba(240, 185, 11, 0.1) 360deg
+    );
   mix-blend-mode: overlay;
   background-blend-mode: overlay, normal;
 }

@@ -42,13 +42,31 @@ function utilColor(p: number): string {
 
 interface RiskRadarProps {
   positions?: Position[]
-  account?: { total_equity?: number; unrealized_profit?: number; margin_used_pct?: number } | null
-  config?: { btc_eth_leverage?: number; altcoin_leverage?: number; max_positions?: number } | null
+  account?: {
+    total_equity?: number
+    unrealized_profit?: number
+    margin_used_pct?: number
+  } | null
+  config?: {
+    btc_eth_leverage?: number
+    altcoin_leverage?: number
+    max_positions?: number
+  } | null
   /** max_drawdown_pct is a percent (18.5 = -18.5%), not a fraction. */
-  fullStats?: { max_drawdown_pct?: number; profit_factor?: number; sharpe_ratio?: number; win_rate?: number } | null
+  fullStats?: {
+    max_drawdown_pct?: number
+    profit_factor?: number
+    sharpe_ratio?: number
+    win_rate?: number
+  } | null
 }
 
-export function RiskRadar({ positions, account, config, fullStats }: RiskRadarProps) {
+export function RiskRadar({
+  positions,
+  account,
+  config,
+  fullStats,
+}: RiskRadarProps) {
   const pos = positions ?? []
 
   const m = useMemo(() => {
@@ -80,11 +98,16 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
 
     const totalNotional = longNotional + shortNotional
     const netNotional = longNotional - shortNotional
-    const longShare = totalNotional > 0 ? (longNotional / totalNotional) * 100 : 0
-    const shortShare = totalNotional > 0 ? (shortNotional / totalNotional) * 100 : 0
+    const longShare =
+      totalNotional > 0 ? (longNotional / totalNotional) * 100 : 0
+    const shortShare =
+      totalNotional > 0 ? (shortNotional / totalNotional) * 100 : 0
 
     const avgLev = levCount > 0 ? levSum / levCount : 0
-    const configMax = Math.max(config?.btc_eth_leverage ?? 0, config?.altcoin_leverage ?? 0)
+    const configMax = Math.max(
+      config?.btc_eth_leverage ?? 0,
+      config?.altcoin_leverage ?? 0
+    )
     const levUse = configMax > 0 ? Math.min(100, (avgLev / configMax) * 100) : 0
 
     const marginPct =
@@ -94,13 +117,15 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
           ? (marginSum / equity) * 100
           : 0
 
-    const concentration = totalNotional > 0 ? (topNotional / totalNotional) * 100 : 0
+    const concentration =
+      totalNotional > 0 ? (topNotional / totalNotional) * 100 : 0
 
     const drawdown = fullStats?.max_drawdown_pct ?? 0
 
     const count = pos.length
     const maxPositions = config?.max_positions ?? 0
-    const countUse = maxPositions > 0 ? Math.min(100, (count / maxPositions) * 100) : 0
+    const countUse =
+      maxPositions > 0 ? Math.min(100, (count / maxPositions) * 100) : 0
 
     const upnl = account?.unrealized_profit ?? 0
 
@@ -127,7 +152,11 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
 
   const hasData = pos.length > 0 || account != null
   if (!hasData) {
-    return <div className="tm-sc" style={{ padding: '16px 0' }}>No live risk data.</div>
+    return (
+      <div className="tm-sc" style={{ padding: '16px 0' }}>
+        No live risk data.
+      </div>
+    )
   }
 
   // ── one-glance verdicts ──────────────────────────────────────────────
@@ -187,11 +216,23 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
   return (
     <div style={{ fontFamily: 'var(--tm-mono)' }}>
       {/* header */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 1 }}>
-        <span className="tm-px" style={{ fontSize: 11 }}>Risk radar</span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
+          marginBottom: 1,
+        }}
+      >
+        <span className="tm-px" style={{ fontSize: 11 }}>
+          Risk radar
+        </span>
         <span
           className="tm-sc"
-          style={{ marginLeft: 'auto', color: m.totalNotional > 0 ? 'var(--tm-up)' : 'var(--tm-muted)' }}
+          style={{
+            marginLeft: 'auto',
+            color: m.totalNotional > 0 ? 'var(--tm-up)' : 'var(--tm-muted)',
+          }}
         >
           {m.totalNotional > 0 ? '● live' : '○ flat'}
         </span>
@@ -201,26 +242,67 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
       </div>
 
       {/* Net exposure — diverging long/short split, the visual centerpiece */}
-      <div style={{ marginBottom: 9, paddingBottom: 9, borderBottom: '1px solid var(--tm-hair)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 4 }}>
+      <div
+        style={{
+          marginBottom: 9,
+          paddingBottom: 9,
+          borderBottom: '1px solid var(--tm-hair)',
+        }}
+      >
+        <div
+          style={{ display: 'flex', alignItems: 'baseline', marginBottom: 4 }}
+        >
           <Label zh="Net exposure" en="NET EXPOSURE" />
           <Tag verdict={exposureTag} />
-          <span className="tm-mono" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--tm-ink)' }}>
+          <span
+            className="tm-mono"
+            style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--tm-ink)' }}
+          >
             long {pct(m.longShare)}
             <span style={{ color: 'var(--tm-muted)' }}> / </span>
             short {pct(m.shortShare)}
           </span>
         </div>
-        <div style={{ display: 'flex', height: 7, background: 'var(--tm-hair)', overflow: 'hidden' }}>
-          <div style={{ width: `${m.longShare}%`, background: 'var(--tm-up)' }} />
-          <div style={{ width: `${m.shortShare}%`, background: 'var(--tm-dn)' }} />
+        <div
+          style={{
+            display: 'flex',
+            height: 7,
+            background: 'var(--tm-hair)',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{ width: `${m.longShare}%`, background: 'var(--tm-up)' }}
+          />
+          <div
+            style={{ width: `${m.shortShare}%`, background: 'var(--tm-dn)' }}
+          />
         </div>
-        <div className="tm-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, marginTop: 3 }}>
-          <span style={{ color: 'var(--tm-up)' }}>long {fmtUsd(m.longNotional)}</span>
-          <span style={{ color: 'var(--tm-ink-2)' }}>
-            net <b style={{ color: m.netNotional >= 0 ? 'var(--tm-up)' : 'var(--tm-dn)' }}>{fmtUsd(m.netNotional)}</b>
+        <div
+          className="tm-mono"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: 9,
+            marginTop: 3,
+          }}
+        >
+          <span style={{ color: 'var(--tm-up)' }}>
+            long {fmtUsd(m.longNotional)}
           </span>
-          <span style={{ color: 'var(--tm-dn)' }}>short {fmtUsd(m.shortNotional)}</span>
+          <span style={{ color: 'var(--tm-ink-2)' }}>
+            net{' '}
+            <b
+              style={{
+                color: m.netNotional >= 0 ? 'var(--tm-up)' : 'var(--tm-dn)',
+              }}
+            >
+              {fmtUsd(m.netNotional)}
+            </b>
+          </span>
+          <span style={{ color: 'var(--tm-dn)' }}>
+            short {fmtUsd(m.shortNotional)}
+          </span>
         </div>
       </div>
 
@@ -231,7 +313,13 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
         value={`${m.avgLev.toFixed(1)}× avg`}
         sub={`/ ${m.maxLev > 0 ? `${m.maxLev.toFixed(0)}×` : '—'} peak · ${m.configMax > 0 ? `${m.configMax}×` : '—'} cap`}
         fill={m.levUse}
-        color={levTag.tone === 'dn' ? 'var(--tm-dn)' : levTag.tone === 'amber' ? C_AMBER : 'var(--tm-up)'}
+        color={
+          levTag.tone === 'dn'
+            ? 'var(--tm-dn)'
+            : levTag.tone === 'amber'
+              ? C_AMBER
+              : 'var(--tm-up)'
+        }
         verdict={levTag}
       />
       <GaugeRow
@@ -265,7 +353,9 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
       <GaugeRow
         zh="Positions"
         en="POSITIONS"
-        value={m.maxPositions > 0 ? `${m.count} / ${m.maxPositions}` : `${m.count}`}
+        value={
+          m.maxPositions > 0 ? `${m.count} / ${m.maxPositions}` : `${m.count}`
+        }
         sub="held / cap"
         fill={m.maxPositions > 0 ? m.countUse : 0}
         color={countTag.tone === 'amber' ? C_AMBER : 'var(--tm-up)'}
@@ -285,9 +375,15 @@ export function RiskRadar({ positions, account, config, fullStats }: RiskRadarPr
         <Label zh="Unrealized PnL" en="UNREALIZED PNL" />
         <span
           className="tm-mono"
-          style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: m.upnl >= 0 ? 'var(--tm-up)' : 'var(--tm-dn)' }}
+          style={{
+            marginLeft: 'auto',
+            fontSize: 13,
+            fontWeight: 700,
+            color: m.upnl >= 0 ? 'var(--tm-up)' : 'var(--tm-dn)',
+          }}
         >
-          {m.upnl >= 0 ? '+' : ''}{fmtUsd(m.upnl)}
+          {m.upnl >= 0 ? '+' : ''}
+          {fmtUsd(m.upnl)}
         </span>
       </div>
     </div>
@@ -340,9 +436,19 @@ function Tag({ verdict }: { verdict: Verdict }) {
 // ── bilingual label block ──────────────────────────────────────────────
 function Label({ zh, en }: { zh: string; en: string }) {
   return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.2 }}>
-      <span style={{ fontSize: 11, color: 'var(--tm-ink)', fontWeight: 600 }}>{zh}</span>
-      <span className="tm-sc" style={{ fontSize: 8, letterSpacing: '0.12em' }}>{en}</span>
+    <span
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        lineHeight: 1.2,
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'var(--tm-ink)', fontWeight: 600 }}>
+        {zh}
+      </span>
+      <span className="tm-sc" style={{ fontSize: 8, letterSpacing: '0.12em' }}>
+        {en}
+      </span>
     </span>
   )
 }
@@ -358,7 +464,16 @@ interface GaugeRowProps {
   valueColor?: string
 }
 
-function GaugeRow({ zh, en, value, sub, fill, color, verdict, valueColor }: GaugeRowProps) {
+function GaugeRow({
+  zh,
+  en,
+  value,
+  sub,
+  fill,
+  color,
+  verdict,
+  valueColor,
+}: GaugeRowProps) {
   const w = Math.min(100, Math.max(0, fill))
   return (
     <div style={{ marginBottom: 9 }}>
@@ -367,16 +482,32 @@ function GaugeRow({ zh, en, value, sub, fill, color, verdict, valueColor }: Gaug
         <Tag verdict={verdict} />
         <span
           className="tm-mono"
-          style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: valueColor ?? 'var(--tm-ink)' }}
+          style={{
+            marginLeft: 'auto',
+            fontSize: 12,
+            fontWeight: 600,
+            color: valueColor ?? 'var(--tm-ink)',
+          }}
         >
           {value}
         </span>
       </div>
-      <div style={{ height: 5, background: 'var(--tm-hair)', overflow: 'hidden' }}>
-        <div style={{ width: `${w}%`, height: '100%', background: color, transition: 'width 0.2s ease-out' }} />
+      <div
+        style={{ height: 5, background: 'var(--tm-hair)', overflow: 'hidden' }}
+      >
+        <div
+          style={{
+            width: `${w}%`,
+            height: '100%',
+            background: color,
+            transition: 'width 0.2s ease-out',
+          }}
+        />
       </div>
       {sub && (
-        <div className="tm-sc" style={{ fontSize: 8, marginTop: 2 }}>{sub}</div>
+        <div className="tm-sc" style={{ fontSize: 8, marginTop: 2 }}>
+          {sub}
+        </div>
       )}
     </div>
   )

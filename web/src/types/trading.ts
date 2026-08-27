@@ -55,10 +55,10 @@ export interface DecisionAction {
   quantity: number
   leverage: number
   price: number
-  stop_loss?: number      // Stop loss price
-  take_profit?: number    // Take profit price
-  confidence?: number     // AI confidence (0-100)
-  reasoning?: string      // Brief reasoning
+  stop_loss?: number // Stop loss price
+  take_profit?: number // Take profit price
+  confidence?: number // AI confidence (0-100)
+  reasoning?: string // Brief reasoning
   order_id: number
   timestamp: string
   success: boolean
@@ -156,10 +156,10 @@ export interface TraderConfigData {
   trader_name: string
   ai_model: string
   exchange_id: string
-  strategy_id?: string  // Strategy ID
-  strategy_name?: string  // Strategy name
+  strategy_id?: string // Strategy ID
+  strategy_name?: string // Strategy name
   is_cross_margin: boolean
-  show_in_competition: boolean  // Whether to show in the competition arena
+  show_in_competition: boolean // Whether to show in the competition arena
   scan_interval_minutes: number
   initial_balance: number
   is_running: boolean

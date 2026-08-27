@@ -37,7 +37,8 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState('7d') // Default to 7 days
 
   // Get hours for selected period
-  const selectedHours = TIME_PERIODS.find(p => p.key === selectedPeriod)?.hours || 0
+  const selectedHours =
+    TIME_PERIODS.find((p) => p.key === selectedPeriod)?.hours || 0
 
   // Generate unique key for SWR (include period and hours)
   const tradersKey = traders
@@ -46,12 +47,20 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
     .join(',')
 
   const { data: allTraderHistories, isLoading } = useSWR(
-    traders.length > 0 ? `equity-histories-${tradersKey}-${selectedHours}` : null,
+    traders.length > 0
+      ? `equity-histories-${tradersKey}-${selectedHours}`
+      : null,
     async () => {
       console.log('Fetching equity history with hours:', selectedHours)
       const traderIds = traders.map((trader) => trader.trader_id)
-      const batchData = await api.getEquityHistoryBatch(traderIds, selectedHours)
-      console.log('Received data points:', Object.values(batchData.histories || {}).map((h: any) => h?.length))
+      const batchData = await api.getEquityHistoryBatch(
+        traderIds,
+        selectedHours
+      )
+      console.log(
+        'Received data points:',
+        Object.values(batchData.histories || {}).map((h: any) => h?.length)
+      )
       return traders.map((trader) => {
         const history = batchData.histories?.[trader.trader_id] || []
 
@@ -59,9 +68,10 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
         if (history.length > 0 && history[0].total_pnl_pct === undefined) {
           const initialEquity = history[0].total_equity
           history.forEach((point: any) => {
-            point.total_pnl_pct = initialEquity > 0
-              ? ((point.total_equity - initialEquity) / initialEquity) * 100
-              : 0
+            point.total_pnl_pct =
+              initialEquity > 0
+                ? ((point.total_equity - initialEquity) / initialEquity) * 100
+                : 0
           })
         }
 
@@ -92,7 +102,10 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
       {
         timestamp: string
         time: string
-        traders: Map<string, { pnl_pct: number; equity: number; originalTs?: string }>
+        traders: Map<
+          string,
+          { pnl_pct: number; equity: number; originalTs?: string }
+        >
       }
     >()
 
@@ -117,7 +130,10 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
           let time: string
           if (selectedHours <= 24) {
             // 1 day: show HH:mm
-            time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            time = date.toLocaleTimeString('zh-CN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
           } else if (selectedHours <= 72) {
             // 3 days: show MM/DD HH:mm
             time = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
@@ -133,8 +149,13 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
         }
 
         // Use latest value if multiple points fall in same minute
-        const existing = timestampMap.get(normalizedTs)!.traders.get(trader.trader_id)
-        if (!existing || new Date(point.timestamp) > new Date(existing.originalTs || '')) {
+        const existing = timestampMap
+          .get(normalizedTs)!
+          .traders.get(trader.trader_id)
+        if (
+          !existing ||
+          new Date(point.timestamp) > new Date(existing.originalTs || '')
+        ) {
           timestampMap.get(normalizedTs)!.traders.set(trader.trader_id, {
             pnl_pct: point.total_pnl_pct || 0,
             equity: point.total_equity,
@@ -144,11 +165,13 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
       })
     })
 
-    const sortedEntries = Array.from(timestampMap.entries())
-      .sort(([tsA], [tsB]) => new Date(tsA).getTime() - new Date(tsB).getTime())
+    const sortedEntries = Array.from(timestampMap.entries()).sort(
+      ([tsA], [tsB]) => new Date(tsA).getTime() - new Date(tsB).getTime()
+    )
 
     // Track last known values for each trader to fill gaps
-    const lastKnown: Map<string, { pnl_pct: number; equity: number }> = new Map()
+    const lastKnown: Map<string, { pnl_pct: number; equity: number }> =
+      new Map()
 
     const combined = sortedEntries.map(([ts, data], index) => {
       const entry: any = {
@@ -190,10 +213,14 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <div className="relative">
-          <div className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin"
-               style={{ borderColor: '#E0483B', borderTopColor: 'transparent' }} />
-          <TrendingUp className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-                      style={{ color: '#E0483B' }} />
+          <div
+            className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: '#E0483B', borderTopColor: 'transparent' }}
+          />
+          <TrendingUp
+            className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ color: '#E0483B' }}
+          />
         </div>
         <div className="text-sm mt-4 font-medium" style={{ color: '#8A8478' }}>
           {t('loadingChartData', language) || 'Loading chart data...'}
@@ -205,14 +232,22 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
   if (combinedData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4"
-             style={{ background: 'rgba(224, 72, 59, 0.1)' }}>
-          <BarChart3 className="w-10 h-10" style={{ color: '#E0483B', opacity: 0.6 }} />
+        <div
+          className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4"
+          style={{ background: 'rgba(224, 72, 59, 0.1)' }}
+        >
+          <BarChart3
+            className="w-10 h-10"
+            style={{ color: '#E0483B', opacity: 0.6 }}
+          />
         </div>
         <div className="text-lg font-bold mb-2" style={{ color: '#1A1813' }}>
           {t('noHistoricalData', language)}
         </div>
-        <div className="text-sm text-center max-w-xs" style={{ color: '#8A8478' }}>
+        <div
+          className="text-sm text-center max-w-xs"
+          style={{ color: '#8A8478' }}
+        >
           {t('dataWillAppear', language)}
         </div>
       </div>
@@ -249,7 +284,7 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
 
     return [
       Math.floor((minVal - padding) * 10) / 10,
-      Math.ceil((maxVal + padding) * 10) / 10
+      Math.ceil((maxVal + padding) * 10) / 10,
     ]
   }
 
@@ -258,7 +293,10 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
     if (active && payload && payload.length) {
       const data = payload[0].payload
       const date = new Date(data.timestamp)
-      const dateStr = date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+      const dateStr = date.toLocaleDateString('zh-CN', {
+        month: 'short',
+        day: 'numeric',
+      })
 
       return (
         <div
@@ -266,10 +304,13 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
           style={{
             background: 'rgba(247, 244, 236, 0.95)',
             border: '1px solid rgba(224, 72, 59, 0.2)',
-            minWidth: '200px'
+            minWidth: '200px',
           }}
         >
-          <div className="flex items-center gap-2 mb-3 pb-2" style={{ borderBottom: '1px solid rgba(26, 24, 19, 0.14)' }}>
+          <div
+            className="flex items-center gap-2 mb-3 pb-2"
+            style={{ borderBottom: '1px solid rgba(26, 24, 19, 0.14)' }}
+          >
             <Zap className="w-3.5 h-3.5" style={{ color: '#E0483B' }} />
             <span className="text-xs font-medium" style={{ color: '#E0483B' }}>
               {dateStr} {data.time}
@@ -283,22 +324,39 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
               const isPositive = pnlPct >= 0
 
               return (
-                <div key={trader.trader_id} className="flex items-center justify-between gap-4">
+                <div
+                  key={trader.trader_id}
+                  className="flex items-center justify-between gap-4"
+                >
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full"
-                         style={{ background: traderColor(trader.trader_id) }} />
-                    <span className="text-xs font-medium truncate max-w-[100px]"
-                          style={{ color: '#1A1813' }}>
+                    <div
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ background: traderColor(trader.trader_id) }}
+                    />
+                    <span
+                      className="text-xs font-medium truncate max-w-[100px]"
+                      style={{ color: '#1A1813' }}
+                    >
                       {trader.trader_name}
                     </span>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-bold mono flex items-center gap-1"
-                         style={{ color: isPositive ? '#2E8B57' : '#D6433A' }}>
-                      {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                      {isPositive ? '+' : ''}{pnlPct.toFixed(2)}%
+                    <div
+                      className="text-sm font-bold mono flex items-center gap-1"
+                      style={{ color: isPositive ? '#2E8B57' : '#D6433A' }}
+                    >
+                      {isPositive ? (
+                        <TrendingUp className="w-3 h-3" />
+                      ) : (
+                        <TrendingDown className="w-3 h-3" />
+                      )}
+                      {isPositive ? '+' : ''}
+                      {pnlPct.toFixed(2)}%
                     </div>
-                    <div className="text-[10px] mono" style={{ color: '#8A8478' }}>
+                    <div
+                      className="text-[10px] mono"
+                      style={{ color: '#8A8478' }}
+                    >
                       ${equity?.toFixed(2)}
                     </div>
                   </div>
@@ -313,25 +371,30 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
   }
 
   // Calculate stats - find each trader's last available data point
-  const traderStats = traders.map(trader => {
-    // Find the last data point that has data for this trader
-    let currentPnl = 0
-    let currentEquity = 0
-    for (let i = displayData.length - 1; i >= 0; i--) {
-      const pnl = displayData[i]?.[`${trader.trader_id}_pnl_pct`]
-      if (pnl !== undefined) {
-        currentPnl = pnl
-        currentEquity = displayData[i]?.[`${trader.trader_id}_equity`] || 0
-        break
+  const traderStats = traders
+    .map((trader) => {
+      // Find the last data point that has data for this trader
+      let currentPnl = 0
+      let currentEquity = 0
+      for (let i = displayData.length - 1; i >= 0; i--) {
+        const pnl = displayData[i]?.[`${trader.trader_id}_pnl_pct`]
+        if (pnl !== undefined) {
+          currentPnl = pnl
+          currentEquity = displayData[i]?.[`${trader.trader_id}_equity`] || 0
+          break
+        }
       }
-    }
-    return { ...trader, currentPnl, currentEquity }
-  }).sort((a, b) => b.currentPnl - a.currentPnl)
+      return { ...trader, currentPnl, currentEquity }
+    })
+    .sort((a, b) => b.currentPnl - a.currentPnl)
 
   const leader = traderStats[0]
-  const gap = traderStats.length > 1
-    ? Math.abs(traderStats[0].currentPnl - traderStats[1].currentPnl).toFixed(2)
-    : '0.00'
+  const gap =
+    traderStats.length > 1
+      ? Math.abs(traderStats[0].currentPnl - traderStats[1].currentPnl).toFixed(
+          2
+        )
+      : '0.00'
 
   return (
     <div className="space-y-4">
@@ -345,9 +408,10 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
               onClick={() => setSelectedPeriod(period.key)}
               className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
               style={{
-                background: selectedPeriod === period.key
-                  ? 'rgba(224, 72, 59, 0.15)'
-                  : 'rgba(26, 24, 19, 0.04)',
+                background:
+                  selectedPeriod === period.key
+                    ? 'rgba(224, 72, 59, 0.15)'
+                    : 'rgba(26, 24, 19, 0.04)',
                 color: selectedPeriod === period.key ? '#E0483B' : '#8A8478',
                 border: `1px solid ${selectedPeriod === period.key ? 'rgba(224, 72, 59, 0.4)' : 'rgba(26, 24, 19, 0.14)'}`,
               }}
@@ -360,21 +424,35 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
         {/* Mini Stats Bar */}
         <div className="flex items-center gap-2 flex-wrap">
           {traderStats.slice(0, 3).map((trader, idx) => (
-            <div key={trader.trader_id}
-                 className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-all hover:scale-105"
-                 style={{
-                   background: idx === 0 ? 'rgba(224, 72, 59, 0.15)' : 'rgba(26, 24, 19, 0.04)',
-                   border: `1px solid ${idx === 0 ? 'rgba(224, 72, 59, 0.3)' : 'rgba(26, 24, 19, 0.14)'}`
-                 }}>
-              <div className="w-2 h-2 rounded-full"
-                   style={{ background: traderColor(trader.trader_id) }} />
-              <span className="text-xs font-medium truncate max-w-[80px]"
-                    style={{ color: '#1A1813' }}>
+            <div
+              key={trader.trader_id}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-all hover:scale-105"
+              style={{
+                background:
+                  idx === 0
+                    ? 'rgba(224, 72, 59, 0.15)'
+                    : 'rgba(26, 24, 19, 0.04)',
+                border: `1px solid ${idx === 0 ? 'rgba(224, 72, 59, 0.3)' : 'rgba(26, 24, 19, 0.14)'}`,
+              }}
+            >
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ background: traderColor(trader.trader_id) }}
+              />
+              <span
+                className="text-xs font-medium truncate max-w-[80px]"
+                style={{ color: '#1A1813' }}
+              >
                 {trader.trader_name}
               </span>
-              <span className="text-xs font-bold mono"
-                    style={{ color: trader.currentPnl >= 0 ? '#2E8B57' : '#D6433A' }}>
-                {trader.currentPnl >= 0 ? '+' : ''}{trader.currentPnl.toFixed(2)}%
+              <span
+                className="text-xs font-bold mono"
+                style={{
+                  color: trader.currentPnl >= 0 ? '#2E8B57' : '#D6433A',
+                }}
+              >
+                {trader.currentPnl >= 0 ? '+' : ''}
+                {trader.currentPnl.toFixed(2)}%
               </span>
             </div>
           ))}
@@ -382,22 +460,26 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
       </div>
 
       {/* Chart */}
-      <div className="relative rounded-xl overflow-hidden"
-           style={{ background: '#F1ECE2' }}>
+      <div
+        className="relative rounded-xl overflow-hidden"
+        style={{ background: '#F1ECE2' }}
+      >
         {/* Watermark */}
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          fontSize: '80px',
-          fontWeight: 'bold',
-          color: 'rgba(224, 72, 59, 0.04)',
-          zIndex: 1,
-          pointerEvents: 'none',
-          fontFamily: 'monospace',
-          letterSpacing: '0.1em',
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            fontSize: '80px',
+            fontWeight: 'bold',
+            color: 'rgba(224, 72, 59, 0.04)',
+            zIndex: 1,
+            pointerEvents: 'none',
+            fontFamily: 'monospace',
+            letterSpacing: '0.1em',
+          }}
+        >
           NOFX
         </div>
 
@@ -411,23 +493,38 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
                 <linearGradient
                   key={`area-gradient-${trader.trader_id}`}
                   id={`area-gradient-${trader.trader_id}`}
-                  x1="0" y1="0" x2="0" y2="1"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
                 >
-                  <stop offset="0%" stopColor={traderColor(trader.trader_id)} stopOpacity={0.3} />
-                  <stop offset="100%" stopColor={traderColor(trader.trader_id)} stopOpacity={0} />
+                  <stop
+                    offset="0%"
+                    stopColor={traderColor(trader.trader_id)}
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={traderColor(trader.trader_id)}
+                    stopOpacity={0}
+                  />
                 </linearGradient>
               ))}
               {/* Glow filter */}
               <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                <feGaussianBlur stdDeviation="2" result="coloredBlur" />
                 <feMerge>
-                  <feMergeNode in="coloredBlur"/>
-                  <feMergeNode in="SourceGraphic"/>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
             </defs>
 
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(26, 24, 19, 0.10)" vertical={false} />
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="rgba(26, 24, 19, 0.10)"
+              vertical={false}
+            />
 
             <XAxis
               dataKey="time"
@@ -494,33 +591,64 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
               wrapperStyle={{ paddingTop: '16px' }}
               content={({ payload }) => {
                 // Filter out Area entries (they use raw dataKey containing _pnl_pct)
-                const filteredPayload = payload?.filter(
-                  (entry: any) => entry.value && !entry.value.includes('_pnl_pct')
-                ) || []
+                const filteredPayload =
+                  payload?.filter(
+                    (entry: any) =>
+                      entry.value && !entry.value.includes('_pnl_pct')
+                  ) || []
 
                 return (
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      gap: '20px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     {filteredPayload.map((entry: any, index: number) => {
-                      const trader = traders.find((t) => t.trader_name === entry.value)
+                      const trader = traders.find(
+                        (t) => t.trader_name === entry.value
+                      )
                       // Find this trader's last available PnL from traderStats
-                      const traderStat = traderStats.find((t) => t.trader_id === trader?.trader_id)
+                      const traderStat = traderStats.find(
+                        (t) => t.trader_id === trader?.trader_id
+                      )
                       const pnl = traderStat?.currentPnl || 0
                       return (
-                        <div key={`legend-${index}`} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            backgroundColor: entry.color
-                          }} />
-                          <span style={{ color: '#1A1813', fontSize: '12px', fontWeight: 500 }}>
+                        <div
+                          key={`legend-${index}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: entry.color,
+                            }}
+                          />
+                          <span
+                            style={{
+                              color: '#1A1813',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                            }}
+                          >
                             {entry.value}
-                            <span style={{
-                              color: pnl >= 0 ? '#2E8B57' : '#D6433A',
-                              marginLeft: '6px',
-                              fontFamily: 'monospace'
-                            }}>
-                              ({pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%)
+                            <span
+                              style={{
+                                color: pnl >= 0 ? '#2E8B57' : '#D6433A',
+                                marginLeft: '6px',
+                                fontFamily: 'monospace',
+                              }}
+                            >
+                              ({pnl >= 0 ? '+' : ''}
+                              {pnl.toFixed(2)}%)
                             </span>
                           </span>
                         </div>
@@ -536,34 +664,68 @@ export function ComparisonChart({ traders }: ComparisonChartProps) {
 
       {/* Bottom Stats */}
       <div className="grid grid-cols-4 gap-2">
-        <div className="p-3 rounded-lg text-center"
-             style={{ background: 'rgba(224, 72, 59, 0.05)', border: '1px solid rgba(224, 72, 59, 0.1)' }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#8A8478' }}>
+        <div
+          className="p-3 rounded-lg text-center"
+          style={{
+            background: 'rgba(224, 72, 59, 0.05)',
+            border: '1px solid rgba(224, 72, 59, 0.1)',
+          }}
+        >
+          <div
+            className="text-[10px] uppercase tracking-wider mb-1"
+            style={{ color: '#8A8478' }}
+          >
             {t('leader', language)}
           </div>
-          <div className="text-sm font-bold truncate" style={{ color: '#E0483B' }}>
+          <div
+            className="text-sm font-bold truncate"
+            style={{ color: '#E0483B' }}
+          >
             {leader?.trader_name || '-'}
           </div>
         </div>
-        <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(46, 139, 87, 0.05)' }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#8A8478' }}>
+        <div
+          className="p-3 rounded-lg text-center"
+          style={{ background: 'rgba(46, 139, 87, 0.05)' }}
+        >
+          <div
+            className="text-[10px] uppercase tracking-wider mb-1"
+            style={{ color: '#8A8478' }}
+          >
             {t('leadPnL', language) || 'Lead PnL'}
           </div>
-          <div className="text-sm font-bold mono"
-               style={{ color: (leader?.currentPnl || 0) >= 0 ? '#2E8B57' : '#D6433A' }}>
-            {(leader?.currentPnl || 0) >= 0 ? '+' : ''}{(leader?.currentPnl || 0).toFixed(2)}%
+          <div
+            className="text-sm font-bold mono"
+            style={{
+              color: (leader?.currentPnl || 0) >= 0 ? '#2E8B57' : '#D6433A',
+            }}
+          >
+            {(leader?.currentPnl || 0) >= 0 ? '+' : ''}
+            {(leader?.currentPnl || 0).toFixed(2)}%
           </div>
         </div>
-        <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(26, 24, 19, 0.04)' }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#8A8478' }}>
+        <div
+          className="p-3 rounded-lg text-center"
+          style={{ background: 'rgba(26, 24, 19, 0.04)' }}
+        >
+          <div
+            className="text-[10px] uppercase tracking-wider mb-1"
+            style={{ color: '#8A8478' }}
+          >
             {t('currentGap', language)}
           </div>
           <div className="text-sm font-bold mono" style={{ color: '#1A1813' }}>
             {gap}%
           </div>
         </div>
-        <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(26, 24, 19, 0.04)' }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#8A8478' }}>
+        <div
+          className="p-3 rounded-lg text-center"
+          style={{ background: 'rgba(26, 24, 19, 0.04)' }}
+        >
+          <div
+            className="text-[10px] uppercase tracking-wider mb-1"
+            style={{ color: '#8A8478' }}
+          >
             {t('dataPoints', language)}
           </div>
           <div className="text-sm font-bold mono" style={{ color: '#1A1813' }}>

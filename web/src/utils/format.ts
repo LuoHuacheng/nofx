@@ -14,7 +14,10 @@
  * @param minDecimals minimum number of decimal places (default 2)
  * @returns the formatted string
  */
-export function formatPrice(price: number | undefined | null, minDecimals = 2): string {
+export function formatPrice(
+  price: number | undefined | null,
+  minDecimals = 2
+): string {
   if (price === undefined || price === null || isNaN(price)) {
     return '0'
   }
@@ -79,7 +82,10 @@ export function formatPrice(price: number | undefined | null, minDecimals = 2): 
  * @param minDecimals minimum number of decimal places (default 2)
  * @returns the formatted string
  */
-export function formatQuantity(quantity: number | undefined | null, minDecimals = 2): string {
+export function formatQuantity(
+  quantity: number | undefined | null,
+  minDecimals = 2
+): string {
   if (quantity === undefined || quantity === null || isNaN(quantity)) {
     return '0'
   }
@@ -127,7 +133,10 @@ export function formatQuantity(quantity: number | undefined | null, minDecimals 
  * @param decimals number of decimal places (default 2)
  * @returns the formatted string
  */
-export function formatPercent(value: number | undefined | null, decimals = 2): string {
+export function formatPercent(
+  value: number | undefined | null,
+  decimals = 2
+): string {
   if (value === undefined || value === null || isNaN(value)) {
     return '0.00'
   }
