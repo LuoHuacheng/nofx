@@ -61,9 +61,17 @@ type FuturesTrader struct {
 	cacheDuration time.Duration
 }
 
-// NewFuturesTrader creates futures trader
-func NewFuturesTrader(apiKey, secretKey string, userId string) *FuturesTrader {
+// NewFuturesTrader creates futures trader. The optional final argument
+// routes all REST trading calls to the Binance Futures testnet
+// (https://testnet.binancefuture.com). It deliberately does NOT touch
+// the SDK package-level futures.UseTestnet flag — that is process-global
+// and would switch every user's client, not just this one.
+func NewFuturesTrader(apiKey, secretKey string, userId string, testnet ...bool) *FuturesTrader {
 	client := futures.NewClient(apiKey, secretKey)
+	if len(testnet) > 0 && testnet[0] {
+		client.SetApiEndpoint(futures.BaseApiTestnetUrl)
+		logger.Infof("🏦 Binance Futures trader using TESTNET (%s)", futures.BaseApiTestnetUrl)
+	}
 	// The SDK defaults to http.DefaultClient, which has no timeout — a hung
 	// connection would stall the trading loop indefinitely.
 	client.HTTPClient = &http.Client{Timeout: 30 * time.Second}

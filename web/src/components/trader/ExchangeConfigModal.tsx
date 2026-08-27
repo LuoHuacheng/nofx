@@ -858,6 +858,30 @@ export function ExchangeConfigModal({
                     />
                   </div>
 
+                  {currentExchangeType === 'binance' && (
+                    <label
+                      className="flex items-start gap-3 p-3 rounded-xl cursor-pointer"
+                      style={{
+                        background: 'rgba(224, 72, 59, 0.05)',
+                        border: '1px solid rgba(224, 72, 59, 0.18)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={testnet}
+                        onChange={(e) => setTestnet(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-[#E0483B]"
+                      />
+                      <span className="text-xs" style={{ color: '#1A1813' }}>
+                        <span className="font-semibold">
+                          Binance Futures Testnet
+                        </span>
+                        <br />
+                        {t('testnetDescription', language)}
+                      </span>
+                    </label>
+                  )}
+
                   {(currentExchangeType === 'okx' ||
                     currentExchangeType === 'bitget' ||
                     currentExchangeType === 'kucoin') && (
