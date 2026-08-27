@@ -25,6 +25,11 @@ type FeatureFlags struct {
 	// VerboseDriftLogging logs detailed threshold changes for debugging
 	// calibration drift and anomalies.
 	VerboseDriftLogging bool
+
+	// EnableDIYQuantFallback uses Binance public calculations when the primary
+	// open-interest source is unavailable. Disabled by default because the OI
+	// change value is a proxy, not historical exchange data.
+	EnableDIYQuantFallback bool
 }
 
 // DefaultFeatureFlags returns sensible defaults
@@ -34,6 +39,7 @@ func DefaultFeatureFlags() FeatureFlags {
 		CalibrateOnStartup:           true, // Load calibrated thresholds if available
 		DriftAlertThresholdPct:       10.0, // Alert on >10% drift
 		VerboseDriftLogging:          false,
+		EnableDIYQuantFallback:       false,
 	}
 }
 
@@ -70,17 +76,24 @@ func LoadFeatureFlagsFromEnv() FeatureFlags {
 		}
 	}
 
+	if val := os.Getenv("FEATURE_DIY_QUANT_FALLBACK"); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			flags.EnableDIYQuantFallback = b
+		}
+	}
+
 	return flags
 }
 
 // String returns human-readable summary of enabled features
 func (ff FeatureFlags) String() string {
 	return fmt.Sprintf(
-		"[AdaptiveMicrostructure: %v, CalibrateStartup: %v, DriftAlertPct: %.1f%%, VerboseDriftLogging: %v]",
+		"[AdaptiveMicrostructure: %v, CalibrateStartup: %v, DriftAlertPct: %.1f%%, VerboseDriftLogging: %v, DIYQuantFallback: %v]",
 		ff.EnableAdaptiveMicrostructure,
 		ff.CalibrateOnStartup,
 		ff.DriftAlertThresholdPct,
 		ff.VerboseDriftLogging,
+		ff.EnableDIYQuantFallback,
 	)
 }
 
@@ -114,4 +127,9 @@ func SetAdaptiveMicrostructure(enabled bool) {
 // IsAdaptiveMicrostructureEnabled returns current state of adaptive microstructure
 func IsAdaptiveMicrostructureEnabled() bool {
 	return Features().EnableAdaptiveMicrostructure
+}
+
+// IsDIYQuantFallbackEnabled returns whether Binance-derived OI fallback is on.
+func IsDIYQuantFallbackEnabled() bool {
+	return Features().EnableDIYQuantFallback
 }

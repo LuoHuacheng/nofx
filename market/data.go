@@ -110,12 +110,8 @@ func GetWithExchange(symbol, exchange string) (*Data, error) {
 		}
 	}
 
-	// Get OI data
-	oiData, err := getOpenInterestData(symbol)
-	if err != nil {
-		// OI failure doesn't affect overall result, use default values
-		oiData = &OIData{Latest: 0, Average: 0}
-	}
+	// Get OI data. DIY Binance calculations are opt-in fallback only.
+	oiData := getOpenInterestWithFallback(symbol)
 
 	// Get Funding Rate
 	fundingRate, _ := getFundingRate(symbol)
@@ -233,11 +229,8 @@ func GetWithTimeframes(symbol string, timeframes []string, primaryTimeframe stri
 	priceChange1h := calculatePriceChangeByBars(primaryKlines, primaryTimeframe, 60)  // 1 hour
 	priceChange4h := calculatePriceChangeByBars(primaryKlines, primaryTimeframe, 240) // 4 hours
 
-	// Get OI data
-	oiData, err := getOpenInterestData(symbol)
-	if err != nil {
-		oiData = &OIData{Latest: 0, Average: 0}
-	}
+	// Get OI data. DIY Binance calculations are opt-in fallback only.
+	oiData := getOpenInterestWithFallback(symbol)
 
 	// Get Funding Rate
 	fundingRate, _ := getFundingRate(symbol)
