@@ -590,8 +590,12 @@ func parseFloat(v interface{}) (float64, error) {
 	}
 }
 
-// BuildDataFromKlines constructs market data snapshot from preloaded K-line series.
-func BuildDataFromKlines(symbol string, primary []Kline, longer []Kline) (*Data, error) {
+// BuildDataFromKlines constructs market data snapshot from preloaded K-line
+// series. timeframe is the primary timeframe name (e.g. "5m") used for the
+// TimeframeData key so the strategy prompt renders OHLCV + indicator series
+// exactly like the live GetWithTimeframes path. The longer series (optional)
+// feeds the multi-timeframe context block.
+func BuildDataFromKlines(symbol string, timeframe string, primary []Kline, longer []Kline) (*Data, error) {
 	if len(primary) == 0 {
 		return nil, fmt.Errorf("primary series is empty")
 	}
@@ -612,7 +616,12 @@ func BuildDataFromKlines(symbol string, primary []Kline, longer []Kline) (*Data,
 		FundingRate:       0,
 		IntradaySeries:    calculateIntradaySeries(primary),
 		LongerTermContext: nil,
+		TimeframeData:     make(map[string]*TimeframeSeriesData),
 	}
+	if timeframe == "" {
+		timeframe = "primary"
+	}
+	data.TimeframeData[timeframe] = calculateTimeframeSeries(primary, timeframe, len(primary))
 
 	if len(longer) > 0 {
 		data.LongerTermContext = calculateLongerTermData(longer)
