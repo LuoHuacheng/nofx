@@ -143,14 +143,23 @@
 - 移除 Lighter、PostgreSQL、Telegram 的改动：与当前功能目标相反。
 - nofxplus 中多次 rollback、debug、临时验证和重复 README commit：不具备可移植价值。
 
-### P2.2：盘口异常监控
-
-**Status:** 已移植。只读检测盘口不平衡、成交量 spike、快速价格变化；增加阈值输入校验和诊断字段，暂不连接下单触发。
-
+## P2 实施进度
 
 ### P2.1：市场微结构分析
 
 **Status:** 已移植。提供只读的盘口深度、VWAP、spread、深度、盘口不平衡、支撑/阻力和大单分析；暂不自动接入下单路径。
+
+### P2.2：盘口异常监控
+
+**Status:** 已移植。只读检测盘口不平衡、成交量 spike、快速价格变化；增加阈值输入校验和诊断字段，暂不连接下单触发。
+
+### P2.3：生产级 Kline WebSocket Manager
+
+**Status:** 已移植并修复初始连接未启动 Kline drainer 的问题。提供连接池、订阅容量管理、活跃币种/周期注册、健康检查和 REST fallback；当前 `ws_kline_cache` 仍是默认数据入口，Manager 作为大规模订阅场景的独立管理层，暂不强制替换少量币种路径。
+
+### P2.4：OKX 订单 WebSocket
+
+**Status:** 客户端已移植并修复重连时复用已关闭 `stopCh` 的 bug；增加凭据校验、主网/模拟盘 URL 和订单事件映射测试。暂未替换当前 OKX `order_sync.go`：现有同步链路依赖 fills-history 的成交明细、手续费和 realized PnL，而 WS 事件还需单独完成 fill 聚合/去重后才能安全接入。
 
 
 ### Task 1：Provider 抽象与 DIY fallback
