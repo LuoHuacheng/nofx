@@ -321,6 +321,7 @@ func decodeDecisions(payload []byte) []Decision {
 			PositionSizeUSD: d.PositionSizeUSD,
 			StopLoss:        d.StopLoss,
 			TakeProfit:      d.TakeProfit,
+			ClosePct:        d.ClosePct,
 		})
 	}
 	return out

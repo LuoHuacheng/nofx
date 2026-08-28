@@ -34,6 +34,17 @@ type FeatureFlags struct {
 	// EnableAdaptiveScanInterval shortens scan intervals during volatile markets.
 	// Disabled by default to preserve current live-trading cadence.
 	EnableAdaptiveScanInterval bool
+
+	// EnableClaw402Data routes paid data requests (nofxos rankings, Vergex
+	// signals) through claw402's x402 payment gateway. Disabled: all data
+	// goes direct to nofxos.ai and no claw402/vergex client is created.
+	EnableClaw402Data bool
+
+	// EnableVergexSignals enables the Vergex signal data source (direction
+	// board, cost/liquidation heatmap, flow markets). Disabled: /api/vergex/*
+	// routes return 404, the strategy engine skips Vergex data, and the
+	// frontend hides all Vergex panels. Requires EnableClaw402Data.
+	EnableVergexSignals bool
 }
 
 // DefaultFeatureFlags returns sensible defaults
@@ -45,6 +56,8 @@ func DefaultFeatureFlags() FeatureFlags {
 		VerboseDriftLogging:          false,
 		EnableDIYQuantFallback:       false,
 		EnableAdaptiveScanInterval:   false,
+		EnableClaw402Data:            true, // paid data routing on by default (FEATURE_CLAW402_ENABLED)
+		EnableVergexSignals:          true, // Vergex signal source on by default (FEATURE_VERGEX_ENABLED)
 	}
 }
 
@@ -56,6 +69,8 @@ func DefaultFeatureFlags() FeatureFlags {
 //	FEATURE_VERBOSE_DRIFT_LOGGING=true/false
 //	FEATURE_DIY_QUANT_FALLBACK=true/false
 //	FEATURE_ADAPTIVE_SCAN_INTERVAL=true/false
+//	FEATURE_CLAW402_ENABLED=true/false
+//	FEATURE_VERGEX_ENABLED=true/false
 func LoadFeatureFlagsFromEnv() FeatureFlags {
 	flags := DefaultFeatureFlags()
 
@@ -95,19 +110,33 @@ func LoadFeatureFlagsFromEnv() FeatureFlags {
 		}
 	}
 
+	if val := os.Getenv("FEATURE_CLAW402_ENABLED"); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			flags.EnableClaw402Data = b
+		}
+	}
+
+	if val := os.Getenv("FEATURE_VERGEX_ENABLED"); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			flags.EnableVergexSignals = b
+		}
+	}
+
 	return flags
 }
 
 // String returns human-readable summary of enabled features
 func (ff FeatureFlags) String() string {
 	return fmt.Sprintf(
-		"[AdaptiveMicrostructure: %v, CalibrateStartup: %v, DriftAlertPct: %.1f%%, VerboseDriftLogging: %v, DIYQuantFallback: %v, AdaptiveScanInterval: %v]",
+		"[AdaptiveMicrostructure: %v, CalibrateStartup: %v, DriftAlertPct: %.1f%%, VerboseDriftLogging: %v, DIYQuantFallback: %v, AdaptiveScanInterval: %v, Claw402Data: %v, VergexSignals: %v]",
 		ff.EnableAdaptiveMicrostructure,
 		ff.CalibrateOnStartup,
 		ff.DriftAlertThresholdPct,
 		ff.VerboseDriftLogging,
 		ff.EnableDIYQuantFallback,
 		ff.EnableAdaptiveScanInterval,
+		ff.EnableClaw402Data,
+		ff.EnableVergexSignals,
 	)
 }
 
@@ -151,4 +180,16 @@ func IsDIYQuantFallbackEnabled() bool {
 // IsAdaptiveScanIntervalEnabled returns whether scan intervals adjust to activity.
 func IsAdaptiveScanIntervalEnabled() bool {
 	return Features().EnableAdaptiveScanInterval
+}
+
+// IsClaw402DataEnabled returns whether paid data requests are routed through
+// the claw402 x402 payment gateway.
+func IsClaw402DataEnabled() bool {
+	return Features().EnableClaw402Data
+}
+
+// IsVergexDataEnabled returns whether the Vergex signal data source is usable.
+// Vergex is paid via claw402, so it also requires the claw402 data routing.
+func IsVergexDataEnabled() bool {
+	return Features().EnableVergexSignals && Features().EnableClaw402Data
 }

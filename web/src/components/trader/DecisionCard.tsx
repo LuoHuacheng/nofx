@@ -37,6 +37,18 @@ const ACTION_CONFIG: Record<
     icon: '💰',
     label: 'CLOSE',
   },
+  partial_close: {
+    color: '#D9A441',
+    bg: 'rgba(217, 164, 65, 0.15)',
+    icon: '🔒',
+    label: 'SCALE-OUT',
+  },
+  adjust_stop_loss: {
+    color: '#D9A441',
+    bg: 'rgba(217, 164, 65, 0.15)',
+    icon: '🎯',
+    label: 'TRAIL STOP',
+  },
   hold: {
     color: '#8A8478',
     bg: 'rgba(138, 132, 120, 0.15)',

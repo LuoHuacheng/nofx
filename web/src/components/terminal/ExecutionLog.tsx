@@ -106,7 +106,7 @@ function cleanLog(raw: string): string {
   }
   // drop a redundant leading "SYMBOL action" prefix when present
   s = s.replace(
-    /^[A-Z0-9:_-]{2,12}\s+(open_long|open_short|close_long|close_short)\s+/i,
+    /^[A-Z0-9:_-]{2,12}\s+(open_long|open_short|close_long|close_short|partial_close|adjust_stop_loss)\s+/i,
     ''
   )
   return s

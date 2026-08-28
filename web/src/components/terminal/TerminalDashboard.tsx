@@ -4,6 +4,8 @@ import type { CSSProperties } from 'react'
 import useSWR, { mutate } from 'swr'
 import { api } from '../../lib/api'
 import { confirmToast, notify } from '../../lib/notify'
+import { isVergexUIEnabled } from '../../lib/config'
+import { useSystemConfig } from '../../hooks/useSystemConfig'
 import type {
   SystemStatus,
   AccountInfo,
@@ -168,6 +170,10 @@ export function TerminalDashboard({
   decisions: propDecisions,
 }: TerminalDashboardProps) {
   const traderId = selectedTrader?.trader_id || selectedTraderId
+  const { config: systemConfig } = useSystemConfig()
+  // null config means /api/config hasn't resolved yet — treat Vergex as
+  // disabled until the flags land so the paid SWR fetches never fire early.
+  const vergexUI = systemConfig != null && isVergexUIEnabled(systemConfig)
   useTick(1000)
   const clock = new Date().toLocaleTimeString('en-GB', { hour12: false })
   const [closing, setClosing] = useState<string | null>(null)
@@ -238,7 +244,7 @@ export function TerminalDashboard({
     { refreshInterval: 120000, shouldRetryOnError: false }
   )
   const { data: realFlow } = useSWR(
-    traderId ? ['flow-markets', traderId] : null,
+    traderId && vergexUI ? ['flow-markets', traderId] : null,
     () =>
       api.getFlowMarkets(selectedTrader?.ai_model, 'mainnet', '1h', 50, true),
     // paid x402 endpoint — poll slowly (5m) to conserve claw402 funds; the
@@ -246,7 +252,7 @@ export function TerminalDashboard({
     { refreshInterval: 300000, shouldRetryOnError: false }
   )
   const { data: realSignalRank } = useSWR(
-    traderId ? ['signal-rank', traderId] : null,
+    traderId && vergexUI ? ['signal-rank', traderId] : null,
     () => api.getDirectionChangeLeaderboard(30, true),
     // paid x402 endpoint — poll slowly (5m) to conserve claw402 funds
     { refreshInterval: 300000, shouldRetryOnError: false }
@@ -760,28 +766,31 @@ export function TerminalDashboard({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns:
-              'minmax(0,1.1fr) minmax(0,0.95fr) minmax(0,1.05fr)',
+            gridTemplateColumns: vergexUI
+              ? 'minmax(0,1.1fr) minmax(0,0.95fr) minmax(0,1.05fr)'
+              : 'minmax(0,0.95fr) minmax(0,1.05fr)',
           }}
         >
-          <div
-            style={{
-              ...sc,
-              borderRight: cellBorder,
-              height: ROW1_H,
-              overflow: 'hidden',
-            }}
-          >
-            {/* cost/liq heatmap works for both synthetic (hip3_perp) and crypto
+          {vergexUI && (
+            <div
+              style={{
+                ...sc,
+                borderRight: cellBorder,
+                height: ROW1_H,
+                overflow: 'hidden',
+              }}
+            >
+              {/* cost/liq heatmap works for both synthetic (hip3_perp) and crypto
                 (perp) markets — pass the likely marketType; the component falls
                 back to the other one if the guess is wrong */}
-            <LiquidationMap
-              symbol={activeSym}
-              demo={on}
-              marketType={CRYPTO_MAJORS.has(activeSym) ? 'perp' : 'hip3_perp'}
-              height={ROW1_H - 130}
-            />
-          </div>
+              <LiquidationMap
+                symbol={activeSym}
+                demo={on}
+                marketType={CRYPTO_MAJORS.has(activeSym) ? 'perp' : 'hip3_perp'}
+                height={ROW1_H - 130}
+              />
+            </div>
+          )}
           <div
             style={{
               ...sc,
@@ -808,14 +817,18 @@ export function TerminalDashboard({
               minHeight: 0,
             }}
           >
-            <SignalMatrix
-              items={signalRank?.items}
-              max={18}
-              active={activeSym}
-              onSelect={setSelectedSym}
-            />
+            {vergexUI && (
+              <SignalMatrix
+                items={signalRank?.items}
+                max={18}
+                active={activeSym}
+                onSelect={setSelectedSym}
+              />
+            )}
             {/* the live K-line always sits under the selector and flexes to fill */}
-            <div className="tm-rule" style={{ margin: '10px 0 8px' }} />
+            {vergexUI && (
+              <div className="tm-rule" style={{ margin: '10px 0 8px' }} />
+            )}
             <div style={{ flex: 1, minHeight: 0 }}>
               <KlineChart symbol={activeSym} fill demo={on} />
             </div>
@@ -1193,31 +1206,34 @@ export function TerminalDashboard({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns:
-              'minmax(0,1.2fr) minmax(0,0.9fr) minmax(0,0.9fr)',
+            gridTemplateColumns: vergexUI
+              ? 'minmax(0,1.2fr) minmax(0,0.9fr) minmax(0,0.9fr)'
+              : 'minmax(0,0.9fr) minmax(0,0.9fr)',
           }}
         >
-          <div style={{ ...sc, borderRight: cellBorder }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 10,
-                marginBottom: 8,
-              }}
-            >
-              <span className="tm-px" style={{ fontSize: 12 }}>
-                Market net inflow
-              </span>
-              <span className="tm-sc">
-                Market net inflow · {flow?.data?.window || '1h'} · Vergex
-              </span>
-              <span className="tm-sc" style={{ marginLeft: 'auto' }}>
-                {flowItems.length} markets
-              </span>
+          {vergexUI && (
+            <div style={{ ...sc, borderRight: cellBorder }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 10,
+                  marginBottom: 8,
+                }}
+              >
+                <span className="tm-px" style={{ fontSize: 12 }}>
+                  Market net inflow
+                </span>
+                <span className="tm-sc">
+                  Market net inflow · {flow?.data?.window || '1h'} · Vergex
+                </span>
+                <span className="tm-sc" style={{ marginLeft: 'auto' }}>
+                  {flowItems.length} markets
+                </span>
+              </div>
+              <FlowMarkets items={flowItems} window={flow?.data?.window} />
             </div>
-            <FlowMarkets items={flowItems} window={flow?.data?.window} />
-          </div>
+          )}
           <div style={{ ...sc, borderRight: cellBorder }}>
             <div
               style={{

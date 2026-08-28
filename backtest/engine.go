@@ -271,6 +271,31 @@ func (e *Engine) execute(d Decision, t time.Time) {
 			e.emitTrace(t, "fill", d.Symbol, fmt.Sprintf("close at %.4f (pnl %.4f)", price, tr.PnL), "")
 			e.equity.Force()
 		}
+	case "partial_close":
+		if d.ClosePct <= 0 || d.ClosePct > 1 {
+			e.emitTrace(t, "info", d.Symbol, fmt.Sprintf("partial_close ignored: close_pct %.4f out of (0,1]", d.ClosePct), "")
+			return
+		}
+		if !e.account.HasPosition(d.Symbol) {
+			e.emitTrace(t, "info", d.Symbol, "partial close ignored: no open position", "")
+			return
+		}
+		if tr, err := e.account.ClosePartial(d.Symbol, d.ClosePct, price, t); err == nil {
+			e.emitTrace(t, "fill", d.Symbol, fmt.Sprintf("partial close %.0f%% at %.4f (pnl %.4f)", d.ClosePct*100, price, tr.PnL), "")
+			e.equity.Force()
+		}
+	case "adjust_stop_loss":
+		if d.StopLoss <= 0 {
+			e.emitTrace(t, "info", d.Symbol, "adjust_stop_loss ignored: stop_loss must be positive", "")
+			return
+		}
+		pos := e.account.PositionAt(d.Symbol)
+		if pos == nil {
+			e.emitTrace(t, "info", d.Symbol, "adjust stop ignored: no open position", "")
+			return
+		}
+		e.account.SetProtection(d.Symbol, d.StopLoss, pos.TakeProfit)
+		e.emitTrace(t, "decision", d.Symbol, fmt.Sprintf("stop moved to %.4f", d.StopLoss), "")
 	case "hold", "wait":
 		// no-op
 	default:

@@ -77,11 +77,12 @@ func (BarCloseExecution) FillPrice(bar Bar) float64 { return bar.Close }
 // converts kernel decisions into this shape.
 type Decision struct {
 	Symbol          string
-	Action          string // open_long | open_short | close_long | close_short | hold | wait
+	Action          string // open_long | open_short | close_long | close_short | partial_close | adjust_stop_loss | hold | wait
 	Leverage        int
 	PositionSizeUSD float64
 	StopLoss        float64
 	TakeProfit      float64
+	ClosePct        float64 // partial_close: fraction of the open position to close, (0,1]
 }
 
 // DecisionContext is the state visible to a Decider at a decision

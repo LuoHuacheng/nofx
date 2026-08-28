@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	config_pkg "nofx/config"
 	"nofx/logger"
 	"nofx/market"
 	"nofx/provider/hyperliquid"
@@ -127,6 +128,9 @@ type Decision struct {
 	StopLoss        float64 `json:"stop_loss,omitempty"`
 	TakeProfit      float64 `json:"take_profit,omitempty"`
 
+	// Partial close (partial_close): fraction of the open position to close, 0 < close_pct <= 1.
+	ClosePct float64 `json:"close_pct,omitempty"`
+
 	// Grid trading parameters
 	Price      float64 `json:"price,omitempty"`       // Limit order price (for grid)
 	Quantity   float64 `json:"quantity,omitempty"`    // Order quantity (for grid)
@@ -210,6 +214,9 @@ func NewStrategyEngine(config *store.StrategyConfig, claw402WalletKey ...string)
 	if walletKey == "" {
 		walletKey = os.Getenv("CLAW402_WALLET_KEY")
 	}
+	if !config_pkg.IsClaw402DataEnabled() {
+		walletKey = "" // claw402 data routing disabled via FEATURE_CLAW402_ENABLED=false (checked after the env fallback)
+	}
 	if walletKey != "" {
 		claw402URL := os.Getenv("CLAW402_URL")
 		if claw402URL == "" {
@@ -224,10 +231,15 @@ func NewStrategyEngine(config *store.StrategyConfig, claw402WalletKey ...string)
 		}
 
 		vergexClient, err := vergex.NewClient(claw402URL, walletKey, &logger.MCPLogger{})
-		if err == nil {
-			logger.Infof("🔗 Vergex signals routed through claw402 (%s)", claw402URL)
-		} else {
+		if err != nil {
 			logger.Warnf("⚠️ Failed to init Vergex claw402 client: %v", err)
+			vergexClient = nil
+		}
+		if vergexClient != nil && !config_pkg.IsVergexDataEnabled() {
+			vergexClient = nil // Vergex disabled via FEATURE_VERGEX_ENABLED=false
+		}
+		if vergexClient != nil {
+			logger.Infof("🔗 Vergex signals routed through claw402 (%s)", claw402URL)
 		}
 		return &StrategyEngine{
 			config:             config,

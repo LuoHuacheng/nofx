@@ -273,3 +273,120 @@ func TestEngineMultiSymbol(t *testing.T) {
 		t.Fatalf("equity curve too short: %d", len(res.Equity))
 	}
 }
+
+// TestEnginePartialClose verifies a scale-out keeps the remainder open
+// with the protective stop intact, and releases margin proportionally.
+func TestEnginePartialClose(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(2 * time.Hour)
+	var bars []Bar
+	for i := 0; i < 20; i++ {
+		bars = append(bars, Bar{
+			Time: start.Add(time.Duration(5*(i+1)) * time.Minute),
+			Open: 100, High: 101, Low: 99, Close: 100, Volume: 100,
+		})
+	}
+	feed := NewMemoryFeed([]string{"BTCUSDT"}, map[string][]Bar{"BTCUSDT": bars}, end, nil, nil)
+	cfg := RunConfig{
+		Symbols: []string{"BTCUSDT"}, Timeframe: "5m",
+		StartTime: start, EndTime: end, InitialBalance: 1000,
+	}
+	step := 0
+	decider := DeciderFunc(func(dc *DecisionContext) []Decision {
+		step++
+		switch step {
+		case 1:
+			return []Decision{{Symbol: "BTCUSDT", Action: "open_long", PositionSizeUSD: 100, Leverage: 2, StopLoss: 95}}
+		case 2:
+			return []Decision{{Symbol: "BTCUSDT", Action: "partial_close", ClosePct: 0.5}}
+		}
+		return nil
+	})
+	eng, err := NewEngine(cfg, feed, decider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pos := eng.Account().PositionAt("BTCUSDT")
+	if pos == nil {
+		t.Fatal("position must remain open after partial close")
+	}
+	if pos.StopLoss != 95 {
+		t.Fatalf("protective stop must survive partial close, got %v", pos.StopLoss)
+	}
+	// notional 100 USDT, leverage 2 -> ~1.0 qty / 50 margin before the
+	// half close (fees come from the default taker fallback).
+	if pos.Qty <= 0.4 || pos.Qty >= 0.6 {
+		t.Fatalf("expected roughly half qty remaining, got %f", pos.Qty)
+	}
+	if pos.Margin <= 0 || pos.Margin >= 30 {
+		t.Fatalf("expected roughly half margin released, got %f", pos.Margin)
+	}
+	var partial *BacktestTrade
+	for i := range res.Trades {
+		if res.Trades[i].Position == "close" {
+			partial = &res.Trades[i]
+		}
+	}
+	if partial == nil {
+		t.Fatal("no partial close trade recorded")
+	}
+}
+
+// TestEngineAdjustStopLoss verifies moving the stop changes the exit
+// trigger price for the position.
+func TestEngineAdjustStopLoss(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(2 * time.Hour)
+	var bars []Bar
+	for i := 0; i < 20; i++ {
+		bars = append(bars, Bar{
+			Time: start.Add(time.Duration(5*(i+1)) * time.Minute),
+			Open: 100, High: 101, Low: 99, Close: 100, Volume: 100,
+		})
+	}
+	feed := NewMemoryFeed([]string{"BTCUSDT"}, map[string][]Bar{"BTCUSDT": bars}, end, nil, nil)
+	cfg := RunConfig{
+		Symbols: []string{"BTCUSDT"}, Timeframe: "5m",
+		StartTime: start, EndTime: end, InitialBalance: 1000,
+	}
+	step := 0
+	decider := DeciderFunc(func(dc *DecisionContext) []Decision {
+		step++
+		switch step {
+		case 1:
+			return []Decision{{Symbol: "BTCUSDT", Action: "open_long", PositionSizeUSD: 100, Leverage: 2, StopLoss: 95}}
+		case 2:
+			return []Decision{{Symbol: "BTCUSDT", Action: "adjust_stop_loss", StopLoss: 98.5}}
+		}
+		return nil
+	})
+	eng, err := NewEngine(cfg, feed, decider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := eng.Account().PositionAt("BTCUSDT")
+	if pos == nil {
+		t.Fatal("position must remain open after stop move")
+	}
+	if pos.StopLoss != 98.5 {
+		t.Fatalf("stop must move to 98.5, got %v", pos.StopLoss)
+	}
+	found := false
+	for _, tr := range res.Trace {
+		if tr.Kind == "decision" && strings.Contains(tr.Message, "stop moved to 98.5000") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no stop-move trace recorded: %+v", res.Trace)
+	}
+}

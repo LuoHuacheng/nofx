@@ -180,13 +180,30 @@ func applyVergexSignalPolicy(
 	for _, decision := range decisions {
 		base := universeBaseKey(decision.Symbol)
 		if positionAction, exists := positionActions[base]; base != "" && exists {
-			if strings.ToLower(strings.TrimSpace(decision.Action)) != positionAction {
+			action := strings.ToLower(strings.TrimSpace(decision.Action))
+			// While the signal holds, partial take-profits and stop moves are
+			// allowed as risk management; they never change direction. A
+			// partial close must stay strictly partial (close_pct < 1) so the
+			// state machine keeps its hold invariant.
+			allowed := action == positionAction ||
+				(positionAction == "hold" && (action == "adjust_stop_loss" ||
+					(action == "partial_close" && decision.ClosePct < 1)))
+			if allowed {
+				if action == "partial_close" || action == "adjust_stop_loss" {
+					filtered = append(filtered, decision)
+				}
+			} else {
 				blocked = append(blocked, decision)
 			}
 			continue
 		}
 		if !isOpenAction(decision.Action) {
-			filtered = append(filtered, decision)
+			switch strings.ToLower(strings.TrimSpace(decision.Action)) {
+			case "partial_close", "adjust_stop_loss":
+				blocked = append(blocked, decision) // no open position to manage
+			default:
+				filtered = append(filtered, decision)
+			}
 			continue
 		}
 

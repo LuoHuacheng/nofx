@@ -30,7 +30,7 @@ import { TerminalDashboard } from '../components/terminal/TerminalDashboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useSystemConfig } from '../hooks/useSystemConfig'
-import { isClaw402GuideEnabled } from '../lib/config'
+import { isClaw402GuideEnabled, isVergexUIEnabled } from '../lib/config'
 import { t } from '../i18n/translations'
 import { api } from '../lib/api'
 import type {
@@ -132,6 +132,7 @@ function AppChrome({
   const location = useLocation()
   const { language, setLanguage } = useLanguage()
   const { user, logout } = useAuth()
+  const { config: systemConfig } = useSystemConfig()
   const [loginOverlayOpen, setLoginOverlayOpen] = useState(false)
   const [loginOverlayFeature, setLoginOverlayFeature] = useState('')
 
@@ -165,6 +166,7 @@ function AppChrome({
         isLoggedIn={!!user}
         currentPage={currentPage}
         language={language}
+        vergexUIEnabled={isVergexUIEnabled(systemConfig)}
         onLanguageChange={setLanguage}
         user={user}
         onLogout={logout}
@@ -427,9 +429,13 @@ export function AppRoutes() {
         <Route
           path={ROUTES.data}
           element={
-            <AppChrome currentPage="data" showFooter={false}>
-              <DataPage />
-            </AppChrome>
+            isVergexUIEnabled(systemConfig) ? (
+              <AppChrome currentPage="data" showFooter={false}>
+                <DataPage />
+              </AppChrome>
+            ) : (
+              <Navigate to={ROUTES.home} replace />
+            )
           }
         />
         <Route
@@ -517,7 +523,7 @@ export function AppRoutes() {
         <Route
           path={ROUTES.strategy}
           element={
-            isAuthenticated ? (
+            isAuthenticated && isVergexUIEnabled(systemConfig) ? (
               <AppChrome currentPage="strategy" animateContent>
                 <StrategyStudioPage />
               </AppChrome>

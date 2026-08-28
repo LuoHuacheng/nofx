@@ -48,7 +48,7 @@ func isOpenAction(action string) bool {
 
 func isCloseAction(action string) bool {
 	switch strings.ToLower(strings.TrimSpace(action)) {
-	case "close_long", "close_short":
+	case "close_long", "close_short", "partial_close":
 		return true
 	default:
 		return false
@@ -128,7 +128,17 @@ func (at *AutoTrader) closeThrottleReason(decision kernel.Decision, ctx *kernel.
 	}
 	symbol := normalizedDecisionSymbol(decision.Symbol)
 	side := closeActionSide(decision.Action)
-	if symbol == "" || side == "" {
+	if symbol == "" {
+		return ""
+	}
+	if side == "" {
+		// partial_close has no direction in the action itself; resolve it from
+		// the open position so scale-outs still respect the hold/noise-band gates.
+		if pos := findAnyContextPosition(ctx, symbol); pos != nil {
+			side = strings.ToLower(strings.TrimSpace(pos.Side))
+		}
+	}
+	if side == "" {
 		return ""
 	}
 

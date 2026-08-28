@@ -170,6 +170,61 @@ func TestLegacyVergexFieldsDoNotChangeFixedExitMode(t *testing.T) {
 	}
 }
 
+func TestVergexSignalPolicyAllowsPartialCloseAndStopMoveWhileHolding(t *testing.T) {
+	decisions := []kernel.Decision{
+		{Symbol: "xyz:NVDA", Action: "partial_close", ClosePct: 0.5},
+		{Symbol: "BTC", Action: "adjust_stop_loss", StopLoss: 64000},
+	}
+	positions := []kernel.PositionInfo{
+		{Symbol: "xyz:NVDA", Side: "long"},
+		{Symbol: "BTC", Side: "short"},
+	}
+
+	got, blocked := applyVergexSignalPolicy(decisions, positions, testSignalBias(map[string]string{
+		"NVDA": "bullish",
+		"BTC":  "bearish",
+	}))
+	if len(blocked) != 0 {
+		t.Fatalf("risk-management actions must pass while the signal holds, got blocked %+v", blocked)
+	}
+	if len(got) != 4 { // 2 state-machine holds + 2 AI risk actions
+		t.Fatalf("expected 4 decisions (2 holds + 2 risk actions), got %+v", got)
+	}
+	gotActions := map[string]bool{}
+	for _, d := range got {
+		gotActions[d.Action] = true
+	}
+	if !gotActions["partial_close"] || !gotActions["adjust_stop_loss"] {
+		t.Fatalf("partial_close and adjust_stop_loss must survive the policy, got %v", gotActions)
+	}
+
+	// close_pct = 1.0 while holding is a full exit in disguise — blocked.
+	fullExit := []kernel.Decision{{Symbol: "xyz:NVDA", Action: "partial_close", ClosePct: 1.0}}
+	got2, blocked2 := applyVergexSignalPolicy(fullExit, positions, testSignalBias(map[string]string{
+		"NVDA": "bullish",
+		"BTC":  "bearish",
+	}))
+	if len(blocked2) != 1 {
+		t.Fatalf("partial_close with close_pct=1 while holding must be blocked, got %+v", got2)
+	}
+}
+
+func TestVergexSignalPolicyBlocksPartialCloseWhenDirectionChanged(t *testing.T) {
+	decisions := []kernel.Decision{
+		{Symbol: "xyz:NVDA", Action: "partial_close", ClosePct: 0.5},
+		{Symbol: "xyz:NVDA", Action: "adjust_stop_loss", StopLoss: 100},
+	}
+	positions := []kernel.PositionInfo{{Symbol: "xyz:NVDA", Side: "long"}}
+
+	got, blocked := applyVergexSignalPolicy(decisions, positions, testSignalBias(map[string]string{
+		"NVDA": "bearish", // direction changed -> state machine demands full close
+	}))
+	if len(blocked) != 2 {
+		t.Fatalf("once the direction changed, partial_close and stop moves must be blocked (exit only), got blocked %+v", blocked)
+	}
+	_ = got
+}
+
 func TestValidateProtectionPrices(t *testing.T) {
 	tests := []struct {
 		name, action           string

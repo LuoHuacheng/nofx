@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"nofx/logger"
 	"nofx/market"
+	"strings"
 )
 
 // ============================================================================
@@ -24,17 +25,36 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 }
 
 func validateDecisionForMode(d *Decision, accountEquity float64, btcEthLeverage, altcoinLeverage int, btcEthPosRatio, altcoinPosRatio float64, signalManagedExit bool) error {
+	d.Action = strings.ToLower(strings.TrimSpace(d.Action))
 	validActions := map[string]bool{
-		"open_long":   true,
-		"open_short":  true,
-		"close_long":  true,
-		"close_short": true,
-		"hold":        true,
-		"wait":        true,
+		"open_long":        true,
+		"open_short":       true,
+		"close_long":       true,
+		"close_short":      true,
+		"partial_close":    true,
+		"adjust_stop_loss": true,
+		"hold":             true,
+		"wait":             true,
 	}
 
 	if !validActions[d.Action] {
 		return fmt.Errorf("invalid action: %s", d.Action)
+	}
+
+	if d.Action == "partial_close" {
+		// Partial take-profit: close a fraction of the open position.
+		if d.ClosePct <= 0 || d.ClosePct > 1 {
+			return fmt.Errorf("partial_close close_pct must be in (0, 1], got %.2f", d.ClosePct)
+		}
+		return nil
+	}
+
+	if d.Action == "adjust_stop_loss" {
+		// Trailing / breakeven stop move: a new protective price is required.
+		if d.StopLoss <= 0 {
+			return fmt.Errorf("adjust_stop_loss requires a positive stop_loss price")
+		}
+		return nil
 	}
 
 	if d.Action == "open_long" || d.Action == "open_short" {

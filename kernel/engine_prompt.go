@@ -247,6 +247,7 @@ func vergexHoldRules() string {
 		"- Existing short + bearish ranking: always `hold`, regardless of PnL, candles, direction history or heatmap.\n" +
 		"- Close an existing position only when its ranking direction changes, becomes neutral, or the symbol disappears from the current valid board.\n" +
 		"- Keep an exchange-level protective stop for hard-risk containment, but do not use a fixed take-profit exit; ordinary exits are signal-managed.\n" +
+		"- While the signal holds, `partial_close` (with `close_pct`) is allowed to lock profits and `adjust_stop_loss` (with a new `stop_loss`) is allowed to trail the stop to breakeven or lock gains. Never move the stop away from the position.\n" +
 		"- Do not treat ordinary PnL fluctuation as a strategy exit signal.\n" +
 		"- Never flip direction in the same cycle: close first, then consider the new direction on a later cycle.\n" +
 		"- There is no fixed hourly or per-cycle entry cap.\n\n"
@@ -396,11 +397,11 @@ func writeVergexOutputFormat(sb *strings.Builder, accountEquity float64, riskCon
 
 	if zh {
 		sb.WriteString("## Field Requirements\n\n")
-		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | hold | wait\n")
+		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | partial_close | adjust_stop_loss | hold | wait\n")
 		sb.WriteString(fmt.Sprintf("- `confidence`: 0-100; recommended ≥ %d to open\n", riskControl.MinConfidence))
 		sb.WriteString("- Required when opening: leverage, position_size_usd, stop_loss, take_profit, confidence, risk_usd\n")
 		sb.WriteString("- `stop_loss` must be a positive protective price calculated from the supplied market data: below entry for `open_long`, above entry for `open_short`. Never copy the illustrative example value.\n")
-		sb.WriteString("- `take_profit` must be exactly 0 because ordinary exits are managed by the Claw402 direction signal.\n")
+		sb.WriteString("- `take_profit` must be exactly 0 because ordinary exits are managed by the Claw402 direction signal.\n- `partial_close` (scale-out): close a fraction of an open position with `close_pct` (0 < close_pct <= 1, e.g. 0.5 = close half). Use it to lock profits while the signal still holds.\n- `adjust_stop_loss` (trailing / breakeven stop): move the protective stop of an open position to the new `stop_loss` price. Once +1R in profit, trail the stop to breakeven; never move it away from the position.\n")
 		sb.WriteString("- All numeric values must be calculated numbers, not formulas.\n")
 		if singleSymbol {
 			sb.WriteString(fmt.Sprintf("- This strategy trades only `%s`; JSON symbol must match it exactly.\n", exampleSymbol))
@@ -410,11 +411,11 @@ func writeVergexOutputFormat(sb *strings.Builder, accountEquity float64, riskCon
 		sb.WriteString("\n")
 	} else {
 		sb.WriteString("## Field Requirements\n\n")
-		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | hold | wait\n")
+		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | partial_close | adjust_stop_loss | hold | wait\n")
 		sb.WriteString(fmt.Sprintf("- `confidence`: 0-100; recommended ≥ %d to open\n", riskControl.MinConfidence))
 		sb.WriteString("- Required when opening: leverage, position_size_usd, stop_loss, take_profit, confidence, risk_usd\n")
 		sb.WriteString("- `stop_loss` must be a positive protective price calculated from the supplied market data: below entry for `open_long`, above entry for `open_short`. Never copy the illustrative example value.\n")
-		sb.WriteString("- `take_profit` must be exactly 0 because ordinary exits are managed by the Claw402 direction signal.\n")
+		sb.WriteString("- `take_profit` must be exactly 0 because ordinary exits are managed by the Claw402 direction signal.\n- `partial_close` (scale-out): close a fraction of an open position with `close_pct` (0 < close_pct <= 1, e.g. 0.5 = close half). Use it to lock profits while the signal still holds.\n- `adjust_stop_loss` (trailing / breakeven stop): move the protective stop of an open position to the new `stop_loss` price. Once +1R in profit, trail the stop to breakeven; never move it away from the position.\n")
 		sb.WriteString("- All numeric values must be calculated numbers, not formulas.\n")
 		if singleSymbol {
 			sb.WriteString(fmt.Sprintf("- This strategy trades only `%s`; JSON symbol must match it exactly.\n", exampleSymbol))
@@ -461,7 +462,8 @@ func buildXYZStockCustomPrompt(symbol string) string {
 	sb.WriteString("- Do not flip directly from long to short or short to long in the same cycle. Manage or close the open position first.\n\n")
 
 	sb.WriteString("## Position Management\n")
-	sb.WriteString("- Trail stop to breakeven once +1R, take partial profits at +2R if momentum stalls.\n")
+	sb.WriteString("- Trail stop to breakeven once +1R: emit `adjust_stop_loss` with the new `stop_loss` (entry price) so the exchange stop moves up.\n")
+	sb.WriteString("- Take partial profits at +2R if momentum stalls: emit `partial_close` with `close_pct` (e.g. 0.5 = close half).\n")
 	sb.WriteString("- Cut quickly if price breaks the stop or the catalyst thesis fails.\n")
 	sb.WriteString("- Holding past 45 minutes is fine; flipping in/out every cycle is not.\n\n")
 
@@ -651,20 +653,20 @@ func writeOutputFormat(sb *strings.Builder, accountEquity, btcEthPosValueRatio f
 
 	if zh {
 		sb.WriteString("## Field Description\n\n")
-		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | hold | wait\n")
+		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | partial_close | adjust_stop_loss | hold | wait\n")
 		sb.WriteString(fmt.Sprintf("- `confidence`: 0-100 (opening recommended ≥ %d)\n", riskControl.MinConfidence))
 		sb.WriteString("- Required when opening: leverage, position_size_usd, stop_loss, take_profit, confidence, risk_usd\n")
-		sb.WriteString("- **IMPORTANT**: all numeric values must be calculated numbers, NOT formulas/expressions (e.g. use `27.76`, not `3000 * 0.01`)\n")
+		sb.WriteString("- `partial_close` (scale-out): close a fraction of an open position with `close_pct` (0 < close_pct <= 1, e.g. 0.5 = close half).\n- `adjust_stop_loss` (trailing / breakeven stop): move the protective stop of an open position to the new `stop_loss` price; never move it away from the position.\n- **IMPORTANT**: all numeric values must be calculated numbers, NOT formulas/expressions (e.g. use `27.76`, not `3000 * 0.01`)\n")
 		if singleSymbol {
 			sb.WriteString(fmt.Sprintf("- **This strategy trades only %s.** The JSON `symbol` MUST match `%s` exactly — do not write `%s` variants that drop the suffix or add USDT.\n", primarySymbol, primarySymbol, primarySymbol))
 		}
 		sb.WriteString("\n")
 	} else {
 		sb.WriteString("## Field Description\n\n")
-		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | hold | wait\n")
+		sb.WriteString("- `action`: open_long | open_short | close_long | close_short | partial_close | adjust_stop_loss | hold | wait\n")
 		sb.WriteString(fmt.Sprintf("- `confidence`: 0-100 (opening recommended ≥ %d)\n", riskControl.MinConfidence))
 		sb.WriteString("- Required when opening: leverage, position_size_usd, stop_loss, take_profit, confidence, risk_usd\n")
-		sb.WriteString("- **IMPORTANT**: all numeric values must be calculated numbers, NOT formulas/expressions (e.g. use `27.76`, not `3000 * 0.01`)\n")
+		sb.WriteString("- `partial_close` (scale-out): close a fraction of an open position with `close_pct` (0 < close_pct <= 1, e.g. 0.5 = close half).\n- `adjust_stop_loss` (trailing / breakeven stop): move the protective stop of an open position to the new `stop_loss` price; never move it away from the position.\n- **IMPORTANT**: all numeric values must be calculated numbers, NOT formulas/expressions (e.g. use `27.76`, not `3000 * 0.01`)\n")
 		if singleSymbol {
 			sb.WriteString(fmt.Sprintf("- **This strategy trades only %s.** The JSON `symbol` MUST match `%s` exactly — do not add USDT/USDC suffix variants.\n", primarySymbol, primarySymbol))
 		}

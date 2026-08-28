@@ -207,6 +207,57 @@ func (a *BacktestAccount) Close(symbol string, price float64, t time.Time) (Back
 	return trade, nil
 }
 
+// ClosePartial closes a fraction pct (0,1] of the open position at
+// price. The remaining position keeps its entry, leverage, stop/take-
+// profit and proportional margin; funding attribution is split pro-
+// portionally. pct >= 1 delegates to Close. Mirrors the live trader's
+// partial_close, where the exchange protective stop stays in place.
+func (a *BacktestAccount) ClosePartial(symbol string, pct, price float64, t time.Time) (BacktestTrade, error) {
+	if pct >= 1 {
+		return a.Close(symbol, price, t)
+	}
+	if pct <= 0 {
+		return BacktestTrade{}, fmt.Errorf("partial close %s: close_pct %.4f must be in (0,1]", symbol, pct)
+	}
+	p, ok := a.positions[symbol]
+	if !ok {
+		return BacktestTrade{}, fmt.Errorf("partial close %s: no open position", symbol)
+	}
+	if price <= 0 {
+		return BacktestTrade{}, fmt.Errorf("partial close %s: non-positive price %.6f", symbol, price)
+	}
+
+	closeSide := "sell"
+	if p.Side == "short" {
+		closeSide = "buy"
+	}
+	closeQty := p.Qty * pct
+	notional := closeQty * price
+	fee := notional * a.feeTaker
+	pricePnL := p.UnrealizedPnL(price) * pct
+	fundingPart := p.FundingPaid * pct
+	releaseMargin := p.Margin * pct
+
+	a.balance += releaseMargin + pricePnL - fee
+	tradePnL := pricePnL - fee - fundingPart
+	a.realizedPnL += tradePnL
+
+	trade := BacktestTrade{
+		Time: t, Symbol: symbol, Side: closeSide, Position: "close", Price: price, Size: closeQty, Fee: fee, PnL: tradePnL,
+	}
+	a.trades = append(a.trades, trade)
+
+	p.Qty -= closeQty
+	p.Margin -= releaseMargin
+	p.FundingPaid -= fundingPart
+	if p.Qty < 1e-12 {
+		// Rounding dust from repeated partial closes: snap to zero and drop
+		// the phantom position so it cannot block a re-open or accrue dust funding.
+		delete(a.positions, symbol)
+	}
+	return trade, nil
+}
+
 // UpdateMark sets the mark price for a symbol's position (no-op if none).
 func (a *BacktestAccount) UpdateMark(symbol string, mark float64) {
 	if p, ok := a.positions[symbol]; ok {

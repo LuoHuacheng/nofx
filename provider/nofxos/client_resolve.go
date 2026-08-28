@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"nofx/config"
 	"nofx/logger"
 )
 
@@ -13,6 +14,10 @@ import (
 // variable, then the direct nofxos.ai client with the default auth key.
 func ResolveClient(walletKey string) *Client {
 	walletKey = strings.TrimSpace(walletKey)
+	if !config.IsClaw402DataEnabled() {
+		// claw402 data routing disabled via FEATURE_CLAW402_ENABLED=false
+		return NewClient(DefaultBaseURL, DefaultAuthKey)
+	}
 	if walletKey == "" {
 		walletKey = strings.TrimSpace(os.Getenv("CLAW402_WALLET_KEY"))
 	}

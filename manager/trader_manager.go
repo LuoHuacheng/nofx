@@ -812,6 +812,9 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 }
 
 func resolveTraderDataWalletKey(st *store.Store, userID string, selectedModel *store.AIModel) string {
+	if !config.IsClaw402DataEnabled() {
+		return "" // claw402 data routing disabled via FEATURE_CLAW402_ENABLED=false
+	}
 	// Fast path: selected model is itself a claw402 model.
 	if selectedModel != nil && selectedModel.Provider == "claw402" {
 		if walletKey := string(selectedModel.APIKey); walletKey != "" {

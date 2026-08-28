@@ -6,6 +6,7 @@ import (
 	"nofx/logger"
 	"nofx/market"
 	"nofx/store"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,10 @@ func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actio
 		return at.executeCloseLongWithRecord(decision, actionRecord)
 	case "close_short":
 		return at.executeCloseShortWithRecord(decision, actionRecord)
+	case "partial_close":
+		return at.executePartialCloseWithRecord(decision, actionRecord)
+	case "adjust_stop_loss":
+		return at.executeAdjustStopLossWithRecord(decision, actionRecord)
 	case "hold":
 		if at.usesSignalManagedExit() {
 			if err := at.trader.CancelTakeProfitOrders(decision.Symbol); err != nil {
@@ -421,5 +426,194 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *kernel.Decision, act
 	at.recordAndConfirmOrder(order, decision.Symbol, "close_short", quantity, marketData.CurrentPrice, 0, entryPrice)
 
 	logger.Infof("  ✓ Position closed successfully")
+	return nil
+}
+
+// resolveOpenPosition returns the side, quantity and entry price of the open
+// position for a symbol (local DB first, exchange as fallback).
+func (at *AutoTrader) resolveOpenPosition(symbol string) (side string, quantity float64, entryPrice float64) {
+	normalizedSymbol := market.Normalize(symbol)
+
+	// Local DB first (more accurate quantity)
+	if at.store != nil {
+		for _, candidate := range []string{"LONG", "SHORT"} {
+			if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, candidate); err == nil && openPos != nil {
+				return strings.ToLower(candidate), openPos.Quantity, openPos.EntryPrice
+			}
+		}
+	}
+
+	// Exchange fallback
+	if positions, err := at.trader.GetPositions(); err == nil {
+		for _, pos := range positions {
+			if fmt.Sprint(pos["symbol"]) == symbol {
+				side := strings.ToLower(fmt.Sprint(pos["side"]))
+				qty, _ := pos["positionAmt"].(float64)
+				if side == "short" {
+					qty = -qty
+				}
+				if qty > 0 {
+					entry, _ := pos["entryPrice"].(float64)
+					return side, qty, entry
+				}
+			}
+		}
+	}
+	return "", 0, 0
+}
+
+// latestProtectionPrices returns the most recent stop-loss / take-profit
+// recorded for a symbol, scanning decision records newest-first. Open actions
+// provide both levels; adjust_stop_loss actions update the stop only. Used to
+// re-establish exchange protection after a partial close, because every
+// exchange adapter cancels pending orders (including protective algo/trigger
+// orders) on a close.
+func (at *AutoTrader) latestProtectionPrices(symbol string) (stopLoss, takeProfit float64) {
+	if at.store == nil {
+		return 0, 0
+	}
+	records, err := at.store.Decision().GetLatestRecords(at.id, 100)
+	if err != nil {
+		return 0, 0
+	}
+	normalized := market.Normalize(symbol)
+	// GetLatestRecords returns oldest→newest; scan backwards for latest values.
+	for i := len(records) - 1; i >= 0; i-- {
+		for _, a := range records[i].Decisions {
+			if market.Normalize(a.Symbol) != normalized {
+				continue
+			}
+			switch a.Action {
+			case "open_long", "open_short":
+				if stopLoss == 0 && a.StopLoss > 0 {
+					stopLoss = a.StopLoss
+				}
+				if takeProfit == 0 && a.TakeProfit > 0 {
+					takeProfit = a.TakeProfit
+				}
+			case "adjust_stop_loss":
+				if stopLoss == 0 && a.StopLoss > 0 {
+					stopLoss = a.StopLoss
+				}
+			}
+		}
+		if stopLoss > 0 && takeProfit > 0 {
+			break
+		}
+	}
+	return stopLoss, takeProfit
+}
+
+// executePartialCloseWithRecord partially closes a position (scale-out take
+// profit). All exchange adapters cancel every pending order after a close
+// fill, so the remaining size must be re-protected immediately: the latest
+// stop (and take-profit when exits are not signal-managed) is re-placed for
+// the remainder, and a failure emergency-closes the leftover position.
+func (at *AutoTrader) executePartialCloseWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+	logger.Infof("  📤 Partial close: %s %.0f%%", decision.Symbol, decision.ClosePct*100)
+
+	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	if err != nil {
+		return fmt.Errorf("failed to get market data for %s: %w", decision.Symbol, err)
+	}
+	actionRecord.Price = marketData.CurrentPrice
+
+	side, quantity, entryPrice := at.resolveOpenPosition(decision.Symbol)
+	if side == "" || quantity <= 0 {
+		return fmt.Errorf("partial close failed: no open %s position found", decision.Symbol)
+	}
+
+	closeQty := quantity * decision.ClosePct
+	if closeQty <= 0 {
+		return fmt.Errorf("partial close failed: computed close quantity %.8f is not positive (position %.8f × %.2f)", closeQty, quantity, decision.ClosePct)
+	}
+
+	var order map[string]interface{}
+	if side == "long" {
+		order, err = at.trader.CloseLong(decision.Symbol, closeQty)
+	} else {
+		order, err = at.trader.CloseShort(decision.Symbol, closeQty)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to partial close %s %s: %w", decision.Symbol, side, err)
+	}
+
+	actionRecord.Quantity = closeQty
+	if orderID, ok := order["orderId"].(int64); ok {
+		actionRecord.OrderID = orderID
+	}
+
+	at.recordAndConfirmOrder(order, decision.Symbol, "partial_close", closeQty, marketData.CurrentPrice, 0, entryPrice)
+
+	// Every adapter cancels pending orders (including the protective stop) on a
+	// close — the leftover size would otherwise run unprotected. Re-place the
+	// latest stop, and the take-profit when exits are not signal-managed.
+	remainingQty := quantity - closeQty
+	if remainingQty > 0 {
+		stopLoss, takeProfit := at.latestProtectionPrices(decision.Symbol)
+		if stopLoss > 0 {
+			if err := at.trader.SetStopLoss(decision.Symbol, strings.ToUpper(side), remainingQty, stopLoss); err != nil {
+				return at.closeUnprotectedPosition(decision.Symbol, side, remainingQty,
+					fmt.Errorf("failed to re-establish stop loss after partial close: %w", err))
+			}
+		}
+		if takeProfit > 0 && !at.usesSignalManagedExit() {
+			if err := at.trader.SetTakeProfit(decision.Symbol, strings.ToUpper(side), remainingQty, takeProfit); err != nil {
+				return at.closeUnprotectedPosition(decision.Symbol, side, remainingQty,
+					fmt.Errorf("failed to re-establish take profit after partial close: %w", err))
+			}
+		}
+	}
+
+	logger.Infof("  ✓ Partial close %s %s: closed %.6f of %.6f (%.0f%%), remainder re-protected", decision.Symbol, side, closeQty, quantity, decision.ClosePct*100)
+	return nil
+}
+
+// executeAdjustStopLossWithRecord moves the exchange stop-loss to a new price
+// (trailing / breakeven stop). Old stop orders are cancelled first so repeated
+// adjustments never pile up duplicate protective orders.
+func (at *AutoTrader) executeAdjustStopLossWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+	logger.Infof("  🎯 Adjust stop loss: %s -> %.4f", decision.Symbol, decision.StopLoss)
+
+	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	if err != nil {
+		return fmt.Errorf("failed to get market data for %s: %w", decision.Symbol, err)
+	}
+	actionRecord.Price = marketData.CurrentPrice
+
+	side, quantity, _ := at.resolveOpenPosition(decision.Symbol)
+	if side == "" || quantity <= 0 {
+		return fmt.Errorf("adjust stop loss failed: no open %s position found", decision.Symbol)
+	}
+
+	// Directional sanity check: a long stop must sit below price, a short above.
+	if side == "long" && decision.StopLoss >= marketData.CurrentPrice {
+		return fmt.Errorf("adjust stop loss failed: new long stop %.8f must be below market price %.8f", decision.StopLoss, marketData.CurrentPrice)
+	}
+	if side == "short" && decision.StopLoss <= marketData.CurrentPrice {
+		return fmt.Errorf("adjust stop loss failed: new short stop %.8f must be above market price %.8f", decision.StopLoss, marketData.CurrentPrice)
+	}
+
+	if err := at.trader.CancelStopLossOrders(decision.Symbol); err != nil {
+		return fmt.Errorf("failed to cancel old stop loss orders for %s: %w", decision.Symbol, err)
+	}
+	if err := at.trader.SetStopLoss(decision.Symbol, strings.ToUpper(side), quantity, decision.StopLoss); err != nil {
+		return fmt.Errorf("failed to move stop loss for %s: %w", decision.Symbol, err)
+	}
+
+	// Hyperliquid CancelStopLossOrders goes through CancelStopOrders, which
+	// cancels every pending order for the coin — including the take-profit.
+	// Re-establish it so the stop move does not silently strip the TP.
+	if !at.usesSignalManagedExit() {
+		if _, takeProfit := at.latestProtectionPrices(decision.Symbol); takeProfit > 0 {
+			if err := at.trader.SetTakeProfit(decision.Symbol, strings.ToUpper(side), quantity, takeProfit); err != nil {
+				return at.closeUnprotectedPosition(decision.Symbol, side, quantity,
+					fmt.Errorf("failed to re-establish take profit after stop move: %w", err))
+			}
+		}
+	}
+
+	actionRecord.StopLoss = decision.StopLoss
+	logger.Infof("  ✓ Stop loss moved to %.4f (%s, qty %.6f)", decision.StopLoss, side, quantity)
 	return nil
 }

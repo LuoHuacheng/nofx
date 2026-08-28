@@ -759,8 +759,8 @@ func sortDecisionsByPriority(decisions []kernel.Decision) []kernel.Decision {
 	// Define priority
 	getActionPriority := func(action string) int {
 		switch action {
-		case "close_long", "close_short":
-			return 1 // Highest priority: close positions first
+		case "close_long", "close_short", "partial_close", "adjust_stop_loss":
+			return 1 // Highest priority: manage/close positions first
 		case "open_long", "open_short":
 			return 2 // Second priority: open positions later
 		case "hold", "wait":

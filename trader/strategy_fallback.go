@@ -3,6 +3,7 @@ package trader
 import (
 	"strings"
 
+	"nofx/config"
 	"nofx/logger"
 	"nofx/store"
 )
@@ -42,11 +43,14 @@ func ResolveStrategyWithVergexFallback(st *store.Store, userID string, strategyC
 	if st == nil || strategyConfig == nil || !isVergexSource(strategyConfig.CoinSource.SourceType) {
 		return strategyConfig, strategyConfigRaw
 	}
-	if walletKey, err := st.AIModel().ResolveClaw402WalletKey(userID, ""); err == nil && walletKey != "" {
+	if !config.IsVergexDataEnabled() {
+		// Vergex disabled via FEATURE_VERGEX_ENABLED=false (or claw402 data
+		// routing off) — treat the paid source as unusable and fall back.
+	} else if walletKey, err := st.AIModel().ResolveClaw402WalletKey(userID, ""); err == nil && walletKey != "" {
 		return strategyConfig, strategyConfigRaw // wallet available, keep vergex
 	}
 
-	logger.Warnf("⚠️ Trader (user %s) uses vergex_signal but no claw402 wallet is configured — falling back to a non-vergex strategy", userID)
+	logger.Warnf("⚠️ Trader (user %s) uses vergex_signal but the Vergex data source is unavailable — falling back to a non-vergex strategy", userID)
 
 	// 1) The user's active strategy, when it is usable.
 	if active, err := st.Strategy().GetActive(userID); err == nil {

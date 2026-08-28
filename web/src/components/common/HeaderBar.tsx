@@ -13,6 +13,8 @@ interface HeaderBarProps {
   isHomePage?: boolean
   currentPage?: Page
   language?: Language
+  /** Hide Vergex-related nav entries (Data, Strategy) when the Vergex UI is disabled. */
+  vergexUIEnabled?: boolean
   onLanguageChange?: (lang: Language) => void
   user?: { email: string } | null
   onLogout?: () => void
@@ -25,6 +27,7 @@ export default function HeaderBar({
   isHomePage = false,
   currentPage,
   language = 'en' as Language,
+  vergexUIEnabled = true,
   user,
   onLogout,
   onPageChange,
@@ -105,6 +108,7 @@ export default function HeaderBar({
                     path: ROUTES.data,
                     label: 'Data',
                     requiresAuth: false,
+                    hidden: !vergexUIEnabled,
                   },
                   {
                     page: 'backtest',
@@ -136,6 +140,7 @@ export default function HeaderBar({
                     path: ROUTES.strategy,
                     label: t('strategyNav', language),
                     requiresAuth: true,
+                    hidden: !vergexUIEnabled,
                   },
                   {
                     page: 'competition',
