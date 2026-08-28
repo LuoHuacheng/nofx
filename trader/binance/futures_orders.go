@@ -45,7 +45,7 @@ func (t *FuturesTrader) OpenLong(symbol string, quantity float64, leverage int) 
 	order, err := t.client.NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeBuy).
-		PositionSide(futures.PositionSideTypeLong).
+		PositionSide(t.positionSide(true)).
 		Type(futures.OrderTypeMarket).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
@@ -100,7 +100,7 @@ func (t *FuturesTrader) OpenShort(symbol string, quantity float64, leverage int)
 	order, err := t.client.NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeSell).
-		PositionSide(futures.PositionSideTypeShort).
+		PositionSide(t.positionSide(false)).
 		Type(futures.OrderTypeMarket).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
@@ -151,7 +151,7 @@ func (t *FuturesTrader) CloseLong(symbol string, quantity float64) (map[string]i
 	order, err := t.client.NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeSell).
-		PositionSide(futures.PositionSideTypeLong).
+		PositionSide(t.positionSide(true)).
 		Type(futures.OrderTypeMarket).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
@@ -206,7 +206,7 @@ func (t *FuturesTrader) CloseShort(symbol string, quantity float64) (map[string]
 	order, err := t.client.NewCreateOrderService().
 		Symbol(symbol).
 		Side(futures.SideTypeBuy).
-		PositionSide(futures.PositionSideTypeShort).
+		PositionSide(t.positionSide(false)).
 		Type(futures.OrderTypeMarket).
 		Quantity(quantityStr).
 		NewClientOrderID(getBrOrderID()).
@@ -441,11 +441,10 @@ func (t *FuturesTrader) PlaceLimitOrder(req *types.LimitOrderRequest) (*types.Li
 
 	if req.Side == "BUY" {
 		side = futures.SideTypeBuy
-		positionSide = futures.PositionSideTypeLong
 	} else {
 		side = futures.SideTypeSell
-		positionSide = futures.PositionSideTypeShort
 	}
+	positionSide = t.positionSide(req.Side == "BUY")
 
 	// Build order service with broker ID
 	orderService := t.client.NewCreateOrderService().
@@ -654,15 +653,13 @@ func (t *FuturesTrader) GetOpenOrders(symbol string) ([]types.OpenOrder, error) 
 // Binance has migrated stop orders to Algo Order system (error -4120 STOP_ORDER_SWITCH_ALGO)
 func (t *FuturesTrader) SetStopLoss(symbol string, positionSide string, quantity, stopPrice float64) error {
 	var side futures.SideType
-	var posSide futures.PositionSideType
 
 	if positionSide == "LONG" {
 		side = futures.SideTypeSell
-		posSide = futures.PositionSideTypeLong
 	} else {
 		side = futures.SideTypeBuy
-		posSide = futures.PositionSideTypeShort
 	}
+	posSide := t.positionSide(positionSide == "LONG")
 
 	// Use new Algo Order API
 	_, err := t.client.NewCreateAlgoOrderService().
@@ -688,15 +685,13 @@ func (t *FuturesTrader) SetStopLoss(symbol string, positionSide string, quantity
 // Binance has migrated stop orders to Algo Order system (error -4120 STOP_ORDER_SWITCH_ALGO)
 func (t *FuturesTrader) SetTakeProfit(symbol string, positionSide string, quantity, takeProfitPrice float64) error {
 	var side futures.SideType
-	var posSide futures.PositionSideType
 
 	if positionSide == "LONG" {
 		side = futures.SideTypeSell
-		posSide = futures.PositionSideTypeLong
 	} else {
 		side = futures.SideTypeBuy
-		posSide = futures.PositionSideTypeShort
 	}
+	posSide := t.positionSide(positionSide == "LONG")
 
 	// Use new Algo Order API
 	_, err := t.client.NewCreateAlgoOrderService().

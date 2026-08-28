@@ -23,7 +23,7 @@ import (
 // Inherits TraderTestSuite and adds Binance Futures specific mock logic
 type BinanceFuturesTestSuite struct {
 	*testutil.TraderTestSuite // Embeds base test suite
-	mockServer              *httptest.Server
+	mockServer                *httptest.Server
 }
 
 // NewBinanceFuturesTestSuite Creates Binance Futures test suite
@@ -243,11 +243,10 @@ func NewBinanceFuturesTestSuite(t *testing.T) *BinanceFuturesTestSuite {
 				"msg":  "success",
 			}
 
-		// Mock ChangePositionMode - /fapi/v1/positionSide/dual
+		// Mock ChangePositionMode/GetPositionMode - /fapi/v1/positionSide/dual
 		case path == "/fapi/v1/positionSide/dual":
 			respBody = map[string]interface{}{
-				"code": 200,
-				"msg":  "success",
+				"dualSidePosition": true,
 			}
 
 		// Mock ServerTime - /fapi/v1/time
@@ -332,8 +331,7 @@ func TestNewFuturesTrader(t *testing.T) {
 			}
 		case "/fapi/v1/positionSide/dual":
 			respBody = map[string]interface{}{
-				"code": 200,
-				"msg":  "success",
+				"dualSidePosition": true,
 			}
 		default:
 			respBody = map[string]interface{}{}
@@ -419,4 +417,18 @@ func TestGetBrOrderID(t *testing.T) {
 		assert.False(t, ids[id], "order ID should be unique")
 		ids[id] = true
 	}
+}
+
+// TestPositionSideAdaptsToMode verifies positionSide adapts to account mode:
+// LONG/SHORT in dual-side mode, BOTH in one-way mode (the -4061 fix).
+func TestPositionSideAdaptsToMode(t *testing.T) {
+	trader := &FuturesTrader{}
+
+	trader.dualSide.Store(true)
+	assert.Equal(t, futures.PositionSideTypeLong, trader.positionSide(true))
+	assert.Equal(t, futures.PositionSideTypeShort, trader.positionSide(false))
+
+	trader.dualSide.Store(false)
+	assert.Equal(t, futures.PositionSideTypeBoth, trader.positionSide(true))
+	assert.Equal(t, futures.PositionSideTypeBoth, trader.positionSide(false))
 }

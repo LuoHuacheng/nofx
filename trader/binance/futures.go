@@ -10,6 +10,7 @@ import (
 	"nofx/logger"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
@@ -46,6 +47,10 @@ func getBrOrderID() string {
 // FuturesTrader Binance futures trader
 type FuturesTrader struct {
 	client *futures.Client
+
+	// dualSide is the account position mode: true = dual-side (Hedge Mode),
+	// false = one-way mode. Set at init; order positionSide adapts to it.
+	dualSide atomic.Bool
 
 	// Balance cache
 	cachedBalance     map[string]interface{}
@@ -94,7 +99,36 @@ func NewFuturesTrader(apiKey, secretKey string, userId string, testnet ...bool) 
 		logger.Infof("⚠️ Failed to set dual-side position mode: %v (ignore this warning if already in dual-side mode)", err)
 	}
 
+	// Query the actual position mode so order positionSide adapts to it:
+	// dual-side mode requires LONG/SHORT, one-way mode rejects them (-4061)
+	// and requires BOTH. Defaults to dual-side (existing behavior) if the
+	// query fails.
+	trader.dualSide.Store(true)
+	if pm, err := client.NewGetPositionModeService().Do(context.Background()); err != nil {
+		logger.Infof("⚠️ Failed to query position mode: %v (defaulting to dual-side)", err)
+	} else {
+		trader.dualSide.Store(pm.DualSidePosition)
+		if pm.DualSidePosition {
+			logger.Infof("  ✓ Account position mode: dual-side (Hedge Mode)")
+		} else {
+			logger.Infof("  ✓ Account position mode: one-way (orders will use positionSide BOTH)")
+		}
+	}
+
 	return trader
+}
+
+// positionSide returns the PositionSide for a long/short order, adapted to the
+// account's position mode: LONG/SHORT in dual-side (Hedge) mode, BOTH in
+// one-way mode (LONG/SHORT is rejected there with -4061).
+func (t *FuturesTrader) positionSide(long bool) futures.PositionSideType {
+	if !t.dualSide.Load() {
+		return futures.PositionSideTypeBoth
+	}
+	if long {
+		return futures.PositionSideTypeLong
+	}
+	return futures.PositionSideTypeShort
 }
 
 // setDualSidePosition sets dual-side position mode (called during initialization)
