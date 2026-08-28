@@ -1,6 +1,7 @@
 package trader
 
 import (
+	"encoding/json"
 	"strings"
 
 	"nofx/config"
@@ -31,10 +32,10 @@ func parseNonVergexStrategy(s *store.Strategy) (*store.StrategyConfig, string, b
 // ResolveStrategyWithVergexFallback implements the strategy priority
 // order: keep the trader's vergex_signal strategy while a claw402 wallet
 // is configured; when the wallet is missing (vergex data source
-// unusable), fall back to the user's active non-vergex strategy, then
-// the system default, then any non-vergex strategy. When nothing
-// suitable exists, the original strategy is kept and the engine reports
-// the concrete claw402-wallet error at runtime.
+// unusable), fall back to the user's active non-vergex strategy. When no
+// active non-vergex strategy exists, fall back to a synthesized
+// hyper_main strategy (Hyperliquid 24h volume top-N) so the trader keeps
+// producing dynamic candidates without a paid wallet.
 //
 // It is applied both when a trader is loaded from the store and when the
 // running trader reloads its strategy from the DB, so a runtime refresh
@@ -52,30 +53,30 @@ func ResolveStrategyWithVergexFallback(st *store.Store, userID string, strategyC
 
 	logger.Warnf("⚠️ Trader (user %s) uses vergex_signal but the Vergex data source is unavailable — falling back to a non-vergex strategy", userID)
 
-	// 1) The user's active strategy, when it is usable.
-	if active, err := st.Strategy().GetActive(userID); err == nil {
+	// 1) The user's active strategy, when it is an explicit choice.
+	// GetActive falls back to the system default strategy when the user has
+	// no active one — that placeholder is not an explicit choice and must not
+	// win over the hyper_main default, so it is skipped here.
+	if active, err := st.Strategy().GetActive(userID); err == nil && active != nil && !active.IsDefault {
 		if cfg, raw, ok := parseNonVergexStrategy(active); ok {
 			logger.Infof("↘️ Trader (user %s) fell back to active strategy \"%s\"", userID, active.Name)
 			return cfg, raw
 		}
 	}
-	// 2) The system default strategy, when it is usable.
-	if def, err := st.Strategy().GetDefault(); err == nil {
-		if cfg, raw, ok := parseNonVergexStrategy(def); ok {
-			logger.Infof("↘️ Trader (user %s) fell back to default strategy \"%s\"", userID, def.Name)
-			return cfg, raw
-		}
-	}
-	// 3) Any other non-vergex strategy of the user.
-	if list, err := st.Strategy().List(userID); err == nil {
-		for _, s := range list {
-			if cfg, raw, ok := parseNonVergexStrategy(s); ok {
-				logger.Infof("↘️ Trader (user %s) fell back to strategy \"%s\"", userID, s.Name)
-				return cfg, raw
-			}
-		}
-	}
 
-	logger.Warnf("⚠️ Trader (user %s): no non-vergex strategy found; keeping vergex_signal (requires a claw402 wallet)", userID)
-	return strategyConfig, strategyConfigRaw
+	// 2) Fallback: synthesize a hyper_main strategy (24h volume top 30,
+	// Hyperliquid public API, no claw402 wallet required) so the trader
+	// keeps a dynamic candidate pool instead of stalling on a dead source.
+	cfg := store.GetDefaultStrategyConfig("en")
+	cfg.CoinSource.SourceType = "hyper_main"
+	cfg.CoinSource.UseHyperMain = true
+	cfg.CoinSource.HyperMainLimit = 30
+	cfg.NormalizeProductSchema()
+	cfg.ClampLimits()
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		raw = []byte(`{"strategy_type":"ai_trading","coin_source":{"source_type":"hyper_main","use_hyper_main":true,"hyper_main_limit":30}}`)
+	}
+	logger.Infof("↘️ Trader (user %s) has no usable non-vergex strategy; defaulting to hyper_main (Hyperliquid top 30 by 24h volume)", userID)
+	return &cfg, string(raw)
 }

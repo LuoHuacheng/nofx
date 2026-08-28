@@ -110,8 +110,17 @@ func TestResolveStrategyWithVergexFallbackDefaultAndNone(t *testing.T) {
 	bound := &store.Strategy{ID: "s-vergex", UserID: "u2", Name: "V", Config: string(b)}
 	boundCfg, _ := bound.ParseConfig()
 	gotCfg, _ := ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
-	if gotCfg == nil || gotCfg.CoinSource.SourceType != "static" {
-		t.Fatalf("expected fallback to system default static, got %q", sourceTypeOf(gotCfg))
+	// No active non-vergex strategy: the fallback defaults to a synthesized
+	// hyper_main strategy (the in-active system default is not an explicit
+	// user choice and no longer wins over the hyper_main default).
+	if gotCfg == nil || gotCfg.CoinSource.SourceType != "hyper_main" {
+		t.Fatalf("expected fallback to hyper_main, got %q", sourceTypeOf(gotCfg))
+	}
+	if !gotCfg.CoinSource.UseHyperMain {
+		t.Fatalf("hyper_main fallback must enable use_hyper_main")
+	}
+	if gotCfg.CoinSource.HyperMainLimit != 30 {
+		t.Fatalf("hyper_main fallback limit = %d, want 30", gotCfg.CoinSource.HyperMainLimit)
 	}
 }
 
@@ -138,9 +147,10 @@ func TestResolveStrategyKeepsNonVergex(t *testing.T) {
 	}
 }
 
-// TestResolveStrategyNoUsableFallback verifies the original vergex
-// strategy is kept (and the engine reports the wallet error) when no
-// non-vergex strategy exists at all.
+// TestResolveStrategyNoUsableFallback verifies that when no active
+// non-vergex strategy exists at all, the fallback defaults to a
+// synthesized hyper_main strategy instead of keeping the dead
+// vergex_signal source (which would leave the engine without candidates).
 func TestResolveStrategyNoUsableFallback(t *testing.T) {
 	st := newStrategyFallbackStore(t)
 	vergexJSON := mustStrategyJSON(t, "vergex_signal", []string{"BTCUSDT"})
@@ -157,11 +167,11 @@ func TestResolveStrategyNoUsableFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	gotCfg, gotRaw := ResolveStrategyWithVergexFallback(st, traderCfg.UserID, boundCfg, bound.Config)
-	if gotCfg == nil || gotCfg.CoinSource.SourceType != "vergex_signal" {
-		t.Fatalf("expected vergex kept when no fallback exists")
+	if gotCfg == nil || gotCfg.CoinSource.SourceType != "hyper_main" {
+		t.Fatalf("expected hyper_main fallback, got %q", sourceTypeOf(gotCfg))
 	}
-	if gotRaw != bound.Config {
-		t.Fatalf("raw should stay the bound vergex config")
+	if gotRaw == bound.Config {
+		t.Fatalf("raw should change to the hyper_main fallback config")
 	}
 }
 
