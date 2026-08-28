@@ -256,10 +256,7 @@ export function MetricTooltip({
 
   const name = metric.nameEn
   const description = metric.descriptionEn
-  const formulaLabel = t(
-    'metricTooltip.formula',
-    language as 'en' | 'zh' | 'id'
-  )
+  const formulaLabel = t('metricTooltip.formula', language as 'en' | 'zh')
 
   const tooltipContent = (
     <div

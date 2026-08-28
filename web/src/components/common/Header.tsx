@@ -1,6 +1,7 @@
 import { useLanguage } from '../../contexts/LanguageContext'
 import { t } from '../../i18n/translations'
 import { Container } from './Container'
+import { LanguageSwitcher } from './LanguageSwitcher'
 
 interface HeaderProps {
   simple?: boolean // For login/register pages
@@ -29,6 +30,7 @@ export function Header({ simple = false }: HeaderProps) {
               )}
             </div>
           </div>
+          {!simple && <LanguageSwitcher />}
         </div>
       </Container>
     </header>

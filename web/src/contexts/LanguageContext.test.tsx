@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { LanguageProvider, useLanguage } from './LanguageContext'
 import { Header } from '../components/common/Header'
@@ -8,31 +8,55 @@ function LanguageProbe() {
   return <div>{language}</div>
 }
 
-describe('English-only language policy', () => {
+describe('language switching (zh/en)', () => {
   beforeEach(() => localStorage.clear())
 
-  it('ignores stale Chinese browser state and normalizes storage to English', async () => {
-    localStorage.setItem('language', 'zh')
-
+  it('defaults to English without saved state', () => {
     render(
       <LanguageProvider>
         <LanguageProbe />
       </LanguageProvider>
     )
-
     expect(screen.getByText('en')).toBeTruthy()
-    await waitFor(() => expect(localStorage.getItem('language')).toBe('en'))
+    expect(localStorage.getItem('language')).toBe('en')
   })
 
-  it('does not render a language switcher anywhere in the English-only header', () => {
+  it('restores a saved Chinese preference', () => {
+    localStorage.setItem('language', 'zh')
     render(
       <LanguageProvider>
-        <Header simple />
+        <LanguageProbe />
       </LanguageProvider>
     )
+    expect(screen.getByText('zh')).toBeTruthy()
+  })
 
-    expect(screen.queryByRole('button', { name: 'Chinese' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'EN' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'ID' })).toBeNull()
+  it('persists the chosen language to storage', () => {
+    localStorage.setItem('language', 'en')
+    const SwitchProbe = () => {
+      const { setLanguage } = useLanguage()
+      return <button onClick={() => setLanguage('zh')}>switch-zh</button>
+    }
+    render(
+      <LanguageProvider>
+        <SwitchProbe />
+      </LanguageProvider>
+    )
+    fireEvent.click(screen.getByText('switch-zh'))
+    expect(localStorage.getItem('language')).toBe('zh')
+  })
+
+  it('renders the language switcher with Chinese and English but no Indonesian', () => {
+    const { container } = render(
+      <LanguageProvider>
+        <Header />
+      </LanguageProvider>
+    )
+    const labels = Array.from(container.querySelectorAll('button')).map(
+      (b) => b.textContent
+    )
+    expect(labels).toContain('中文')
+    expect(labels).toContain('EN')
+    expect(labels).not.toContain('ID')
   })
 })

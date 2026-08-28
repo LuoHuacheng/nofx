@@ -6,6 +6,7 @@ import { t, type Language } from '../../i18n/translations'
 import { OFFICIAL_LINKS } from '../../constants/branding'
 import { getCurrentPageForPath, ROUTES, type Page } from '../../router/paths'
 import { HyperliquidWalletConnect } from './HyperliquidWalletConnect'
+import { LanguageSwitcher } from './LanguageSwitcher'
 
 interface HeaderBarProps {
   onLoginClick?: () => void
@@ -260,6 +261,9 @@ export default function HeaderBar({
                 </svg>
               </a>
             </div>
+
+            {/* Language Switcher */}
+            <LanguageSwitcher />
 
             {/* Divider */}
             <div

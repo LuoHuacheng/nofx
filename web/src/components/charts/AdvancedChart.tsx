@@ -81,14 +81,14 @@ const getBaseUnit = (
   language: string
 ): string => {
   if (['alpaca'].includes(exchange)) {
-    return t('advancedChart.shares', language as 'en' | 'zh' | 'id')
+    return t('advancedChart.shares', language as 'en' | 'zh')
   }
   if (['forex', 'metals'].includes(exchange)) {
     return ''
   }
   // Crypto: extract base asset from symbol
   const base = symbol.replace(/USDT$|USD$|BUSD$/, '')
-  return base || t('advancedChart.units', language as 'en' | 'zh' | 'id')
+  return base || t('advancedChart.units', language as 'en' | 'zh')
 }
 
 // Format large numbers
