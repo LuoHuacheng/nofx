@@ -573,3 +573,57 @@ func TestManagedExitEntryLookupFailure(t *testing.T) {
 		t.Fatal("an unreadable entry was marked cancelled")
 	}
 }
+
+// A flat account whose exit the venue has not finished resolving is not done:
+// the run halts, leaves its protection live and never resends the exit.
+func TestManagedExitPendingAfterFlat(t *testing.T) {
+	c, b, venue, v := managedProtected(t, "limit")
+	venue.exitAckLost = true
+	if _, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline"); err == nil {
+		t.Fatal("an unconfirmed exit was reported as done")
+	}
+	venue.exitAckLost = false
+	got, err := c.Get("alice", v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exitID, tpID string
+	for _, o := range got.Orders {
+		switch o.Role {
+		case "exit":
+			exitID = o.ClientID
+		case "tp":
+			tpID = o.ClientID
+		}
+	}
+	if exitID == "" || tpID == "" {
+		t.Fatalf("fixture lost its exit or target: %+v", got.Orders)
+	}
+	// The account is flat but the venue still reports the exit in progress.
+	b.mu.Lock()
+	observed := b.orders[exitID]
+	observed.Status, observed.Filled = "PARTIALLY_FILLED", "0.005"
+	b.orders[exitID] = observed
+	b.account.Position = "0"
+	b.mu.Unlock()
+	if _, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline"); err == nil {
+		t.Fatal("a flat account with an unresolved exit was reported done")
+	}
+	if n := len(exitOrders(b)); n != 1 {
+		t.Fatalf("the unresolved exit was resubmitted: %d", n)
+	}
+	b.mu.Lock()
+	tp := b.orders[tpID]
+	cancelled := strings.Join(b.cancelled, ",")
+	b.mu.Unlock()
+	if tp.Status != "NEW" || strings.Contains(cancelled, tpID) {
+		t.Fatalf("protection was cancelled while the exit was unresolved: %s %s", tp.Status, cancelled)
+	}
+	got, err = c.Get("alice", v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != runHaltedUnknown {
+		t.Fatalf("run is %q, not halted", got.State)
+	}
+}

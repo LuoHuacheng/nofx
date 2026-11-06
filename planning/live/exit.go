@@ -162,7 +162,7 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 		return v, err
 	}
 	if pendingExit {
-		return c.halt(&v, "An earlier exit is still open at the exchange. Reconcile it before another exit is sent.")
+		return c.halt(&v, "An earlier exit is still open at the exchange. Reconcile it before another exit is sent; protection orders are still live.")
 	}
 	if cmp(position, "0") > 0 {
 		if c.isStopped() {
