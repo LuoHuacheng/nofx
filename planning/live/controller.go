@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm"
 	"nofx/planning"
 	"nofx/planning/core"
+	"nofx/trader/execution"
 )
 
 type Market interface {
@@ -25,6 +26,7 @@ type Controller struct {
 	DB       *gorm.DB
 	Factory  Factory
 	Market   Market
+	Now      func() time.Time // nil means UTC wall clock; tests inject it
 	mu       sync.Mutex
 	workers  map[string]context.CancelFunc
 	stopped  bool
@@ -33,7 +35,7 @@ type Controller struct {
 }
 
 func New(db *gorm.DB, f Factory, m Market) (*Controller, error) {
-	if e := db.AutoMigrate(&planning.Draft{}, &Run{}, &Lease{}); e != nil {
+	if e := db.AutoMigrate(&planning.Draft{}, &Run{}, &Lease{}, &execution.Binding{}); e != nil {
 		return nil, e
 	}
 	c := &Controller{DB: db, Factory: f, Market: m, workers: map[string]context.CancelFunc{}}
@@ -233,7 +235,7 @@ func (c *Controller) save(v *View) error {
 	}
 	v.OrdersJSON = string(raw)
 	v.UpdatedAt = time.Now().UTC()
-	return c.DB.Model(&Run{}).Where("id = ? AND user_id = ?", v.ID, v.UserID).Updates(map[string]any{"state": v.State, "orders_json": v.OrdersJSON, "started_at": v.StartedAt, "deadline": v.Deadline, "updated_at": v.UpdatedAt, "error": v.Error}).Error
+	return c.DB.Model(&Run{}).Where("id = ? AND user_id = ?", v.ID, v.UserID).Updates(map[string]any{"state": v.State, "orders_json": v.OrdersJSON, "started_at": v.StartedAt, "deadline": v.Deadline, "protection_state": v.ProtectionState, "protection_observed_at": v.ProtectionObservedAt, "updated_at": v.UpdatedAt, "error": v.Error}).Error
 }
 
 type runMutex struct{ token chan struct{} }
@@ -519,6 +521,7 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 		return true
 	}
 	observationsValid, receiptsValid := true, true
+	supervised := c.supervised(ctx, v)
 	attention := func(message string) {
 		observationsValid = false
 		v.State = "needs_attention"
@@ -538,12 +541,18 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 		result, er := broker.Lookup(ctx, *o)
 		if er != nil {
 			receiptsValid = false
-			attention("Exchange order state is unconfirmed; no resubmission:" + er.Error())
+			// A supervised run judges its protectors through ensureProtection, so
+			// an unreadable protection is a deadline instead of an immediate lock.
+			if !supervised || o.Role == "entry" {
+				attention("Exchange order state is unconfirmed; no resubmission:" + er.Error())
+			}
 			continue
 		}
 		if !validReceipt(*o, result) || (o.OrderID != "" && o.OrderID != result.OrderID) || cmp(result.Filled, o.Filled) < 0 {
 			receiptsValid = false
-			attention("Inconsistent exchange receipt; further entries stopped")
+			if !supervised || o.Role == "entry" {
+				attention("Inconsistent exchange receipt; further entries stopped")
+			}
 			continue
 		}
 		*o = result
@@ -556,102 +565,15 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 	if e = c.save(&v); e != nil {
 		return true
 	}
-	account, accountErr := broker.Account(ctx, v.Plan.Snapshot.Symbol)
-	positionValid := accountErr == nil
-	if _, err := decimal(account.Position); err != nil {
-		positionValid = false
-	}
-	if !positionValid {
-		attention("Live position read failed. New entries and protection submission stopped; reconcile positions immediately.")
-	}
 	entries := len(v.Plan.Orders)
 	if entries == 0 {
 		entries = 1
 	}
-	expected := filledExposure(v.Orders)
-	if cmp(expected, "0") < 0 {
-		positionValid = false
-		attention("Exit fills exceed confirmed entry fills; reconcile live positions.")
+	if e = c.ensureProtection(ctx, &v, broker, c.now()); e != nil {
+		return true
 	}
-	positionMatches := positionValid && cmp(account.Position, expected) == 0
-	if positionValid && !positionMatches {
-		attention("Live position differs from this plan fills. Further entries stopped; check external trades and protective orders.")
-	}
-	for i := 0; i < entries; i++ {
-		entry := v.Orders[i]
-		if !positionMatches || cmp(account.Position, "0") == 0 || cmp(entry.Filled, "0") <= 0 {
-			continue
-		}
-		for _, role := range []string{"sl", "tp"} {
-			protected := core.Decimal("0")
-			uncertain := false
-			for _, o := range v.Orders {
-				if o.Role != role || o.ParentID != entry.ClientID {
-					continue
-				}
-				if o.OrderID != "" && (o.Status == "NEW" || o.Status == "PARTIALLY_FILLED" || o.Status == "FILLED" || o.Status == "TRIGGERED") {
-					protected = add(protected, o.Quantity)
-				} else {
-					uncertain = true
-				}
-			}
-			if uncertain {
-				attention("Protective order state is abnormal. Further entries stopped; reconcile live positions manually.")
-				continue
-			}
-			if cmp(protected, entry.Filled) >= 0 {
-				continue
-			}
-			if len(v.Orders) >= 1024 {
-				attention("Partial-fill count exceeds the handling limit; manage protection manually")
-				break
-			}
-			delta := sub(entry.Filled, protected)
-			client := cid(v.ID, i+1, role, string(entry.Filled))
-			exists := false
-			for _, o := range v.Orders {
-				if o.ClientID == client {
-					exists = true
-					break
-				}
-			}
-			if exists {
-				continue
-			}
-			price := v.Plan.Idea.Stop
-			if role == "tp" {
-				price = v.Plan.Idea.Target
-			}
-			o := Order{ClientID: client, Role: role, Symbol: entry.Symbol, Side: entry.Side, Price: price, Quantity: delta, Status: "submitting", Filled: "0", ParentID: entry.ClientID}
-			o, er := routedOrder(broker, o)
-			if er != nil {
-				attention("Protective order route is unconfirmed; further entries stopped")
-				break
-			}
-			v.Orders = append(v.Orders, o)
-			if e = c.save(&v); e != nil {
-				return true
-			}
-			receipt, er := broker.Place(ctx, o)
-			if er == nil && !validReceipt(o, receipt) {
-				er = errors.New("invalid protection acknowledgement")
-			}
-			if er != nil {
-				v.Orders[len(v.Orders)-1].Status = "UNKNOWN"
-				attention("Protection is unconfirmed. New entries stopped; reconcile positions and protective orders in NOFX immediately. " + er.Error())
-				_ = c.save(&v)
-				break
-			}
-			receipt.ParentID = entry.ClientID
-			v.Orders[len(v.Orders)-1] = receipt
-			if receipt.Status == "TRIGGERED" || cmp(receipt.Filled, "0") > 0 {
-				v.State = "stopping"
-			}
-			if e = c.save(&v); e != nil {
-				return true
-			}
-		}
-	}
+	// A transient protection fault still blocks recovery into position_open.
+	observationsValid = observationsValid && v.ProtectionState == protectionProtected
 	if v.State == "stopping" || v.State == "needs_attention" {
 		for i := 0; i < entries; i++ {
 			o := &v.Orders[i]
@@ -666,7 +588,9 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 			}
 		}
 	}
-	if v.State == "running" {
+	// A supervised account must confirm its stop from the venue before another
+	// entry is released; manual runs keep the original reserve-then-submit path.
+	if v.State == "running" && (!supervised || v.ProtectionState == protectionProtected) {
 		for i := 0; i < entries; i++ {
 			o := &v.Orders[i]
 			if o.Status != "scheduled" {
@@ -733,7 +657,7 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 	// A filled entry can precede its account-position update. Recompute after
 	// placement and require confirmed exits before releasing the reservation.
 	// External closes use the same terminal-order proof as CheckStatus.
-	expected = filledExposure(v.Orders)
+	expected := filledExposure(v.Orders)
 	if !pending && er == nil && receiptsValid && confirmedClosedTrade(v.Orders, account) {
 		return c.complete(&v) == nil
 	}

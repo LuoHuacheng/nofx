@@ -52,8 +52,12 @@ type Run struct {
 	ApprovedAt   time.Time  `json:"approved_at"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	Deadline     *time.Time `json:"deadline,omitempty"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	Error        string     `json:"error,omitempty"`
+	// ProtectionState and ProtectionObservedAt are supervised-account protection
+	// supervision; ProtectionObservedAt is when the position became unprotected.
+	ProtectionState      string     `json:"protection_state,omitempty"`
+	ProtectionObservedAt *time.Time `json:"protection_observed_at,omitempty"`
+	UpdatedAt            time.Time  `json:"updated_at"`
+	Error                string     `json:"error,omitempty"`
 }
 
 func (Run) TableName() string { return "planning_live_runs" }
