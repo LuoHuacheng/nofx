@@ -279,6 +279,20 @@ func (c *Controller) save(v *View) error {
 	return c.DB.Model(&Run{}).Where("id = ? AND user_id = ?", v.ID, v.UserID).Updates(map[string]any{"state": v.State, "orders_json": v.OrdersJSON, "started_at": v.StartedAt, "deadline": v.Deadline, "protection_state": v.ProtectionState, "protection_observed_at": v.ProtectionObservedAt, "updated_at": v.UpdatedAt, "error": v.Error}).Error
 }
 
+// failStarted records a refusal that happened after the hold committed but
+// before any order was submitted. The hold is released in the same
+// transaction: nothing was sent, so nothing can still consume budget, and a
+// needs_attention run has no path back to running that could release it later.
+func (c *Controller) failStarted(v *View) error {
+	v.UpdatedAt = time.Now().UTC()
+	return c.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Run{}).Where("id = ? AND user_id = ?", v.ID, v.UserID).Updates(map[string]any{"state": v.State, "updated_at": v.UpdatedAt, "error": v.Error}).Error; err != nil {
+			return err
+		}
+		return c.releaseRisk(tx, v)
+	})
+}
+
 type runMutex struct{ token chan struct{} }
 
 func newRunMutex() *runMutex {
@@ -426,6 +440,14 @@ func (c *Controller) Execute(ctx context.Context, user, id, hash string) (out Vi
 		return v, e
 	}
 	v = started
+	if e = c.checkRisk(ctx, &v); e != nil {
+		// The hold is committed but nothing was submitted yet: persist the
+		// refusal and release it in one transaction, then report the reason.
+		if fail := c.failStarted(&v); fail != nil {
+			return v, fmt.Errorf("%w; could not record the refusal: %v", e, fail)
+		}
+		return v, e
+	}
 	c.launch(v.ID, user)
 	return v, nil
 }
@@ -579,6 +601,21 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 		if v.ProtectionState != protectionExitRequired {
 			v.Error = message // a frozen exit verdict keeps the reason it was raised
 		}
+	}
+	// The hard breaker is read on every tick before any entry is released: a
+	// latched account may still reduce, never add. Flatten runs through the
+	// lock-free variant because this tick already holds the run lock.
+	decision, er := c.riskDecision(ctx, &v)
+	switch {
+	case er != nil:
+		attention("Risk breaker could not be evaluated; further entries stopped: " + er.Error())
+	case decision.Action == risk.ActionFlatten && cmp(filledExposure(v.Orders), "0") > 0:
+		_, _ = c.flatten(ctx, v.UserID, v.ID, decision.Reason) // it persists its own state and error
+		return true
+	case decision.Action != risk.ActionAllow:
+		// No exposure to flatten (or only a pause): stop entries and let the
+		// rest of this tick cancel them and prove the run flat.
+		v.State, v.Error = "needs_attention", decision.Reason
 	}
 	if v.Deadline != nil && time.Now().After(*v.Deadline) && v.State == "running" {
 		v.State = "stopping"

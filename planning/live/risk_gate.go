@@ -86,3 +86,37 @@ func (c *Controller) releaseRisk(tx *gorm.DB, v *View) error {
 	}
 	return c.Risk.ReleaseTx(context.Background(), tx, v.ID)
 }
+
+// riskDecision returns the persisted hard-breaker verdict of this run's
+// account. A manual run without a risk store keeps the unreserved behaviour.
+func (c *Controller) riskDecision(ctx context.Context, v *View) (risk.Decision, error) {
+	if c.Risk == nil {
+		if v.Managed {
+			return risk.Decision{}, errors.New("managed run requires the risk store")
+		}
+		return risk.Decision{Action: risk.ActionAllow}, nil
+	}
+	return c.Risk.Evaluate(ctx, v.UserID, v.AccountKey, c.now())
+}
+
+// applyRisk marks the run as needing attention when the breaker blocks new
+// entries. It only mutates the View: the caller owns the durable write, because
+// Execute must persist the failure and release the hold in one transaction.
+func (c *Controller) applyRisk(v *View, decision risk.Decision) error {
+	if decision.Action == risk.ActionAllow {
+		return nil
+	}
+	v.State, v.Error = "needs_attention", decision.Reason
+	return errors.New(decision.Reason)
+}
+
+// checkRisk blocks new entries on a pause/flatten latch. It is called only
+// before the first submit, so a failure leaves no exposure and the caller
+// releases the hold.
+func (c *Controller) checkRisk(ctx context.Context, v *View) error {
+	decision, err := c.riskDecision(ctx, v)
+	if err != nil {
+		return err
+	}
+	return c.applyRisk(v, decision)
+}

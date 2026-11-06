@@ -24,7 +24,7 @@ func NewStore(db *gorm.DB) (*Store, error) {
 	if db == nil {
 		return nil, errors.New("risk: store requires a database")
 	}
-	if err := db.AutoMigrate(&policyRecord{}, &EquityState{}, &EquityObservation{}, &LedgerEvent{}, &ReservationRecord{}, &portfolioLock{}); err != nil {
+	if err := db.AutoMigrate(&policyRecord{}, &EquityState{}, &EquityObservation{}, &LedgerEvent{}, &ReservationRecord{}, &portfolioLock{}, &Breaker{}, &ResetRecord{}); err != nil {
 		return nil, fmt.Errorf("risk: migrate risk tables: %w", err)
 	}
 	return &Store{db: db}, nil
