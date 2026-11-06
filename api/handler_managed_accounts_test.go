@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"net/http/httptest"
+	"nofx/config"
+	"nofx/manager"
 	"nofx/planning/live"
 	"nofx/planning/market"
 	"nofx/store"
@@ -326,5 +328,193 @@ func TestManagedBindingRotation(t *testing.T) {
 	}
 	if _, key, err := f.server.planningBroker(ctx, "alice", "alice-okx-legacy"); err != nil || key != accountKey(legacy) {
 		t.Fatalf("legacy planning key = %q, %v", key, err)
+	}
+}
+
+func (f *managedFixture) call(method, path, user, body string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	r.Header.Set("Test-User", user)
+	r.Header.Set("Content-Type", "application/json")
+	f.router.ServeHTTP(w, r)
+	return w
+}
+
+// withExchangeRoutes exposes the real exchange mutation handlers, the boundary
+// that must void a binding when credentials or the endpoint change.
+func (f *managedFixture) withExchangeRoutes(t *testing.T) *managedFixture {
+	t.Setenv("JWT_SECRET", strings.Repeat("t", 32))
+	config.Init()
+	f.server.traderManager = manager.NewTraderManager()
+	f.server.exchangeAccountStateCache = &ExchangeAccountStateCache{}
+	f.router.PUT("/api/exchanges", f.server.handleUpdateExchangeConfigs)
+	f.router.DELETE("/api/exchanges/:id", f.server.handleDeleteExchange)
+	return f
+}
+
+func TestManagedBindingRejectsDisabledExchange(t *testing.T) {
+	f := newManagedFixture(t)
+	if err := f.db.Model(&store.Exchange{}).Where("id = ?", "alice-okx-demo").Update("enabled", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	if w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-demo", VenueAccountID: "okx-uid-1", Environment: "sandbox"}); w.Code != 400 {
+		t.Fatalf("disabled exchange bound: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := execution.ResolveBinding(context.Background(), f.db, "alice", "alice-okx-demo"); err == nil {
+		t.Fatal("disabled exchange was persisted")
+	}
+}
+
+func TestManagedBindingKeepsCredentialsOut(t *testing.T) {
+	f := newManagedFixture(t)
+	w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"})
+	if w.Code != 200 {
+		t.Fatalf("bind = %d %s", w.Code, w.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{"id": true, "user_id": true, "exchange_id": true, "venue": true, "environment": true, "venue_account_id": true, "verified_at": true, "enabled": true}
+	for key := range payload {
+		if !allowed[key] {
+			t.Fatalf("binding response leaked field %q", key)
+		}
+	}
+	columns, err := f.db.Migrator().ColumnTypes(&execution.Binding{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range columns {
+		switch column.Name() {
+		case "api_key", "secret_key", "passphrase":
+			t.Fatalf("binding table stores credentials in %q", column.Name())
+		}
+	}
+}
+
+func TestManagedBindingInvalidatedByCredentialSwap(t *testing.T) {
+	f := newManagedFixture(t).withExchangeRoutes(t)
+	ctx := context.Background()
+	w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"})
+	if w.Code != 200 {
+		t.Fatalf("bind = %d %s", w.Code, w.Body.String())
+	}
+	first := decodeBinding(t, w)
+
+	if w := f.call("PUT", "/api/exchanges", "alice", `{"exchanges":{"alice-okx-live":{"api_key":"rotated-key"}}}`); w.Code != 200 {
+		t.Fatalf("credential rotation = %d %s", w.Code, w.Body.String())
+	}
+	stale, err := execution.ResolveBinding(ctx, f.db, "alice", "alice-okx-live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stale.Enabled || !stale.VerifiedAt.IsZero() {
+		t.Fatalf("rotated credentials inherited the proof: %+v", stale)
+	}
+	if _, _, err := f.server.managedTrader(ctx, "alice", "alice-okx-live"); err == nil {
+		t.Fatal("rotated credentials entered managed execution")
+	}
+
+	// Re-verifying the same account restores execution under the same key.
+	w = f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"})
+	if w.Code != 200 {
+		t.Fatalf("re-verify = %d %s", w.Code, w.Body.String())
+	}
+	if again := decodeBinding(t, w); again.ID != first.ID {
+		t.Fatal("re-verifying the same account changed its key")
+	}
+	if _, _, err := f.server.managedTrader(ctx, "alice", "alice-okx-live"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagedBindingEnvironmentFlipRebinds(t *testing.T) {
+	f := newManagedFixture(t).withExchangeRoutes(t)
+	ctx := context.Background()
+	w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"})
+	if w.Code != 200 {
+		t.Fatalf("bind = %d %s", w.Code, w.Body.String())
+	}
+	first := decodeBinding(t, w)
+
+	if w := f.call("PUT", "/api/exchanges", "alice", `{"exchanges":{"alice-okx-live":{"testnet":true}}}`); w.Code != 200 {
+		t.Fatalf("testnet flip = %d %s", w.Code, w.Body.String())
+	}
+	if stale, err := execution.ResolveBinding(ctx, f.db, "alice", "alice-okx-live"); err != nil || stale.Enabled || !stale.VerifiedAt.IsZero() {
+		t.Fatalf("testnet flip kept the proof: %+v, %v", stale, err)
+	}
+	if w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"}); w.Code != 400 {
+		t.Fatalf("stale environment bound: %d %s", w.Code, w.Body.String())
+	}
+
+	w = f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "sandbox"})
+	if w.Code != 200 {
+		t.Fatalf("sandbox rebind = %d %s", w.Code, w.Body.String())
+	}
+	if again := decodeBinding(t, w); again.ID != first.ID || again.Environment != execution.EnvironmentSandbox {
+		t.Fatalf("environment flip = %+v, first %+v", again, first)
+	}
+	if f.environments["alice-okx-live"] != execution.EnvironmentSandbox {
+		t.Fatalf("rebind factory env = %q", f.environments["alice-okx-live"])
+	}
+	trader, _, err := f.server.managedTrader(ctx, "alice", "alice-okx-live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap, err := trader.ManagedSnapshot(ctx); err != nil || snap.AccountKey != first.ID {
+		t.Fatalf("snapshot key after flip = %q, %v", snap.AccountKey, err)
+	}
+}
+
+func TestManagedBindingDeletedWithExchange(t *testing.T) {
+	f := newManagedFixture(t).withExchangeRoutes(t)
+	ctx := context.Background()
+	w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"})
+	if w.Code != 200 {
+		t.Fatalf("bind = %d %s", w.Code, w.Body.String())
+	}
+	first := decodeBinding(t, w)
+
+	if w := f.call("DELETE", "/api/exchanges/alice-okx-live", "alice", ""); w.Code != 200 {
+		t.Fatalf("delete exchange = %d %s", w.Code, w.Body.String())
+	}
+	if _, err := execution.ResolveBinding(ctx, f.db, "alice", "alice-okx-live"); err == nil {
+		t.Fatal("deleted exchange kept its binding")
+	}
+
+	// A re-created configuration can bind the same physical account again.
+	if err := f.db.Create(&store.Exchange{ID: "alice-okx-live-2", UserID: "alice", ExchangeType: "okx", AccountName: "recreated", Name: "recreated", Type: "cex", Enabled: true, APIKey: "live-2-key", SecretKey: "live-2-secret", Passphrase: "live-2-pass"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	w = f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-live-2", VenueAccountID: "okx-uid-live", Environment: "live"})
+	if w.Code != 200 {
+		t.Fatalf("rebind after delete = %d %s", w.Code, w.Body.String())
+	}
+	if again := decodeBinding(t, w); again.ID == first.ID {
+		t.Fatal("re-created configuration reused the deleted binding")
+	}
+	if _, _, err := f.server.managedTrader(ctx, "alice", "alice-okx-live-2"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagedBindingVerifiedTakeover(t *testing.T) {
+	f := newManagedFixture(t)
+	ctx := context.Background()
+	stub, err := execution.BindManagedAccount(ctx, f.db, execution.Binding{UserID: "bob", ExchangeID: "bob-okx-demo", Venue: "okx", Environment: execution.EnvironmentSandbox, VenueAccountID: "okx-uid-1"})
+	if err != nil || stub.Enabled {
+		t.Fatalf("stub = %+v, %v", stub, err)
+	}
+	w := f.bind("alice", managedBindingRequest{ExchangeID: "alice-okx-demo", VenueAccountID: "okx-uid-1", Environment: "sandbox"})
+	if w.Code != 200 {
+		t.Fatalf("verified takeover = %d %s", w.Code, w.Body.String())
+	}
+	claimed := decodeBinding(t, w)
+	if claimed.ID != stub.ID || !claimed.Enabled || claimed.VerifiedAt.IsZero() || claimed.ExchangeID != "alice-okx-demo" {
+		t.Fatalf("takeover = %+v, stub %+v", claimed, stub)
+	}
+	if _, err := execution.ResolveBinding(ctx, f.db, "bob", "bob-okx-demo"); err == nil {
+		t.Fatal("unverified stub kept its owner after takeover")
 	}
 }

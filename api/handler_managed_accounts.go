@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"nofx/logger"
 	"nofx/store"
 	"nofx/trader/binance"
 	"nofx/trader/execution"
@@ -93,6 +94,33 @@ func (s *Server) managedTrader(ctx context.Context, user, exchangeID string) (ex
 	return execution.WithBinding(t, b), b, nil
 }
 
+// refreshManagedBinding voids the physical-identity proof when the saved
+// credentials or endpoint change, so a rotated key or swapped account never
+// inherits it. The row is kept so the same account can be re-verified.
+func (s *Server) refreshManagedBinding(ex *store.Exchange, apiKey, secretKey, passphrase string, testnet bool) {
+	if apiKey == strings.TrimSpace(string(ex.APIKey)) &&
+		secretKey == strings.TrimSpace(string(ex.SecretKey)) &&
+		passphrase == strings.TrimSpace(string(ex.Passphrase)) &&
+		testnet == ex.Testnet {
+		return
+	}
+	err := s.store.GormDB().Model(&execution.Binding{}).
+		Where("user_id = ? AND exchange_id = ?", ex.UserID, ex.ID).
+		Updates(map[string]any{"enabled": false, "verified_at": time.Time{}}).Error
+	if err != nil {
+		logger.Infof("⚠️ Failed to invalidate managed account binding %s: %v", ex.ID, err)
+	}
+}
+
+// deleteManagedBinding drops the binding together with the credential
+// configuration, so a re-created configuration never inherits a stale proof.
+func (s *Server) deleteManagedBinding(userID, exchangeID string) {
+	err := s.store.GormDB().Where("user_id = ? AND exchange_id = ?", userID, exchangeID).Delete(&execution.Binding{}).Error
+	if err != nil {
+		logger.Infof("⚠️ Failed to delete managed account binding %s: %v", exchangeID, err)
+	}
+}
+
 func (s *Server) handleManagedAccountBinding(c *gin.Context) {
 	user := c.GetString("user_id")
 	var in managedBindingRequest
@@ -100,7 +128,8 @@ func (s *Server) handleManagedAccountBinding(c *gin.Context) {
 		planningError(c, errors.New("invalid managed account binding request"))
 		return
 	}
-	if _, e := s.planningService(); e != nil {
+	// Migrate directly: binding must not depend on the planning controller.
+	if e := s.store.GormDB().AutoMigrate(&execution.Binding{}); e != nil {
 		c.JSON(503, gin.H{"error": "managed account binding unavailable"})
 		return
 	}

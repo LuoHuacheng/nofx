@@ -21,8 +21,8 @@ type AccountIdentity interface {
 // It stores no credentials: the stored API key hash is not a physical identity.
 type Binding struct {
 	ID             string      `gorm:"primaryKey" json:"id"`
-	UserID         string      `gorm:"column:user_id;not null;index" json:"user_id"`
-	ExchangeID     string      `gorm:"column:exchange_id;not null;index" json:"exchange_id"`
+	UserID         string      `gorm:"column:user_id;not null;uniqueIndex:managed_account_config,priority:1" json:"user_id"`
+	ExchangeID     string      `gorm:"column:exchange_id;not null;uniqueIndex:managed_account_config,priority:2" json:"exchange_id"`
 	Venue          string      `gorm:"column:venue;not null;uniqueIndex:managed_account_identity,priority:1" json:"venue"`
 	Environment    Environment `gorm:"column:environment;not null;uniqueIndex:managed_account_identity,priority:2" json:"environment"`
 	VenueAccountID string      `gorm:"column:venue_account_id;not null;uniqueIndex:managed_account_identity,priority:3" json:"venue_account_id"`
@@ -48,9 +48,12 @@ func ResolveBinding(ctx context.Context, db *gorm.DB, user, exchangeID string) (
 	return b, nil
 }
 
-// BindManagedAccount creates or rotates the binding of one credential
-// configuration. One physical account keeps exactly one binding and one
-// credential configuration; an unverified identity is never enabled.
+// BindManagedAccount creates, rotates or re-verifies the binding of one
+// credential configuration. One physical account keeps exactly one binding and
+// one credential configuration exactly one physical account. Only a verified
+// identity may claim an unverified record, and moving a configuration onto a
+// different physical account mints a new binding ID so runs and leases never
+// carry over to another account.
 func BindManagedAccount(ctx context.Context, db *gorm.DB, b Binding) (Binding, error) {
 	if db == nil || b.UserID == "" || b.ExchangeID == "" || b.Venue == "" || b.VenueAccountID == "" {
 		return Binding{}, errors.New("managed binding requires a user, an exchange configuration, a venue and a venue account ID")
@@ -61,34 +64,79 @@ func BindManagedAccount(ctx context.Context, db *gorm.DB, b Binding) (Binding, e
 	if b.VerifiedAt.IsZero() {
 		b.Enabled = false
 	}
+	verified := !b.VerifiedAt.IsZero()
 	var out Binding
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var known Binding
-		err := tx.Where("venue = ? AND environment = ? AND venue_account_id = ?", b.Venue, b.Environment, b.VenueAccountID).First(&known).Error
+		var identity, config Binding
+		identityFound, err := firstBinding(tx, &identity, "venue = ? AND environment = ? AND venue_account_id = ?", b.Venue, b.Environment, b.VenueAccountID)
+		if err != nil {
+			return err
+		}
+		configFound, err := firstBinding(tx, &config, "user_id = ? AND exchange_id = ?", b.UserID, b.ExchangeID)
+		if err != nil {
+			return err
+		}
 		switch {
-		case err == nil:
-			if known.UserID != b.UserID {
-				return errors.New("this physical account is already bound to another NOFX user")
-			}
-			if known.ExchangeID != b.ExchangeID {
-				return errors.New("this physical account is already bound to another credential configuration")
-			}
-			known.VerifiedAt, known.Enabled = b.VerifiedAt, b.Enabled
-			if err := tx.Model(&known).Updates(map[string]any{"verified_at": known.VerifiedAt, "enabled": known.Enabled}).Error; err != nil {
+		case identityFound && configFound && identity.ID == config.ID:
+			// Rotation of the same credentials for the same physical account.
+			updates := map[string]any{"verified_at": b.VerifiedAt, "enabled": b.Enabled}
+			if err := tx.Model(&identity).Updates(updates).Error; err != nil {
 				return err
 			}
-			out = known
+			identity.VerifiedAt, identity.Enabled = b.VerifiedAt, b.Enabled
+			out = identity
 			return nil
-		case !errors.Is(err, gorm.ErrRecordNotFound):
-			return err
+		case identityFound && !configFound:
+			// Only proof can claim a global identity, so an unverified record
+			// (an initialization stub or a squatter) cannot lock it away.
+			if !verified || !identity.VerifiedAt.IsZero() {
+				return errors.New("this physical account is already bound to another NOFX account")
+			}
+			updates := map[string]any{
+				"user_id":     b.UserID,
+				"exchange_id": b.ExchangeID,
+				"verified_at": b.VerifiedAt,
+				"enabled":     b.Enabled,
+			}
+			if err := tx.Model(&identity).Updates(updates).Error; err != nil {
+				return err
+			}
+			identity.UserID, identity.ExchangeID = b.UserID, b.ExchangeID
+			identity.VerifiedAt, identity.Enabled = b.VerifiedAt, b.Enabled
+			out = identity
+			return nil
+		case identityFound && configFound:
+			// Different rows: the verified proof releases the stale unverified
+			// identity and the configuration is re-pointed below.
+			if !verified || !identity.VerifiedAt.IsZero() {
+				return errors.New("this physical account is already bound to another NOFX account")
+			}
+			if err := tx.Delete(&Binding{}, "id = ?", identity.ID).Error; err != nil {
+				return err
+			}
 		}
-		var occupied Binding
-		err = tx.Where("user_id = ? AND exchange_id = ?", b.UserID, b.ExchangeID).First(&occupied).Error
-		if err == nil {
-			return errors.New("this credential configuration is already bound to another physical account")
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
+		if configFound {
+			if config.Venue != b.Venue {
+				return errors.New("this credential configuration is bound to another venue")
+			}
+			if config.VenueAccountID != b.VenueAccountID {
+				// A different physical account must not inherit the durable key.
+				if !verified || !config.VerifiedAt.IsZero() {
+					return errors.New("this credential configuration is already bound to another physical account")
+				}
+				if err := tx.Delete(&Binding{}, "id = ?", config.ID).Error; err != nil {
+					return err
+				}
+			} else {
+				// Same account, moved endpoint (testnet flip): keep the key.
+				updates := map[string]any{"environment": b.Environment, "verified_at": b.VerifiedAt, "enabled": b.Enabled}
+				if err := tx.Model(&config).Updates(updates).Error; err != nil {
+					return err
+				}
+				config.Environment, config.VerifiedAt, config.Enabled = b.Environment, b.VerifiedAt, b.Enabled
+				out = config
+				return nil
+			}
 		}
 		b.ID = uuid.NewString()
 		out = b
@@ -98,6 +146,14 @@ func BindManagedAccount(ctx context.Context, db *gorm.DB, b Binding) (Binding, e
 		return Binding{}, err
 	}
 	return out, nil
+}
+
+func firstBinding(tx *gorm.DB, dst *Binding, query string, args ...any) (bool, error) {
+	err := tx.Where(query, args...).First(dst).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 type boundTrader struct {

@@ -192,3 +192,68 @@ func TestManagedBindingWithBinding(t *testing.T) {
 		t.Fatal("wrapper lost the venue")
 	}
 }
+
+func TestManagedBindingTakeoverAndRebind(t *testing.T) {
+	ctx := context.Background()
+	db := managedBindingDB(t)
+	verified := time.Now().UTC()
+
+	// An unverified identity record cannot lock the account away from the user
+	// who later proves it.
+	stub, err := BindManagedAccount(ctx, db, Binding{UserID: "bob", ExchangeID: "bob-config", Venue: "okx", Environment: EnvironmentLive, VenueAccountID: "uid-shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stub.Enabled || !stub.VerifiedAt.IsZero() {
+		t.Fatalf("unverified stub was usable: %+v", stub)
+	}
+	claimed, err := BindManagedAccount(ctx, db, Binding{UserID: "alice", ExchangeID: "alice-config", Venue: "okx", Environment: EnvironmentLive, VenueAccountID: "uid-shared", VerifiedAt: verified, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed.ID != stub.ID || claimed.UserID != "alice" || claimed.ExchangeID != "alice-config" || !claimed.Enabled {
+		t.Fatalf("verified takeover = %+v, stub %+v", claimed, stub)
+	}
+	if _, err := ResolveBinding(ctx, db, "bob", "bob-config"); err == nil {
+		t.Fatal("unverified stub kept its owner after takeover")
+	}
+
+	// A verified account cannot be taken over by another user.
+	if _, err := BindManagedAccount(ctx, db, Binding{UserID: "carol", ExchangeID: "carol-config", Venue: "okx", Environment: EnvironmentLive, VenueAccountID: "uid-shared", VerifiedAt: verified, Enabled: true}); err == nil {
+		t.Fatal("verified identity was taken over")
+	}
+
+	// A testnet flip keeps the same account and the durable key.
+	flipped, err := BindManagedAccount(ctx, db, Binding{UserID: "alice", ExchangeID: "alice-config", Venue: "okx", Environment: EnvironmentSandbox, VenueAccountID: "uid-shared", VerifiedAt: verified.Add(time.Minute), Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flipped.ID != claimed.ID || flipped.Environment != EnvironmentSandbox || !flipped.Enabled {
+		t.Fatalf("environment flip = %+v", flipped)
+	}
+
+	// After the API voids the proof on a credential swap, pointing the
+	// configuration at another account mints a new key instead of reusing it.
+	if err := db.Model(&Binding{}).Where("id = ?", flipped.ID).Updates(map[string]any{"enabled": false, "verified_at": time.Time{}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	swapped, err := BindManagedAccount(ctx, db, Binding{UserID: "alice", ExchangeID: "alice-config", Venue: "okx", Environment: EnvironmentSandbox, VenueAccountID: "uid-new", VerifiedAt: verified.Add(2 * time.Minute), Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if swapped.ID == flipped.ID {
+		t.Fatal("different physical account inherited the durable key")
+	}
+	var rows []Binding
+	if err := db.Find(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].VenueAccountID != "uid-new" {
+		t.Fatalf("rows after account swap = %+v", rows)
+	}
+
+	// One credential configuration has one binding at the database level.
+	if err := db.Create(&Binding{ID: "raw-config", UserID: "alice", ExchangeID: "alice-config", Venue: "okx", Environment: EnvironmentLive, VenueAccountID: "uid-other"}).Error; err == nil {
+		t.Fatal("database accepted two bindings for one credential configuration")
+	}
+}

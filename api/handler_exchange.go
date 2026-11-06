@@ -322,6 +322,8 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 			SafeInternalError(c, fmt.Sprintf("Update exchange %s", exchangeID), err)
 			return
 		}
+		// New credentials or endpoint void the physical-identity proof.
+		s.refreshManagedBinding(existing, effectiveAPIKey, effectiveSecretKey, effectivePassphrase, exchangeData.Testnet)
 	}
 
 	s.exchangeAccountStateCache.Invalidate(userID)
@@ -481,6 +483,7 @@ func (s *Server) handleDeleteExchange(c *gin.Context) {
 		SafeInternalError(c, "Failed to delete exchange account", err)
 		return
 	}
+	s.deleteManagedBinding(userID, exchangeID)
 
 	s.exchangeAccountStateCache.Invalidate(userID)
 
