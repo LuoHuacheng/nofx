@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"nofx/api"
 	"nofx/auth"
 	"nofx/config"
@@ -11,6 +12,7 @@ import (
 	_ "nofx/mcp/provider"
 	"nofx/store"
 	"nofx/telemetry"
+	"nofx/trader/execution"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -87,6 +89,18 @@ func main() {
 		logger.Fatalf("❌ Failed to initialize database: %v", err)
 	}
 	defer st.Close()
+
+	// Unattended execution is single-owner: a second process must not touch the
+	// same database. Acquired before any trader autostart below.
+	releaseExecutionLock, err := execution.AcquireProcessLock(context.Background(), st.GormDB(), filepath.Dir(cfg.DBPath))
+	if err != nil {
+		logger.Fatalf("❌ Failed to acquire execution ownership: %v", err)
+	}
+	defer func() {
+		if err := releaseExecutionLock(); err != nil {
+			logger.Warnf("⚠️ Failed to release execution ownership: %v", err)
+		}
+	}()
 
 	// Initialize installation ID for experience improvement (anonymous statistics)
 	initInstallationID(st)
