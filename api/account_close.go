@@ -116,6 +116,10 @@ func (s *Server) handlePlanningAccountClose(c *gin.Context) {
 }
 
 func (s *Server) closeFuturesAccount(ctx context.Context, user string, in accountCloseRequest, factory func(*store.Exchange) (accountCloser, error)) (out execution.Order, err error) {
+	// ruling: this authenticated reduce-only close deliberately never calls
+	// execution.RequireLegacyAllowed. Reducing exposure must stay available while
+	// a managed account holds the entry freeze, so the bypass guard stops entries
+	// only.
 	// Only a definite pre-submission failure may release the UI's close latch.
 	// Existing durable intents and ambiguous submissions must stay protected.
 	mayHaveSubmitted := false

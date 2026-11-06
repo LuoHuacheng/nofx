@@ -518,3 +518,94 @@ func TestManagedBindingVerifiedTakeover(t *testing.T) {
 		t.Fatal("unverified stub kept its owner after takeover")
 	}
 }
+
+// TestManagedOwnershipEnablesOnlyWhenIdle keeps the ordering of the enable
+// path: the legacy autotrader has to be stopped before the binding is enabled.
+func TestManagedOwnershipEnablesOnlyWhenIdle(t *testing.T) {
+	f := newManagedFixture(t)
+	legacy := store.Trader{ID: "legacy", UserID: "alice", Name: "legacy", ExchangeID: "alice-okx-live", IsRunning: true}
+	if err := f.db.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	in := managedBindingRequest{ExchangeID: "alice-okx-live", VenueAccountID: "okx-uid-live", Environment: "live"}
+	if w := f.bind("alice", in); w.Code != 400 {
+		t.Fatalf("binding enabled while the legacy autotrader runs: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := execution.ResolveBinding(context.Background(), f.db, "alice", "alice-okx-live"); err == nil {
+		t.Fatal("refused enable persisted the binding")
+	}
+	if err := f.db.Model(&store.Trader{}).Where("id = ?", "legacy").Update("is_running", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	if w := f.bind("alice", in); w.Code != 200 {
+		t.Fatalf("idle account refused: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// TestManagedOwnershipBlocksLegacy proves the API start path cannot construct a
+// trader for a managed account, so no venue settings or orders can be written.
+func TestManagedOwnershipBlocksLegacy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "start.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sql.Close() })
+	if err = db.AutoMigrate(&store.Exchange{}, &store.Trader{}, &store.AIModel{}, &execution.Binding{}, &live.Lease{}, &live.Run{}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.NewFromGorm(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []any{
+		&store.Exchange{ID: "managed", UserID: "alice", ExchangeType: "okx", AccountName: "managed", Name: "managed", APIKey: "key", SecretKey: "secret", Passphrase: "pass", Enabled: true},
+		&store.AIModel{ID: "model", UserID: "alice", Provider: "deepseek", Enabled: true},
+		&store.Trader{ID: "trader-1", UserID: "alice", Name: "legacy", AIModelID: "model", ExchangeID: "managed"},
+		&execution.Binding{ID: "binding-1", UserID: "alice", ExchangeID: "managed", Venue: "okx", Environment: execution.EnvironmentLive, VenueAccountID: "uid", Enabled: true},
+	} {
+		if err = db.Create(row).Error; err != nil {
+			t.Fatalf("seed %T: %v", row, err)
+		}
+	}
+	s := &Server{store: st, traderManager: manager.NewTraderManager(), planning: &planningServices{source: market.New()}}
+	s.planningOnce.Do(func() {})
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("user_id", c.GetHeader("Test-User")) })
+	router.POST("/traders/:id/start", s.handleStartTrader)
+
+	r := httptest.NewRequest("POST", "/traders/trader-1/start", nil)
+	r.Header.Set("Test-User", "alice")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "unattended execution") {
+		t.Fatalf("API start on a managed account = %d %s", w.Code, w.Body.String())
+	}
+	if _, err = s.traderManager.GetTrader("trader-1"); err == nil {
+		t.Fatal("API start constructed a legacy trader for a managed account")
+	}
+}
+
+// TestManagedOwnershipAllowsEmergencyClose pins the exception: the guard freezes
+// entries, never the authenticated reduce that lowers exposure.
+func TestManagedOwnershipAllowsEmergencyClose(t *testing.T) {
+	s, f, in := closeFixture(t)
+	if err := s.store.GormDB().AutoMigrate(&execution.Binding{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.GormDB().Create(&execution.Binding{ID: "binding-1", UserID: "alice", ExchangeID: "second", Venue: "binance", Environment: execution.EnvironmentLive, VenueAccountID: "uid", Enabled: true}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A managed run keyed by the binding is live on the same physical account.
+	if err := s.store.GormDB().Create(&live.Run{ID: "run-1", UserID: "alice", ExchangeID: "second", AccountKey: "binding-1", State: "position_open"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	order, err := s.closeFuturesAccount(context.Background(), "alice", in, func(*store.Exchange) (accountCloser, error) { return f, nil })
+	if err != nil || order.Status != "FILLED" || f.calls != 1 {
+		t.Fatalf("managed account could not close: %+v, %v, calls %d", order, err, f.calls)
+	}
+}

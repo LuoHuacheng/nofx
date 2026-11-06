@@ -104,6 +104,9 @@ func (s *Server) planningBroker(ctx context.Context, user, id string) (live.Brok
 			}
 		}
 		if active {
+			// ruling: this is the enable-time precondition for managed execution. An
+			// approved run may only be created after the legacy autotrader is stopped,
+			// never the other way round.
 			return nil, "", errors.New("Automatic trading is running on this account. Stop it before using an approved one-time plan.")
 		}
 	}

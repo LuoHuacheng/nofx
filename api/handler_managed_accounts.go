@@ -169,12 +169,44 @@ func (s *Server) handleManagedAccountBinding(c *gin.Context) {
 		planningError(c, errors.New("this venue cannot prove an immutable account ID; confirm the account is dedicated before binding"))
 		return
 	}
+	if b.Enabled {
+		if e := s.assertLegacyStoppedForManagedBinding(user, ex.ID); e != nil {
+			planningError(c, e)
+			return
+		}
+	}
 	b, e = execution.BindManagedAccount(c.Request.Context(), s.store.GormDB(), b)
 	if e != nil {
 		planningError(c, e)
 		return
 	}
 	c.JSON(200, b)
+}
+
+// assertLegacyStoppedForManagedBinding refuses to enable the binding while a
+// legacy autotrader is still marked as running on this account.
+// ruling: enabling first would let the legacy autotrader and managed execution
+// trade one physical account, so the legacy stop is a precondition of enabling,
+// never a follow-up; stopping a live strategy stays an explicit user action.
+func (s *Server) assertLegacyStoppedForManagedBinding(user, exchangeID string) error {
+	rows, e := s.store.Trader().ListByExchangeID(user, exchangeID)
+	if e != nil {
+		return errors.New("cannot verify whether automatic trading is still running on this account")
+	}
+	for _, row := range rows {
+		active := row.IsRunning
+		if s.traderManager != nil {
+			if runtime, e := s.traderManager.GetTrader(row.ID); e == nil {
+				if running, ok := runtime.GetStatus()["is_running"].(bool); ok {
+					active = active || running
+				}
+			}
+		}
+		if active {
+			return errors.New("stop automatic trading on this account before enabling unattended execution")
+		}
+	}
+	return nil
 }
 
 func (s *Server) registerManagedAccounts(protected *gin.RouterGroup) {

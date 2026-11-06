@@ -10,6 +10,7 @@ import (
 
 	"nofx/logger"
 	"nofx/store"
+	"nofx/trader/execution"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -797,6 +798,12 @@ func (s *Server) handleStartTrader(c *gin.Context) {
 		}
 		if leaseError == nil {
 			SafeBadRequest(c, "该账户有已批准或尚未结束的交易计划，先取消或完成计划再启动自动交易")
+			return
+		}
+		// ruling: the managed-ownership refusal sits before any trader is
+		// constructed, so no venue client writes settings for this account.
+		if e := execution.RequireLegacyAllowed(c.Request.Context(), s.store.GormDB(), userID, fullCfg.Exchange.ID); e != nil {
+			SafeBadRequest(c, e.Error())
 			return
 		}
 	}

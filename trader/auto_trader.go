@@ -1,6 +1,7 @@
 package trader
 
 import (
+	"context"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	appconfig "nofx/config"
@@ -16,6 +17,7 @@ import (
 	"nofx/trader/binance"
 	"nofx/trader/bitget"
 	"nofx/trader/bybit"
+	"nofx/trader/execution"
 	"nofx/trader/gate"
 	"nofx/trader/hyperliquid"
 	"nofx/trader/indodax"
@@ -230,6 +232,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 				return nil, fmt.Errorf("account has an unresolved planning lease or lease lookup failed")
 			}
 		}
+		// Managed ownership is checked before any venue client is constructed:
+		// legacy constructors write account settings (e.g. position mode).
+		if err := execution.RequireLegacyAllowed(context.Background(), st.GormDB(), userID, config.ExchangeID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Set default values
@@ -364,6 +371,16 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		trader = indodax.NewIndodaxTrader(config.IndodaxAPIKey, config.IndodaxSecretKey)
 	default:
 		return nil, fmt.Errorf("unsupported trading platform: %s", config.Exchange)
+	}
+
+	// ruling: the physical-account comparison also runs at construction, so a
+	// second configuration of a managed account can never reach its Run loop.
+	if st != nil && config.ExchangeID != "" {
+		if identity, ok := trader.(execution.AccountIdentity); ok {
+			if err := execution.RequireLegacyIdentity(context.Background(), st.GormDB(), config.ExchangeID, config.Exchange, identity); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Validate initial balance configuration, auto-fetch from exchange if 0
@@ -501,6 +518,18 @@ func (at *AutoTrader) Run() error {
 			if err != nil || count != 0 {
 				unlock()
 				return fmt.Errorf("account has an unresolved planning lease or lease lookup failed")
+			}
+		}
+		// ruling: this check shares the planning account lock with approval, so
+		// a managed run cannot be approved between the check and isRunning.
+		if err := execution.RequireLegacyAllowed(context.Background(), at.store.GormDB(), at.userID, at.exchangeID); err != nil {
+			unlock()
+			return err
+		}
+		if identity, ok := at.trader.(execution.AccountIdentity); ok {
+			if err := execution.RequireLegacyIdentity(context.Background(), at.store.GormDB(), at.exchangeID, at.exchange, identity); err != nil {
+				unlock()
+				return err
 			}
 		}
 	}
