@@ -2,7 +2,9 @@ package okx
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"nofx/trader/execution"
 	"nofx/trader/types"
@@ -143,12 +145,54 @@ func (t *OKXTrader) frontierBalance() (map[string]interface{}, error) {
 	return nil, errors.New("OKX USDT trading balance unavailable")
 }
 
+// ManagedCapabilities reports the amend-in-place guarantee only for the stop
+// trigger, which /trade/amend-algos changes without cancelling the order.
 func (t *OKXTrader) ManagedCapabilities() execution.Capabilities {
-	return execution.Capabilities{}
+	return execution.Capabilities{SafeStopAmend: true}
 }
 
-func (t *OKXTrader) AmendStop(context.Context, execution.Order, execution.Decimal) (execution.Order, error) {
-	return execution.Order{}, execution.ErrUnsupported
+// okxAmendAlgoPath changes a stop trigger in place. It is not a cancel-then-place
+// sequence, so a refusal at either step leaves the original protection live.
+const okxAmendAlgoPath = "/api/v5/trade/amend-algos"
+
+// AmendStop tightens the stop trigger of one protection order and confirms it
+// through the same read path used for reconciliation. An unconfirmed amend is
+// reported as an error; the restored trigger is never assumed.
+func (t *OKXTrader) AmendStop(ctx context.Context, o execution.Order, price execution.Decimal) (execution.Order, error) {
+	if o.Role != "sl" || o.OrderID == "" {
+		return o, errors.New("only a submitted stop-loss can be amended")
+	}
+	if !execution.Positive(price) {
+		return o, errors.New("invalid stop price")
+	}
+	inst, e := t.executionInstrument(ctx, o.Symbol)
+	if e != nil {
+		return o, e
+	}
+	if !execution.Aligned(string(price), inst.TickSz) {
+		return o, errors.New("stop price is not an exact OKX tick")
+	}
+	body := map[string]string{"instId": o.Symbol, "algoId": o.OrderID, "newSlTriggerPx": string(price), "newSlTriggerPxType": "mark"}
+	raw, e := t.doRequestContext(ctx, "POST", okxAmendAlgoPath, body)
+	if e != nil {
+		return o, e
+	}
+	var rows []struct{ AlgoId, AlgoClOrdId, SCode, SMsg string }
+	if json.Unmarshal(raw, &rows) != nil || len(rows) != 1 {
+		return o, errors.New("OKX stop amendment response is unconfirmed")
+	}
+	if rows[0].SCode != "0" || rows[0].AlgoId != o.OrderID {
+		return o, fmt.Errorf("OKX stop amendment rejected (%s): %s", rows[0].SCode, rows[0].SMsg)
+	}
+	// Read-back proves the live order still exists and now carries the new
+	// trigger; the caller never treats the acknowledgement as the amendment.
+	checked := o
+	checked.Price = price
+	observed, e := t.LookupOrder(ctx, checked)
+	if e != nil || observed.OrderID != o.OrderID || observed.Status != "NEW" || !execution.Equal(string(observed.Price), string(price)) {
+		return o, errors.New("OKX stop amendment is unconfirmed; verify the protective order at the exchange")
+	}
+	return observed, nil
 }
 
 func (t *OKXTrader) Events(context.Context, func(execution.AccountEvent) error) error {

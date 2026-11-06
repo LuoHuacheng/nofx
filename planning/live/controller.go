@@ -504,7 +504,9 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 	if e != nil {
 		return true
 	}
-	if v.State == "completed" || v.State == "cancelled" || v.State == "approved" {
+	// halted_unknown keeps its lease and stays frozen: only the original exit
+	// client ID may resolve it, and no other submission is allowed meanwhile.
+	if v.State == "completed" || v.State == "cancelled" || v.State == "approved" || v.State == runHaltedUnknown {
 		return true
 	}
 	if v.StartedAt == nil {
@@ -778,13 +780,35 @@ func validateIntent(v View) error {
 		seen[o.ClientID] = true
 	}
 	totals := map[string]core.Decimal{}
+	basket := core.Decimal("0")
+	for _, s := range specs {
+		basket = add(basket, s.Quantity)
+	}
+	generation := 0
 	for _, o := range v.Orders[len(specs):] {
+		if o.Role == "exit" {
+			generation++
+			if o.Type != "market" || !o.ReduceOnly || o.PostOnly || o.ParentID != "" || o.Symbol != v.Plan.Snapshot.Symbol || o.Side != v.Plan.Idea.Side || o.ClientID != cid(v.ID, generation, "exit", "") || !core.Positive(o.Quantity) || cmp(o.Quantity, basket) > 0 || seen[o.ClientID] {
+				return errors.New("closing intent exceeds the locked position")
+			}
+			seen[o.ClientID] = true
+			if _, e := decimal(o.Filled); e != nil || cmp(o.Filled, o.Quantity) > 0 {
+				return errors.New("invalid closing fill")
+			}
+			continue
+		}
 		entry, ok := entries[o.ParentID]
 		price := v.Plan.Idea.Stop
 		if o.Role == "tp" {
 			price = v.Plan.Idea.Target
 		}
-		if o.Type != "" || o.PostOnly || o.ReduceOnly || !ok || (o.Role != "sl" && o.Role != "tp") || !core.Positive(o.Quantity) || cmp(o.Quantity, entry.Quantity) > 0 || cmp(o.Price, price) != 0 || o.Side != entry.Side || o.Symbol != entry.Symbol || seen[o.ClientID] {
+		// A stop may only tighten, so a stop moved closer to the mark still fits
+		// the risk the plan was approved for; a target stays at its plan price.
+		priceOK := cmp(o.Price, price) == 0
+		if o.Role == "sl" {
+			priceOK = (entry.Side == "long" && cmp(o.Price, price) >= 0) || (entry.Side != "long" && cmp(o.Price, price) <= 0)
+		}
+		if o.Type != "" || o.PostOnly || o.ReduceOnly || !ok || (o.Role != "sl" && o.Role != "tp") || !core.Positive(o.Quantity) || cmp(o.Quantity, entry.Quantity) > 0 || !priceOK || o.Side != entry.Side || o.Symbol != entry.Symbol || seen[o.ClientID] {
 			return errors.New("protective intent exceeds the locked basket")
 		}
 		seen[o.ClientID] = true

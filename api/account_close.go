@@ -125,7 +125,7 @@ func (s *Server) closeFuturesAccount(ctx context.Context, user string, in accoun
 		}
 	}()
 	id, err := uuid.Parse(in.RequestID)
-	if err != nil || id == uuid.Nil || !instrument.ValidSymbol(in.Symbol) || (in.Side != "long" && in.Side != "short") || !execution.Positive(execution.Decimal(in.Quantity)) || !execution.ValidOrderPrice(execution.Order{Role: "entry", Type: "market", ReduceOnly: true, Price: execution.Decimal(in.Entry)}) {
+	if err != nil || id == uuid.Nil || !instrument.ValidSymbol(in.Symbol) || (in.Side != "long" && in.Side != "short") || !execution.Positive(execution.Decimal(in.Quantity)) || !execution.ValidOrderPrice(execution.Order{Role: "exit", Type: "market", ReduceOnly: true, Price: execution.Decimal(in.Entry)}) {
 		return out, errors.New("Review a valid position and quantity before closing")
 	}
 	in.RequestID = id.String()
@@ -203,11 +203,9 @@ func (s *Server) closeFuturesAccount(ctx context.Context, user string, in accoun
 	if err != nil {
 		return out, err
 	}
-	side := "short"
-	if in.Side == "short" {
-		side = "long"
-	}
-	out = execution.Order{ClientID: strings.ReplaceAll(id.String(), "-", ""), Symbol: in.Symbol, Role: "entry", Type: "market", Side: side, Price: execution.Decimal(in.Entry), Quantity: execution.Decimal(quantity), ReduceOnly: true, Status: "submitting", Filled: "0"}
+	// A manual close is the same reduce-only market exit the live path uses, so
+	// every venue closes the reviewed position side instead of opening the other.
+	out = execution.Order{ClientID: strings.ReplaceAll(id.String(), "-", ""), Symbol: in.Symbol, Role: "exit", Type: "market", Side: in.Side, Price: execution.Decimal(in.Entry), Quantity: execution.Decimal(quantity), ReduceOnly: true, Status: "submitting", Filled: "0"}
 	out.VenueClientID, err = client.RouteClientID(out.ClientID)
 	if err != nil {
 		return out, err

@@ -67,7 +67,9 @@ func activeProtection(status string) bool {
 // Supervised runs trust only a fresh venue read: neither an acknowledgement nor
 // a stale order status can prove protection.
 func (c *Controller) inspectProtection(ctx context.Context, v *View, b Broker, entry Order, supervised bool) (remaining, stop, target core.Decimal, stopUnreadable, targetUnreadable bool) {
-	remaining, stop, target = entry.Filled, "0", "0"
+	// Confirmed exit fills already closed part of the position: protection must
+	// never top up to a size the venue no longer holds.
+	remaining, stop, target = sub(entry.Filled, exitAllocation(v.Orders, entry)), "0", "0"
 	for i := range v.Orders {
 		o := &v.Orders[i]
 		if o.ParentID != entry.ClientID || (o.Role != "sl" && o.Role != "tp") {

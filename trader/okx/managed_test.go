@@ -2,6 +2,7 @@ package okx
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -257,12 +258,12 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported_capabilities", func(t *testing.T) {
+	t.Run("capabilities", func(t *testing.T) {
 		b := &OKXTrader{environment: execution.EnvironmentSandbox}
-		if caps := b.ManagedCapabilities(); caps.SafeStopAmend || caps.PrivateEvents {
+		if caps := b.ManagedCapabilities(); !caps.SafeStopAmend || caps.PrivateEvents {
 			t.Fatalf("capabilities over-reported: %+v", caps)
 		}
-		if _, err := b.AmendStop(context.Background(), execution.Order{}, "1"); !errors.Is(err, execution.ErrUnsupported) {
+		if _, err := b.AmendStop(context.Background(), execution.Order{}, "1"); err == nil || errors.Is(err, execution.ErrUnsupported) {
 			t.Fatalf("amend stop must be unsupported: %v", err)
 		}
 		if err := b.Events(context.Background(), func(execution.AccountEvent) error { return nil }); !errors.Is(err, execution.ErrUnsupported) {
@@ -270,4 +271,76 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 		}
 		var _ execution.ManagedTrader = b
 	})
+}
+
+// A managed exit posts one market close for the contracts that are actually
+// held, with the reduce-only flag on the one-way wire body.
+func TestManagedExitOrderTerms(t *testing.T) {
+	client := strings.Repeat("b", 32)
+	routes := okxManagedFixture("net_mode", "0.01", "0.01", okxManagedPosition)
+	routes[okxOrderPath] = func(r *http.Request) (int, string) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		if body["ordType"] != "market" || body["reduceOnly"] != true || body["posSide"] != "net" || body["side"] != "sell" || body["sz"] != "10" || body["clOrdId"] != client {
+			t.Fatalf("unsafe exit wire intent: %v", body)
+		}
+		if _, ok := body["px"]; ok {
+			t.Fatalf("market exit carried a price: %v", body)
+		}
+		return 200, okxManagedData(fmt.Sprintf(`[{"ordId":"42","clOrdId":%q,"sCode":"0"}]`, client))
+	}
+	b, _ := newManagedOKXFixture(t, execution.EnvironmentSandbox, routes)
+	o := execution.Order{ClientID: client, VenueClientID: client, Role: "exit", Type: "market", ReduceOnly: true, Side: "long", Symbol: "BTC-USDT-SWAP", Price: "100", Quantity: "0.1", Status: "submitting", Filled: "0"}
+	got, err := b.SubmitOrder(context.Background(), o)
+	if err != nil || got.OrderID != "42" || got.Status != "NEW" {
+		t.Fatal(got, err)
+	}
+}
+
+// The stop trigger is amended in place and only reported after the read-back
+// confirms the same order carries the new trigger.
+func TestManagedStopAmend(t *testing.T) {
+	client := strings.Repeat("c", 32)
+	amends, reads := 0, 0
+	routes := okxManagedFixture("net_mode", "0.01", "0.01", okxManagedPosition)
+	routes[okxAmendAlgoPath] = func(r *http.Request) (int, string) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]string
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		amends++
+		if body["algoId"] != "7" || body["newSlTriggerPx"] != "96" || body["newSlTriggerPxType"] != "mark" || body["instId"] != "BTC-USDT-SWAP" {
+			t.Fatalf("wrong amend intent: %v", body)
+		}
+		return 200, okxManagedData(fmt.Sprintf(`[{"algoId":"7","algoClOrdId":%q,"sCode":"0"}]`, client))
+	}
+	routes[okxAlgoOrderPath] = func(r *http.Request) (int, string) {
+		reads++
+		if r.URL.Query().Get("algoClOrdId") != client {
+			t.Fatalf("read-back lost the stop identity: %s", r.URL.String())
+		}
+		return 200, okxManagedData(fmt.Sprintf(`[{"algoId":"7","algoClOrdId":%q,"instId":"BTC-USDT-SWAP","side":"sell","posSide":"net","ordType":"conditional","sz":"10","slTriggerPx":"96","slTriggerPxType":"mark","slOrdPx":"-1","state":"live","reduceOnly":true}]`, client))
+	}
+	b, calls := newManagedOKXFixture(t, execution.EnvironmentSandbox, routes)
+	if caps := b.ManagedCapabilities(); !caps.SafeStopAmend || caps.PrivateEvents {
+		t.Fatalf("capabilities over-reported: %+v", caps)
+	}
+	stop := execution.Order{ClientID: client, VenueClientID: client, OrderID: "7", Role: "sl", Symbol: "BTC-USDT-SWAP", Side: "long", Price: "95", Quantity: "0.1", Status: "NEW"}
+	if _, err := b.AmendStop(context.Background(), stop, "96.05"); err == nil || amends != 0 {
+		t.Fatal("a stop off the tick grid reached the venue", err, amends)
+	}
+	got, err := b.AmendStop(context.Background(), stop, "96")
+	if err != nil || got.Price != "96" || got.Status != "NEW" || got.OrderID != "7" || amends != 1 || reads != 1 {
+		t.Fatal(got, err, amends, reads, calls.requests)
+	}
 }

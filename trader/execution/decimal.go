@@ -85,7 +85,7 @@ func Aligned(value, step string) bool {
 // A reduce-only market close carries the observed average entry only as review
 // metadata. That weighted average is not a limit price and may have more digits.
 func ValidOrderPrice(o Order) bool {
-	if o.Role == "entry" && o.Type == "market" && o.ReduceOnly {
+	if (o.Role == "entry" || o.Role == "exit") && o.Type == "market" && o.ReduceOnly {
 		price, err := Number(string(o.Price))
 		return err == nil && price.Sign() > 0
 	}
@@ -100,14 +100,17 @@ func ValidateIntent(o Order) error {
 	if o.Side != "long" && o.Side != "short" {
 		return errors.New("invalid execution side")
 	}
-	if o.Role != "entry" && o.Role != "sl" && o.Role != "tp" {
+	if o.Role != "entry" && o.Role != "exit" && o.Role != "sl" && o.Role != "tp" {
 		return errors.New("invalid order role")
 	}
 	if o.Type != "" && o.Type != "limit" && o.Type != "market" {
 		return errors.New("unsupported order type")
 	}
-	if o.ReduceOnly && (o.Role != "entry" || o.Type != "market") {
+	if o.ReduceOnly && (o.Role != "entry" && o.Role != "exit" || o.Type != "market") {
 		return errors.New("unsupported reduce-only intent")
+	}
+	if o.Role == "exit" && (!o.ReduceOnly || o.Type != "market") {
+		return errors.New("a closing order must be a reduce-only market order")
 	}
 	if !Positive(o.Quantity) || !ValidOrderPrice(o) || o.PostOnly && (o.Role != "entry" || o.Type == "market") {
 		return errors.New("invalid order quantity, price or post-only mode")

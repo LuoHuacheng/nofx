@@ -179,7 +179,7 @@ func executionPosition(side string, hedge bool) futures.PositionSideType {
 	return futures.PositionSideTypeShort
 }
 func (b *FuturesTrader) SubmitOrder(ctx context.Context, o execution.Order) (execution.Order, error) {
-	if o.Type != "" && (o.Type != "market" || o.Role != "entry" || o.PostOnly) {
+	if o.Type != "" && (o.Type != "market" || (o.Role != "entry" && o.Role != "exit") || o.PostOnly) {
 		return o, errors.New("unsupported execution order type")
 	}
 	nativeID, err := b.nativeClientID(o)
@@ -208,13 +208,15 @@ func (b *FuturesTrader) SubmitOrder(ctx context.Context, o execution.Order) (exe
 			side = futures.SideTypeBuy
 		}
 	}
-	if o.Role == "entry" {
+	// A closing order travels the regular order path like an entry: it closes
+	// the position side it names instead of opening the opposite one.
+	if o.Role == "entry" || o.Role == "exit" {
 		tif := futures.TimeInForceTypeGTC
 		if o.PostOnly {
 			tif = futures.TimeInForceTypeGTX
 		}
 		positionSide := executionPosition(o.Side, mode.DualSidePosition)
-		if o.ReduceOnly && mode.DualSidePosition {
+		if o.Role == "entry" && o.ReduceOnly && mode.DualSidePosition {
 			if o.Side == "long" {
 				positionSide = futures.PositionSideTypeShort
 			} else {
@@ -277,7 +279,7 @@ func (b *FuturesTrader) LookupOrder(ctx context.Context, o execution.Order) (exe
 		return o, err
 	}
 
-	if o.Role != "entry" {
+	if o.Role != "entry" && o.Role != "exit" {
 		r, e := b.client.NewGetAlgoOrderService().ClientAlgoID(nativeID).Do(ctx)
 		if e != nil {
 			return o, errors.New("Binance protective order lookup is unconfirmed")
@@ -318,8 +320,19 @@ func (b *FuturesTrader) LookupOrder(ctx context.Context, o execution.Order) (exe
 	if e != nil {
 		return o, errors.New("Binance order lookup is unconfirmed; missing does not mean filled")
 	}
+	expected := futures.SideTypeBuy
+	if o.Side == "short" {
+		expected = futures.SideTypeSell
+	}
+	if o.Role != "entry" { // closing orders trade against the position they reduce
+		if expected == futures.SideTypeBuy {
+			expected = futures.SideTypeSell
+		} else {
+			expected = futures.SideTypeBuy
+		}
+	}
 	priceMismatch := o.Type != "market" && !sameNativeDecimal(r.Price, string(o.Price))
-	marketMismatch := o.Type == "market" && (r.Type != futures.OrderTypeMarket || (o.Side == "long" && r.Side != futures.SideTypeBuy) || (o.Side == "short" && r.Side != futures.SideTypeSell))
+	marketMismatch := o.Type == "market" && (r.Type != futures.OrderTypeMarket || r.Side != expected)
 	if r.OrderID <= 0 || r.ClientOrderID != nativeID || r.Symbol != o.Symbol || !sameNativeDecimal(r.OrigQuantity, string(o.Quantity)) || priceMismatch || marketMismatch {
 		return o, errors.New("order identity mismatch")
 	}
@@ -335,7 +348,7 @@ func (b *FuturesTrader) CancelExecutionOrder(ctx context.Context, o execution.Or
 		return err
 	}
 
-	if o.Role == "entry" {
+	if o.Role == "entry" || o.Role == "exit" {
 		r, e := b.client.NewCancelOrderService().Symbol(o.Symbol).OrigClientOrderID(nativeID).Do(ctx)
 		if e != nil || r.ClientOrderID != nativeID {
 			return errors.New("Binance entry cancellation is unconfirmed")

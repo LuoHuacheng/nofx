@@ -26,6 +26,13 @@ func (b NOFXBroker) RouteClientID(id string) (string, error) {
 
 var _ Broker = NOFXBroker{}
 
+// Managed exposes the optional managed-account surface. A trader without it
+// keeps the finite scheduler's manual behaviour instead of a silent fallback.
+func (b NOFXBroker) Managed() (execution.ManagedTrader, bool) {
+	m, ok := b.Trader.(execution.ManagedTrader)
+	return m, ok
+}
+
 func (b NOFXBroker) PrepareLeverage(ctx context.Context, symbol string, leverage int) error {
 	if t, ok := b.Trader.(interface {
 		PrepareExecutionLeverage(context.Context, string, int) error

@@ -84,7 +84,7 @@ func TestAccountCloseUsesSelectedBinanceWithoutAutopilot(t *testing.T) {
 	if err != nil || order.Status != "FILLED" {
 		t.Fatal(order, err)
 	}
-	if f.calls != 1 || !f.last.ReduceOnly || f.last.Type != "market" || f.last.Side != "long" || f.last.Quantity != "0.019" || f.last.VenueClientID == "" {
+	if f.calls != 1 || !f.last.ReduceOnly || f.last.Type != "market" || f.last.Role != "exit" || f.last.Side != "short" || f.last.Quantity != "0.019" || f.last.VenueClientID == "" {
 		t.Fatal(f.last)
 	}
 	var count int64
@@ -199,7 +199,7 @@ func TestAccountCloseAcceptsWeightedAverageWithoutRounding(t *testing.T) {
 			}
 			f.positions = []map[string]interface{}{{"symbol": in.Symbol, "side": "short", "positionAmt": float64(-12257), "entryPrice": 0.1287878419678551}}
 			o, err := s.closeFuturesAccount(context.Background(), "alice", in, func(*store.Exchange) (accountCloser, error) { return f, nil })
-			if err != nil || f.calls != 1 || o.Price != execution.Decimal(in.Entry) || o.Quantity != "12257" || !o.ReduceOnly {
+			if err != nil || f.calls != 1 || o.Price != execution.Decimal(in.Entry) || o.Quantity != "12257" || !o.ReduceOnly || o.Role != "exit" || o.Side != in.Side {
 				t.Fatal(o, err, f.calls)
 			}
 			if !execution.ValidOrderPrice(o) {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"nofx/trader/execution"
+	"strings"
 	"testing"
 
 	"github.com/adshao/go-binance/v2/futures"
@@ -201,4 +202,52 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 		}
 		var _ execution.ManagedTrader = b
 	})
+}
+
+// A managed exit is a market close of the run's own position: the venue side is
+// flipped once from the position side and the reduce-only guarantee reaches the
+// wire in both position modes.
+func TestManagedExitOrderTerms(t *testing.T) {
+	for _, hedge := range []bool{false, true} {
+		t.Run(fmt.Sprintf("hedge=%t", hedge), func(t *testing.T) {
+			o := execution.Order{ClientID: strings.Repeat("a", 32), Role: "exit", Type: "market", ReduceOnly: true, Side: "long", Symbol: "BTCUSDT", Price: "100000", Quantity: "0.001", Status: "submitting", Filled: "0"}
+			nativePosition, reduceOnly := "BOTH", "true"
+			if hedge {
+				nativePosition, reduceOnly = "LONG", ""
+			}
+			submits := 0
+			b, _, _ := newManagedBinanceFixture(t, func(r *http.Request) (int, string) {
+				if r.URL.Path == "/fapi/v1/positionSide/dual" {
+					return 200, fmt.Sprintf(`{"dualSidePosition":%t}`, hedge)
+				}
+				if r.URL.Path != "/fapi/v1/order" || r.Method != http.MethodPost {
+					return 0, ""
+				}
+				r.ParseForm()
+				submits++
+				if r.Form.Get("type") != "MARKET" || r.Form.Get("side") != "SELL" || r.Form.Get("positionSide") != nativePosition || r.Form.Get("reduceOnly") != reduceOnly {
+					t.Fatalf("unsafe exit wire intent: %v", r.Form)
+				}
+				if r.Form.Get("price") != "" || r.Form.Get("timeInForce") != "" || r.Form.Get("newOrderRespType") != "RESULT" {
+					t.Fatalf("market exit carried limit terms: %v", r.Form)
+				}
+				if r.Form.Get("newClientOrderId") != o.VenueClientID || r.Form.Get("quantity") != string(o.Quantity) {
+					t.Fatalf("exit lost its durable identity: %v", r.Form)
+				}
+				return 200, fmt.Sprintf(`{"orderId":123,"clientOrderId":%q,"symbol":"BTCUSDT","origQty":"0.001","side":"SELL","positionSide":%q,"type":"MARKET","reduceOnly":%t,"status":"FILLED","executedQty":"0.001","avgPrice":"100000"}`, o.VenueClientID, nativePosition, !hedge)
+			})
+			route, err := b.RouteClientID(o.ClientID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			o.VenueClientID = route
+			got, err := b.SubmitOrder(context.Background(), o)
+			if err != nil || got.Status != "FILLED" || submits != 1 {
+				t.Fatal(got, err, submits)
+			}
+			if caps := b.ManagedCapabilities(); caps.SafeStopAmend {
+				t.Fatal("binance reported an amend the SDK cannot confirm")
+			}
+		})
+	}
 }

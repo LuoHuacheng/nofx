@@ -202,6 +202,11 @@ func (t *BitgetTrader) PrepareExecutionLeverage(ctx context.Context, symbol stri
 	}
 	return nil
 }
+
+// An exit closes the position but travels the regular order path, so only its
+// direction and reduce-only flag differ from an entry.
+func bitgetRegular(role string) bool { return role == "entry" || role == "exit" }
+
 func bitgetDirection(o execution.Order, mode string) (side, held, trade string) {
 	held = o.Side
 	side = "buy"
@@ -209,7 +214,7 @@ func bitgetDirection(o execution.Order, mode string) (side, held, trade string) 
 		side = "sell"
 	}
 	trade = "open"
-	if o.ReduceOnly {
+	if o.ReduceOnly && o.Role == "entry" {
 		held = "short"
 		if o.Side == "short" {
 			held = "long"
@@ -267,7 +272,7 @@ func (t *BitgetTrader) SubmitOrder(ctx context.Context, o execution.Order) (exec
 	if e != nil {
 		return o, e
 	}
-	if (o.Type != "market" || o.Role != "entry") && !execution.Aligned(string(o.Price), string(tick)) {
+	if o.Type != "market" && !execution.Aligned(string(o.Price), string(tick)) {
 		return o, errors.New("price is not an exact Bitget tick")
 	}
 	a, e := t.executionAccount(ctx, o.Symbol)
@@ -310,7 +315,7 @@ func (t *BitgetTrader) SubmitOrder(ctx context.Context, o execution.Order) (exec
 	}
 	body := map[string]any{"symbol": o.Symbol, "productType": "USDT-FUTURES", "marginCoin": "USDT", "size": string(o.Quantity), "clientOid": o.ClientID}
 	path := bitgetOrderPath
-	if o.Role == "entry" {
+	if bitgetRegular(o.Role) {
 		body["marginMode"] = margin
 		body["side"] = side
 		body["orderType"] = "limit"
@@ -373,7 +378,7 @@ func (t *BitgetTrader) LookupOrder(ctx context.Context, o execution.Order) (exec
 	if o.OrderID != "" {
 		query = mixQuery(o.Symbol) + "&orderId=" + url.QueryEscape(o.OrderID)
 	}
-	if o.Role == "entry" {
+	if bitgetRegular(o.Role) {
 		if e := t.readExecution(ctx, "/api/v2/mix/order/detail"+query, &r); e != nil {
 			return o, e
 		}
@@ -408,12 +413,12 @@ func (t *BitgetTrader) LookupOrder(ctx context.Context, o execution.Order) (exec
 		return o, errors.New("Bitget receipt position mode missing")
 	}
 	side, held, trade := bitgetDirection(o, r.PosMode)
-	if (o.Role == "entry" && (r.Side != side || (r.PosMode == "hedge_mode" && r.PosSide != held))) || (o.Role != "entry" && !bitgetProtectionDirection(r, held)) {
+	if (bitgetRegular(o.Role) && (r.Side != side || (r.PosMode == "hedge_mode" && r.PosSide != held))) || (!bitgetRegular(o.Role) && !bitgetProtectionDirection(r, held)) {
 		return o, errors.New("Bitget receipt direction mismatch")
 	}
 	o.OrderID = r.OrderId
 	o.Filled = "0"
-	if o.Role == "entry" {
+	if bitgetRegular(o.Role) {
 		typ := "limit"
 		if o.Type == "market" {
 			typ = "market"
@@ -532,7 +537,7 @@ func (t *BitgetTrader) CancelExecutionOrder(ctx context.Context, o execution.Ord
 	}
 	body := map[string]any{"symbol": o.Symbol, "productType": "USDT-FUTURES", "marginCoin": "USDT"}
 	path := bitgetCancelOrderPath
-	if o.Role == "entry" {
+	if bitgetRegular(o.Role) {
 		body["orderId"] = o.OrderID
 		body["clientOid"] = o.ClientID
 	} else {
@@ -550,7 +555,7 @@ func (t *BitgetTrader) CancelExecutionOrder(ctx context.Context, o execution.Ord
 	if json.Unmarshal(raw, &r) != nil {
 		return errors.New("invalid Bitget cancellation response")
 	}
-	if o.Role == "entry" {
+	if bitgetRegular(o.Role) {
 		if r.OrderId == o.OrderID && r.ClientOid == o.ClientID {
 			return nil
 		}

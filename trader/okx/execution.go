@@ -254,7 +254,7 @@ func okxSide(o execution.Order) (side, held string) {
 			side = "buy"
 		}
 	}
-	if o.ReduceOnly {
+	if o.ReduceOnly && o.Role == "entry" {
 		held = "short"
 		if o.Side == "short" {
 			held = "long"
@@ -292,7 +292,7 @@ func (t *OKXTrader) SubmitOrder(ctx context.Context, o execution.Order) (executi
 			return o, errors.New("quantity exceeds OKX order limit")
 		}
 	}
-	if (o.Type != "market" || o.Role != "entry") && !execution.Aligned(string(o.Price), inst.TickSz) {
+	if o.Type != "market" && !execution.Aligned(string(o.Price), inst.TickSz) {
 		return o, errors.New("price is not an exact OKX tick")
 	}
 	mode, e := t.executionMode(ctx)
@@ -350,7 +350,7 @@ func (t *OKXTrader) SubmitOrder(ctx context.Context, o execution.Order) (executi
 		}
 	}
 	path := okxOrderPath
-	if o.Role == "entry" {
+	if o.Role == "entry" || o.Role == "exit" {
 		body["clOrdId"] = o.ClientID
 		body["ordType"] = "limit"
 		body["px"] = string(o.Price)
@@ -382,7 +382,7 @@ func (t *OKXTrader) SubmitOrder(ctx context.Context, o execution.Order) (executi
 		return o, fmt.Errorf("OKX order rejected (%s): %s", r.SCode, r.SMsg)
 	}
 	id, cid := r.OrdId, r.ClOrdId
-	if o.Role != "entry" {
+	if o.Role != "entry" && o.Role != "exit" {
 		id, cid = r.AlgoId, r.AlgoClOrdId
 	}
 	if id == "" || (cid != "" && cid != o.ClientID) {
@@ -400,7 +400,7 @@ func (t *OKXTrader) LookupOrder(ctx context.Context, o execution.Order) (executi
 	}
 	var rows []executionReceipt
 	path := okxOrderPath + "?instId=" + url.QueryEscape(o.Symbol) + "&clOrdId=" + url.QueryEscape(o.ClientID)
-	if o.Role != "entry" {
+	if o.Role != "entry" && o.Role != "exit" {
 		path = okxAlgoOrderPath + "?algoClOrdId=" + url.QueryEscape(o.ClientID)
 	}
 	if e := t.readExecution(ctx, path, &rows); e != nil {
@@ -411,7 +411,7 @@ func (t *OKXTrader) LookupOrder(ctx context.Context, o execution.Order) (executi
 	}
 	r := rows[0]
 	id, cid := r.OrdId, r.ClOrdId
-	if o.Role != "entry" {
+	if o.Role != "entry" && o.Role != "exit" {
 		id, cid = r.AlgoId, r.AlgoClOrdId
 	}
 	if id == "" || cid != o.ClientID || r.InstId != o.Symbol || (o.OrderID != "" && id != o.OrderID) {
@@ -431,7 +431,7 @@ func (t *OKXTrader) LookupOrder(ctx context.Context, o execution.Order) (executi
 	}
 	o.OrderID = id
 	o.Filled = "0"
-	if o.Role == "entry" {
+	if o.Role == "entry" || o.Role == "exit" {
 		expected := "limit"
 		if o.Type == "market" {
 			expected = "market"
@@ -583,7 +583,7 @@ func (t *OKXTrader) CancelExecutionOrder(ctx context.Context, o execution.Order)
 	}
 	path := okxCancelOrderPath
 	var body any = map[string]string{"instId": o.Symbol, "ordId": o.OrderID, "clOrdId": o.ClientID}
-	if o.Role != "entry" {
+	if o.Role != "entry" && o.Role != "exit" {
 		path = okxCancelAlgoPath
 		body = []map[string]string{{"instId": o.Symbol, "algoId": o.OrderID}}
 	}
