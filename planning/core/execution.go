@@ -121,8 +121,8 @@ func compileExecution(s Snapshot, c Constraints, i Idea, now time.Time) (Plan, e
 			w = big.NewRat(1, int64(x.Slices))
 		}
 		weights = append(weights, w)
-		loss := add(abs(sub(must(l.Price), must(i.Stop))), mul(add(must(l.Price), must(i.Stop)), cost))
-		gain := sub(abs(sub(must(i.Target), must(l.Price))), mul(add(must(l.Price), must(i.Target)), cost))
+		loss := add(add(abs(sub(must(l.Price), must(i.Stop))), mul(add(must(l.Price), must(i.Stop)), cost)), fundingReserve(must(l.Price), c))
+		gain := sub(sub(abs(sub(must(i.Target), must(l.Price))), mul(add(must(l.Price), must(i.Target)), cost)), fundingReserve(must(l.Price), c))
 		lossSum = add(lossSum, mul(w, loss))
 		gainSum = add(gainSum, mul(w, gain))
 		notional = add(notional, mul(w, mul(must(l.Price), add(big.NewRat(1, 1), cost))))
@@ -140,8 +140,8 @@ func compileExecution(s Snapshot, c Constraints, i Idea, now time.Time) (Plan, e
 		if q.Cmp(must(s.MinQty)) < 0 || mul(q, must(l.Price)).Cmp(must(s.MinNotional)) < 0 {
 			return Plan{}, fmt.Errorf("Child order %d is below venue minimum quantity or notional; reduce slice count or adjust the budget", n+1)
 		}
-		loss := add(abs(sub(must(l.Price), must(i.Stop))), mul(add(must(l.Price), must(i.Stop)), cost))
-		gain := sub(abs(sub(must(i.Target), must(l.Price))), mul(add(must(l.Price), must(i.Target)), cost))
+		loss := add(add(abs(sub(must(l.Price), must(i.Stop))), mul(add(must(l.Price), must(i.Stop)), cost)), fundingReserve(must(l.Price), c))
+		gain := sub(sub(abs(sub(must(i.Target), must(l.Price))), mul(add(must(l.Price), must(i.Target)), cost)), fundingReserve(must(l.Price), c))
 		offset := 0
 		if x.Kind == "twap" {
 			offset = n * x.IntervalSeconds

@@ -158,6 +158,9 @@ type Constraints struct {
 	MinRewardRisk   Decimal `json:"min_reward_risk"`
 	FeeBPS          Decimal `json:"fee_bps"`
 	SlippageBPS     Decimal `json:"slippage_bps"`
+	// FundingReserveBPS charges expected funding on both the loss and the reward
+	// side. Empty means zero, so plans compiled before this field keep their digest.
+	FundingReserveBPS Decimal `json:"funding_reserve_bps,omitempty"`
 }
 
 // An omitted policy preserves the calculation and execution checks of saved plans.
@@ -205,6 +208,12 @@ func (c Constraints) Validate() error {
 	if must(c.FeeBPS).Cmp(big.NewRat(1000, 1)) > 0 || must(c.SlippageBPS).Cmp(big.NewRat(1000, 1)) > 0 {
 		return errors.New("cost assumption exceeds 1000 bps")
 	}
+	if c.FundingReserveBPS != "" {
+		reserve, err := rat(c.FundingReserveBPS)
+		if err != nil || reserve.Sign() < 0 || reserve.Cmp(big.NewRat(1000, 1)) > 0 {
+			return errors.New("funding reserve must be a non-negative decimal up to 1000 bps")
+		}
+	}
 	return nil
 }
 
@@ -240,6 +249,15 @@ func floorStep(v, step *big.Rat) *big.Rat {
 	q := div(v, step)
 	n := new(big.Int).Quo(q.Num(), q.Denom())
 	return mul(new(big.Rat).SetInt(n), step)
+}
+
+// fundingReserve is the expected funding paid on one unit over the holding
+// period, charged conservatively on both the loss and the reward side.
+func fundingReserve(price *big.Rat, c Constraints) *big.Rat {
+	if c.FundingReserveBPS == "" {
+		return new(big.Rat)
+	}
+	return mul(price, div(must(c.FundingReserveBPS), big.NewRat(10000, 1)))
 }
 
 func sizeByLimits(c Constraints, risk, budget, liquidity *big.Rat) (*big.Rat, string) {
@@ -292,11 +310,11 @@ func Compile(s Snapshot, c Constraints, i Idea, now time.Time) (Plan, error) {
 		return p, errors.New("entry more than 10% from book")
 	}
 	cost := div(add(must(c.FeeBPS), must(c.SlippageBPS)), big.NewRat(10000, 1))
-	loss := add(abs(sub(e, st)), mul(add(e, st), cost))
+	loss := add(add(abs(sub(e, st)), mul(add(e, st), cost)), fundingReserve(e, c))
 	if c.EffectiveLeverage() > 1 && mul(loss, big.NewRat(int64(c.EffectiveLeverage()), 1)).Cmp(mul(e, big.NewRat(4, 5))) >= 0 {
 		return p, errors.New("stop and costs consume over 80% of initial margin at this leverage; reduce leverage")
 	}
-	gain := sub(abs(sub(tp, e)), mul(add(e, tp), cost))
+	gain := sub(sub(abs(sub(tp, e)), mul(add(e, tp), cost)), fundingReserve(e, c))
 	if gain.Sign() <= 0 {
 		return p, errors.New("target return does not cover estimated fees and slippage")
 	}
