@@ -196,7 +196,7 @@ func (t *OKXTrader) ManagedSnapshot(ctx context.Context) (execution.ManagedAccou
 		out.PositionMode = "one_way"
 	}
 	var balances []struct {
-		Details []struct{ Ccy, Eq, AvailEq, AvailBal string }
+		Details []struct{ Ccy, Eq, AvailEq, AvailBal, Imr string }
 	}
 	if err := t.readExecution(ctx, okxAccountPath+"?ccy=USDT", &balances); err != nil {
 		return out, err
@@ -216,6 +216,9 @@ func (t *OKXTrader) ManagedSnapshot(ctx context.Context) (execution.ManagedAccou
 			}
 			if out.Available, err = execution.BalanceDecimal(available); err != nil {
 				return out, errors.New("OKX available margin is unavailable")
+			}
+			if out.MarginUsed, err = execution.BalanceDecimal(d.Imr); err != nil {
+				return out, errors.New("OKX margin used is unavailable")
 			}
 			found = true
 		}
@@ -321,10 +324,9 @@ func (t *OKXTrader) ManagedSnapshot(ctx context.Context) (execution.ManagedAccou
 				role, price = "sl", r.SlTriggerPx
 			case r.TpTriggerPx != "":
 				role, price = "tp", r.TpTriggerPx
-			case r.TriggerPx != "":
-				role, price = "sl", r.TriggerPx
 			default:
-				return out, errors.New("OKX protective order has no trigger price")
+				// An entry trigger order carries triggerPx but no protective leg.
+				return out, errors.New("OKX pending algo order is not a confirmed SL/TP protection")
 			}
 		}
 		id, clientID := r.OrdId, r.ClOrdId

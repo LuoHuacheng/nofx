@@ -58,7 +58,7 @@ func okxManagedFixture(mode, ctVal, lotSz, positions string) okxManagedRoutes {
 			return 200, okxManagedData(fmt.Sprintf(`[{"posMode":%q,"acctLv":"2"}]`, mode))
 		},
 		okxAccountPath: func(*http.Request) (int, string) {
-			return 200, okxManagedData(`[{"details":[{"ccy":"USDT","eq":"320","availEq":"280"}]}]`)
+			return 200, okxManagedData(`[{"details":[{"ccy":"USDT","eq":"320","availEq":"280","imr":"40"}]}]`)
 		},
 		okxPositionPath: func(*http.Request) (int, string) { return 200, okxManagedData(positions) },
 		okxInstrumentsPath: func(*http.Request) (int, string) {
@@ -117,7 +117,7 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 			if got.Environment != execution.EnvironmentSandbox || got.Venue != "okx" || got.PositionMode != "one_way" || got.MarginMode != "isolated" {
 				t.Fatalf("wrong account mode: %+v", got)
 			}
-			if got.Equity != "320" || got.Available != "280" {
+			if got.Equity != "320" || got.Available != "280" || got.MarginUsed != "40" {
 				t.Fatalf("wrong balances: %+v", got)
 			}
 			if len(got.Positions) != 1 || got.Positions[0].Side != "long" || got.Positions[0].Mark != "101" {
@@ -155,6 +155,26 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 		}
 		if len(got.Orders) != 1 || got.Orders[0].Role != "sl" || got.Orders[0].Side != "long" || got.Orders[0].Price != "95" {
 			t.Fatalf("wrong order read model: %+v", got.Orders)
+		}
+	})
+
+	t.Run("entry_trigger_is_not_protection", func(t *testing.T) {
+		routes := okxManagedFixture("net_mode", "0.01", "0.01", okxManagedPosition)
+		routes[okxAlgoPendingPath] = func(r *http.Request) (int, string) {
+			if r.URL.Query().Get("ordType") != "trigger" {
+				return 200, okxManagedData(`[]`)
+			}
+			return 200, okxManagedData(`[{"algoId":"7","instId":"BTC-USDT-SWAP","side":"sell","posSide":"net","state":"live","ordType":"trigger","sz":"10","triggerPx":"101"}]`)
+		}
+		client, _ := newManagedOKXFixture(t, execution.EnvironmentSandbox, routes)
+		got, err := client.ManagedSnapshot(context.Background())
+		if err == nil {
+			t.Fatal("entry trigger order accepted as protection")
+		}
+		for _, p := range got.Positions {
+			if p.StopPrice != "" {
+				t.Fatalf("unconfirmed stop price filled: %+v", p)
+			}
 		}
 	})
 
@@ -207,6 +227,15 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 		client, _ := newManagedOKXFixture(t, execution.EnvironmentSandbox, routes)
 		if got, err := client.ManagedSnapshot(context.Background()); err == nil || len(got.Positions) != 0 {
 			t.Fatal("missing equity reported as a snapshot")
+		}
+
+		routes = okxManagedFixture("net_mode", "0.01", "0.01", okxManagedPosition)
+		routes[okxAccountPath] = func(*http.Request) (int, string) {
+			return 200, okxManagedData(`[{"details":[{"ccy":"USDT","eq":"320","availEq":"280"}]}]`)
+		}
+		client, _ = newManagedOKXFixture(t, execution.EnvironmentSandbox, routes)
+		if got, err := client.ManagedSnapshot(context.Background()); err == nil || len(got.Positions) != 0 {
+			t.Fatal("missing margin used reported as a snapshot")
 		}
 
 		routes = okxManagedFixture("net_mode", "0.01", "0.01", okxManagedPosition)
