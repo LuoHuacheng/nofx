@@ -17,6 +17,14 @@ import (
 type protectionVenue struct {
 	testNOFXTrader
 	rejectSL, rejectTP, ackLost bool
+	accountErr                  error
+}
+
+func (v *protectionVenue) AccountSnapshot(ctx context.Context, s string) (Account, error) {
+	if v.accountErr != nil {
+		return Account{}, v.accountErr
+	}
+	return v.testNOFXTrader.AccountSnapshot(ctx, s)
 }
 
 func (v *protectionVenue) SubmitOrder(ctx context.Context, o Order) (Order, error) {
@@ -176,6 +184,56 @@ func TestManagedPartialFillProtection(t *testing.T) {
 	}
 	if len(b.cancelled) != 0 || got.State != "running" {
 		t.Fatalf("confirmed stop was lost with the failed take-profit: %+v", got.Run)
+	}
+}
+
+func TestManagedPositionReadFailureNeverRequiresExit(t *testing.T) {
+	c, b, venue, p, clock := supervisedSetup(t, "limit")
+	v := started(t, c, p)
+	c.step(context.Background(), "alice", v.ID)
+	entryFilled(t, c, b, v.ID, "FILLED", "0.00998", "0.00998")
+	venue.accountErr = errors.New("venue timed out")
+	for _, wait := range []time.Duration{0, protectionGrace * 3, time.Hour} {
+		*clock = clock.Add(wait)
+		c.step(context.Background(), "alice", v.ID)
+		got, _ := c.Get("alice", v.ID)
+		if got.ProtectionState != protectionUnknown {
+			t.Fatalf("unreadable position armed the protection deadline: %+v", got.Run)
+		}
+		if submitted(b, "sl") != 0 {
+			t.Fatal("submitted protection without a position read")
+		}
+	}
+	// A later readable tick must still protect the position instead of exiting it.
+	venue.accountErr = nil
+	c.step(context.Background(), "alice", v.ID)
+	got, _ := c.Get("alice", v.ID)
+	if got.ProtectionState != protectionPending || submitted(b, "sl") != 1 || submitted(b, "tp") != 1 {
+		t.Fatalf("recovered position read did not resume protection: %+v", got.Run)
+	}
+	c.step(context.Background(), "alice", v.ID)
+	if got, _ = c.Get("alice", v.ID); got.ProtectionState != protectionProtected {
+		t.Fatalf("recovered position read left the position unprotected: %+v", got.Run)
+	}
+}
+
+func TestManagedMismatchEscalationKeepsTriageText(t *testing.T) {
+	c, b, _, p, clock := supervisedSetup(t, "limit")
+	v := started(t, c, p)
+	c.step(context.Background(), "alice", v.ID)
+	entryFilled(t, c, b, v.ID, "FILLED", "0.00998", "0.004")
+	c.step(context.Background(), "alice", v.ID)
+	if got, _ := c.Get("alice", v.ID); got.ProtectionState == protectionExitRequired {
+		t.Fatal("escalated before the protection deadline")
+	}
+	*clock = clock.Add(protectionGrace)
+	c.step(context.Background(), "alice", v.ID)
+	got, _ := c.Get("alice", v.ID)
+	if got.ProtectionState != protectionExitRequired {
+		t.Fatalf("bookkeeping divergence left the position unprotected: %+v", got.Run)
+	}
+	if !strings.Contains(got.Error, "Live position differs") || !strings.Contains(got.Error, "Protection deadline") {
+		t.Fatalf("escalation dropped its triage text: %+v", got.Run)
 	}
 }
 

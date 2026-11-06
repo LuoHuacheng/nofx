@@ -525,7 +525,9 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 	attention := func(message string) {
 		observationsValid = false
 		v.State = "needs_attention"
-		v.Error = message
+		if v.ProtectionState != protectionExitRequired {
+			v.Error = message // a frozen exit verdict keeps the reason it was raised
+		}
 	}
 	if v.Deadline != nil && time.Now().After(*v.Deadline) && v.State == "running" {
 		v.State = "stopping"

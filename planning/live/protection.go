@@ -163,11 +163,17 @@ func (c *Controller) ensureProtection(ctx context.Context, v *View, b Broker, no
 	}
 	account, readErr := b.Account(ctx, v.Plan.Snapshot.Symbol)
 	_, positionErr := decimal(account.Position)
+	if readErr != nil || positionErr != nil {
+		// "Cannot read the position" is not "the stop is missing": no deadline
+		// may be armed from it. step still forces needs_attention and stops
+		// entries through the same unknown state.
+		protectionFault(v, supervised, "Live position read failed. New entries and protection submission stopped; reconcile positions immediately.")
+		v.ProtectionState = protectionUnknown
+		return nil
+	}
 	expected := filledExposure(v.Orders)
 	mismatch := ""
 	switch {
-	case readErr != nil || positionErr != nil:
-		mismatch = "Live position read failed. New entries and protection submission stopped; reconcile positions immediately."
 	case cmp(expected, "0") < 0:
 		mismatch = "Exit fills exceed confirmed entry fills; reconcile live positions."
 	case cmp(account.Position, expected) != 0:
@@ -250,7 +256,12 @@ func (c *Controller) ensureProtection(ctx context.Context, v *View, b Broker, no
 		if v.State == "running" || v.State == "position_open" {
 			v.State = "needs_attention"
 		}
-		v.Error = "Protection deadline exceeded with an open position. Exit required; protection retries stopped and remaining entries were cancelled."
+		message := "Protection deadline exceeded with an open position. Exit required; protection retries stopped and remaining entries were cancelled."
+		if mismatch != "" {
+			v.Error = mismatch + " " + message
+		} else {
+			v.Error = message
+		}
 	}
 	return nil
 }
