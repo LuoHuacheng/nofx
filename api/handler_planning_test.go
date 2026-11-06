@@ -21,7 +21,7 @@ func TestPlanningPrivateRoutesRequireLogin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	s := &Server{router: gin.New()}
 	s.setupRoutes()
-	for _, r := range []struct{ method, path string }{{"GET", "/api/planning/setup-wallet"}, {"POST", "/api/planning/setup-wallet"}, {"GET", "/api/planning/state"}, {"GET", "/api/planning/account"}, {"POST", "/api/planning/approve"}, {"POST", "/api/planning/execute"}, {"POST", "/api/planning/chat"}, {"POST", "/api/planning/compile"}, {"POST", "/api/planning/stop"}, {"POST", "/api/planning/reconcile"}, {"GET", "/api/planning/data-plugins"}, {"POST", "/api/planning/data-plugins"}, {"GET", "/api/planning/plugin-data"}, {"GET", "/api/planning/ai500"}} {
+	for _, r := range []struct{ method, path string }{{"GET", "/api/planning/setup-wallet"}, {"POST", "/api/planning/setup-wallet"}, {"GET", "/api/planning/state"}, {"GET", "/api/planning/account"}, {"POST", "/api/planning/approve"}, {"POST", "/api/planning/execute"}, {"POST", "/api/planning/chat"}, {"POST", "/api/planning/compile"}, {"POST", "/api/planning/stop"}, {"POST", "/api/planning/reconcile"}, {"GET", "/api/planning/data-plugins"}, {"POST", "/api/planning/data-plugins"}, {"GET", "/api/planning/plugin-data"}, {"GET", "/api/planning/ai500"}, {"POST", "/api/managed-accounts/bindings"}} {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(r.method, r.path, strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")

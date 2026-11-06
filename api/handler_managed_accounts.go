@@ -1,0 +1,153 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"nofx/store"
+	"nofx/trader/binance"
+	"nofx/trader/execution"
+	"nofx/trader/okx"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// managedTraderFactory is a test seam; production builds real venue clients.
+type managedTraderFactory func(context.Context, *store.Exchange, execution.Environment) (execution.ManagedTrader, error)
+
+type managedBindingRequest struct {
+	ExchangeID              string `json:"exchange_id"`
+	VenueAccountID          string `json:"venue_account_id"`
+	Environment             string `json:"environment"`
+	ConfirmDedicatedAccount bool   `json:"confirm_dedicated_account"`
+}
+
+// managedEnvironment maps the saved endpoint to the execution environment, so
+// testnet/demo credentials can never reach the live venue.
+func managedEnvironment(ex *store.Exchange) (execution.Environment, error) {
+	switch ex.ExchangeType {
+	case "binance", "okx":
+	default:
+		return "", errors.New("unattended execution supports Binance and OKX USDT perpetuals only")
+	}
+	if ex.Testnet {
+		return execution.EnvironmentSandbox, nil
+	}
+	return execution.EnvironmentLive, nil
+}
+
+func (s *Server) managedExchange(user, id string) (*store.Exchange, execution.Environment, error) {
+	ex, e := s.store.Exchange().GetByID(user, id)
+	if e != nil || !ex.Enabled {
+		return nil, "", errors.New("select an enabled NOFX trading account owned by the current user")
+	}
+	env, e := managedEnvironment(ex)
+	if e != nil {
+		return nil, "", e
+	}
+	return ex, env, nil
+}
+
+func (s *Server) managedAdapter(ctx context.Context, ex *store.Exchange, env execution.Environment) (execution.ManagedTrader, error) {
+	if s.managedTraderFactory != nil {
+		return s.managedTraderFactory(ctx, ex, env)
+	}
+	switch ex.ExchangeType {
+	case "binance":
+		if ex.APIKey == "" || ex.SecretKey == "" {
+			return nil, errors.New("connect a Binance futures API key and secret in NOFX first")
+		}
+		return binance.NewManagedAccountTrader(ctx, string(ex.APIKey), string(ex.SecretKey), ex.UserID, env)
+	case "okx":
+		if ex.APIKey == "" || ex.SecretKey == "" || ex.Passphrase == "" {
+			return nil, errors.New("connect the OKX API key, secret and passphrase in NOFX first")
+		}
+		return okx.NewManagedAccountTrader(ctx, string(ex.APIKey), string(ex.SecretKey), string(ex.Passphrase), env)
+	}
+	return nil, errors.New("unattended execution supports Binance and OKX USDT perpetuals only")
+}
+
+// managedTrader returns the venue client tagged with the durable binding ID.
+// Unverified or environment-mismatched bindings fail closed.
+func (s *Server) managedTrader(ctx context.Context, user, exchangeID string) (execution.ManagedTrader, execution.Binding, error) {
+	ex, env, e := s.managedExchange(user, exchangeID)
+	if e != nil {
+		return nil, execution.Binding{}, e
+	}
+	b, e := execution.ResolveBinding(ctx, s.store.GormDB(), user, exchangeID)
+	if e != nil {
+		return nil, execution.Binding{}, e
+	}
+	if !b.Enabled || b.VerifiedAt.IsZero() {
+		return nil, execution.Binding{}, errors.New("this physical account is not verified; unattended execution stays disabled")
+	}
+	if b.Venue != ex.ExchangeType || b.Environment != env {
+		return nil, execution.Binding{}, errors.New("the managed binding does not match the saved exchange configuration")
+	}
+	t, e := s.managedAdapter(ctx, ex, env)
+	if e != nil {
+		return nil, execution.Binding{}, e
+	}
+	return execution.WithBinding(t, b), b, nil
+}
+
+func (s *Server) handleManagedAccountBinding(c *gin.Context) {
+	user := c.GetString("user_id")
+	var in managedBindingRequest
+	if e := c.ShouldBindJSON(&in); e != nil {
+		planningError(c, errors.New("invalid managed account binding request"))
+		return
+	}
+	if _, e := s.planningService(); e != nil {
+		c.JSON(503, gin.H{"error": "managed account binding unavailable"})
+		return
+	}
+	ex, env, e := s.managedExchange(user, in.ExchangeID)
+	if e != nil {
+		planningError(c, e)
+		return
+	}
+	if execution.Environment(in.Environment) != env {
+		planningError(c, errors.New("the requested environment does not match the saved exchange configuration"))
+		return
+	}
+	id := strings.TrimSpace(in.VenueAccountID)
+	if id == "" {
+		planningError(c, errors.New("a venue account ID is required; credentials are never used as a physical identity"))
+		return
+	}
+	t, e := s.managedAdapter(c.Request.Context(), ex, env)
+	if e != nil {
+		planningError(c, e)
+		return
+	}
+	b := execution.Binding{UserID: user, ExchangeID: ex.ID, Venue: ex.ExchangeType, Environment: env, VenueAccountID: id}
+	if reader, ok := t.(execution.AccountIdentity); ok {
+		actual, e := reader.VenueAccountID(c.Request.Context())
+		if e != nil {
+			planningError(c, fmt.Errorf("could not verify the venue account identity: %w", e))
+			return
+		}
+		if actual != id {
+			planningError(c, errors.New("the venue account ID does not match the configured API credentials"))
+			return
+		}
+		b.VerifiedAt = time.Now().UTC()
+		b.Enabled = true
+	} else if !in.ConfirmDedicatedAccount {
+		planningError(c, errors.New("this venue cannot prove an immutable account ID; confirm the account is dedicated before binding"))
+		return
+	}
+	b, e = execution.BindManagedAccount(c.Request.Context(), s.store.GormDB(), b)
+	if e != nil {
+		planningError(c, e)
+		return
+	}
+	c.JSON(200, b)
+}
+
+func (s *Server) registerManagedAccounts(protected *gin.RouterGroup) {
+	protected.POST("/managed-accounts/bindings", s.handleManagedAccountBinding)
+}

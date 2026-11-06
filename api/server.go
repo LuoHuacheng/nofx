@@ -29,6 +29,7 @@ type Server struct {
 	planningClosing           bool
 	planning                  *planningServices
 	planningError             error
+	managedTraderFactory      managedTraderFactory
 	router                    *gin.Engine
 	traderManager             *manager.TraderManager
 	store                     *store.Store
@@ -213,6 +214,7 @@ func (s *Server) setupRoutes() {
 		// Routes requiring authentication
 		protected := api.Group("/", s.authMiddleware())
 		s.registerPlanning(api, protected)
+		s.registerManagedAccounts(protected)
 		// UI-only secret export: do not register in the AI route/tool catalog.
 		protected.POST("/wallet/export", s.handleWalletExport)
 		{

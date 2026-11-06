@@ -22,6 +22,7 @@ import (
 	"nofx/store"
 	"nofx/trader/binance"
 	"nofx/trader/bitget"
+	"nofx/trader/execution"
 	"nofx/trader/hyperliquid"
 	"nofx/trader/okx"
 	"os"
@@ -72,7 +73,7 @@ func (s *Server) planningService() (*planningServices, error) {
 			return
 		}
 		p.live = controller
-		if e = s.store.GormDB().AutoMigrate(&planning.Conversation{}, &planning.Preferences{}, &accountCloseIntent{}); e != nil {
+		if e = s.store.GormDB().AutoMigrate(&planning.Conversation{}, &planning.Preferences{}, &accountCloseIntent{}, &execution.Binding{}); e != nil {
 			s.planningError = e
 			return
 		}
@@ -106,14 +107,22 @@ func (s *Server) planningBroker(ctx context.Context, user, id string) (live.Brok
 			return nil, "", errors.New("Automatic trading is running on this account. Stop it before using an approved one-time plan.")
 		}
 	}
-	stampBytes, _ := json.Marshal([]any{ex.UpdatedAt, string(ex.APIKey), string(ex.SecretKey), string(ex.Passphrase), ex.HyperliquidWalletAddr, ex.HyperliquidBuilderApproved, ex.Testnet, ex.HyperliquidUnifiedAcct})
+	// A verified managed binding owns the durable account identity; unbound
+	// (historical) accounts keep the legacy credential-derived key.
+	key := accountKey(ex)
+	if env, e := managedEnvironment(ex); e == nil {
+		if b, e := execution.ResolveBinding(ctx, s.store.GormDB(), user, id); e == nil && b.Enabled && !b.VerifiedAt.IsZero() && b.Venue == ex.ExchangeType && b.Environment == env {
+			key = b.ID
+		}
+	}
+	stampBytes, _ := json.Marshal([]any{ex.UpdatedAt, string(ex.APIKey), string(ex.SecretKey), string(ex.Passphrase), ex.HyperliquidWalletAddr, ex.HyperliquidBuilderApproved, ex.Testnet, ex.HyperliquidUnifiedAcct, key})
 	stampHash := sha256.Sum256(stampBytes)
 	stamp := hex.EncodeToString(stampHash[:])
 	if s.planning != nil {
 		if cached, ok := s.planning.brokers.Load(user + "/" + id); ok {
 			v := cached.(planningBrokerCache)
 			if v.stamp == stamp && time.Since(v.created) < 5*time.Minute {
-				return v.broker, accountKey(ex), nil
+				return v.broker, key, nil
 			}
 		}
 	}
@@ -123,7 +132,6 @@ func (s *Server) planningBroker(ctx context.Context, user, id string) (live.Brok
 		}
 		return b, key, nil
 	}
-	key := accountKey(ex)
 	switch ex.ExchangeType {
 	case "binance":
 		if ex.APIKey == "" || ex.SecretKey == "" {

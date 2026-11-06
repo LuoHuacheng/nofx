@@ -13,6 +13,7 @@ import (
 )
 
 var _ execution.Trader = (*OKXTrader)(nil)
+var _ execution.AccountIdentity = (*OKXTrader)(nil)
 
 func (t *OKXTrader) Venue() string                           { return "okx" }
 func (t *OKXTrader) RouteClientID(id string) (string, error) { return execution.CanonicalClientID(id) }
@@ -56,6 +57,18 @@ func (t *OKXTrader) executionMode(ctx context.Context) (string, error) {
 		return "", errors.New("Frontier supports OKX futures and multi-currency margin accounts; portfolio margin is not supported")
 	}
 	return rows[0].PosMode, nil
+}
+
+// VenueAccountID reads the immutable OKX account UID behind the signed credentials.
+func (t *OKXTrader) VenueAccountID(ctx context.Context) (string, error) {
+	var rows []struct{ Uid string }
+	if e := t.readExecution(ctx, okxAccountConfigPath, &rows); e != nil {
+		return "", e
+	}
+	if len(rows) != 1 || strings.TrimSpace(rows[0].Uid) == "" {
+		return "", errors.New("OKX account config did not report one account uid")
+	}
+	return strings.TrimSpace(rows[0].Uid), nil
 }
 
 type executionPosition struct{ InstId, Pos, PosSide, MgnMode, AvgPx, MarkPx, Upl, Lever, LiqPx, Imr string }
