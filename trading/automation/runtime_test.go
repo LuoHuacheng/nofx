@@ -2,6 +2,9 @@ package automation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -40,12 +43,28 @@ type managedTraderFixture struct {
 }
 
 func (f *managedTraderFixture) Venue() string { return f.venue }
-func (f *managedTraderFixture) AccountSnapshot(context.Context, string) (execution.Account, error) {
+func (f *managedTraderFixture) AccountSnapshot(_ context.Context, symbol string) (execution.Account, error) {
 	s, err := f.ManagedSnapshot(context.Background())
 	if err != nil {
 		return execution.Account{}, err
 	}
-	return execution.Account{Equity: s.Equity, Available: s.Available, FeeBPS: "5", Position: "0", OpenOrders: len(s.Orders)}, nil
+	// The position must mirror the snapshot: a venue that reports a flat
+	// account while holding a position makes protection refuse to run.
+	position := execution.Decimal("0")
+	for _, p := range s.Positions {
+		if p.Symbol != symbol {
+			continue
+		}
+		qty, err := execution.Number(string(p.Quantity))
+		if err != nil {
+			return execution.Account{}, err
+		}
+		position, err = execution.ExactDecimal(qty)
+		if err != nil {
+			return execution.Account{}, err
+		}
+	}
+	return execution.Account{Equity: s.Equity, Available: s.Available, FeeBPS: "5", Position: position, OpenOrders: len(s.Orders)}, nil
 }
 func (f *managedTraderFixture) PrepareExecution(context.Context, string) error { return nil }
 func (f *managedTraderFixture) SubmitOrder(_ context.Context, o execution.Order) (execution.Order, error) {
@@ -115,6 +134,48 @@ func (f *managedTraderFixture) placeCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.placed)
+}
+
+func (f *managedTraderFixture) protectionCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, o := range f.placed {
+		if o.Role == "sl" || o.Role == "tp" {
+			n++
+		}
+	}
+	return n
+}
+
+func (f *managedTraderFixture) exitCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, o := range f.placed {
+		if o.Role == "exit" {
+			n++
+		}
+	}
+	return n
+}
+
+func (f *managedTraderFixture) placedOrders() []execution.Order {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]execution.Order(nil), f.placed...)
+}
+
+func (f *managedTraderFixture) entryCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, o := range f.placed {
+		if o.Role == "entry" {
+			n++
+		}
+	}
+	return n
 }
 
 func (f *managedTraderFixture) snapshotCalls() int {
@@ -400,6 +461,227 @@ func TestRecoveryNoEntryReplay(t *testing.T) {
 	if rig.venue.placeCount() != placed {
 		t.Fatalf("recovery submitted %d new orders", rig.venue.placeCount()-placed)
 	}
+}
+
+// TestSupervisionProtectsWithoutEntry proves a recovered position is protected
+// without any entry being replayed: supervision places the stop-loss, never an
+// entry.
+func TestSupervisionProtectsWithoutEntry(t *testing.T) {
+	rig := rig(t, nil)
+	plan := rig.plan(t)
+	startedPlan(t, rig, plan, "FILLED", "filled-entry")
+	if err := rig.ctrl.DB.Model(&live.Run{}).Where("user_id = ?", "alice").Update("state", "position_open").Error; err != nil {
+		t.Fatal(err)
+	}
+	rig.venue.snapshot.Positions = []execution.ManagedPosition{{Symbol: plan.Snapshot.Symbol, Side: "long", Quantity: plan.Quantity, Entry: plan.Idea.Entry, Mark: plan.Idea.Entry}}
+	rt := rig.runtime(t, nil)
+	if err := rt.Tick(context.Background(), "alice", "account"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && rig.venue.protectionCount() == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if rig.venue.protectionCount() == 0 {
+		t.Fatal("a recovered position was left without a stop-loss")
+	}
+	if got := rig.venue.entryCount(); got != 0 {
+		t.Fatalf("supervision replayed %d entries on a recovered position", got)
+	}
+}
+
+// TestFlattenAccountReachesTheController proves the management seam delegates
+// the reduction to the controller's own state machine instead of writing an
+// order of its own, and refuses an account that belongs to another user.
+func TestFlattenAccountReachesTheController(t *testing.T) {
+	rig := rig(t, nil)
+	plan := rig.plan(t)
+	startedPlan(t, rig, plan, "FILLED", "filled-entry")
+	if err := rig.ctrl.DB.Model(&live.Run{}).Where("user_id = ?", "alice").Update("state", "position_open").Error; err != nil {
+		t.Fatal(err)
+	}
+	rig.venue.snapshot.Positions = []execution.ManagedPosition{{Symbol: plan.Snapshot.Symbol, Side: "long", Quantity: plan.Quantity, Entry: plan.Idea.Entry, Mark: plan.Idea.Entry}}
+	rt := rig.runtime(t, nil)
+	if err := rt.FlattenAccount(context.Background(), "bob", "account", "review"); err == nil {
+		t.Fatal("a foreign account key was flattened")
+	}
+	if err := rt.PauseAccount(context.Background(), "bob", "account", "review"); err == nil {
+		t.Fatal("a foreign account key was paused")
+	}
+	// The exit is sent but the venue read still shows the position, so the
+	// controller reports that state instead of claiming a flat account.
+	if err := rt.FlattenAccount(context.Background(), "alice", "account", "review"); err != nil &&
+		!strings.Contains(err.Error(), "not confirmed flat") {
+		t.Fatalf("flatten failed: %v", err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && rig.venue.exitCount() == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if rig.venue.exitCount() == 0 {
+		t.Fatal("flatten never asked the controller for a reduce-only exit")
+	}
+	// The exit must be a reduction: no entry may be submitted by a flatten.
+	if got := rig.venue.entryCount(); got != 0 {
+		t.Fatalf("flatten submitted %d entries", got)
+	}
+	for _, o := range rig.venue.placedOrders() {
+		if o.Role == "exit" && !o.ReduceOnly {
+			t.Fatal("the flatten exit was not reduce-only")
+		}
+	}
+}
+
+// TestRecoveryBreakpoints proves every crash point between the approval and a
+// submitted entry leaves at most one entry POST after a restart, and that an
+// unresolved entry never becomes a second one.
+func TestRecoveryBreakpoints(t *testing.T) {
+	cases := []struct {
+		name    string
+		prepare func(t *testing.T, rig *automationRig, plan core.Plan) live.View
+		posts   int
+		state   string
+		frozen  bool
+	}{
+		{
+			// Approved but never started: no entry was ever written, so a
+			// restart may only retire the approval.
+			name: "approved_only",
+			prepare: func(t *testing.T, rig *automationRig, plan core.Plan) live.View {
+				return approvedPlan(t, rig, plan)
+			},
+			posts: 0, state: "approved",
+		},
+		{
+			// Started, the entry persisted as scheduled, then the process died
+			// before the venue saw it: reconciliation may submit it once.
+			name: "started_not_submitted",
+			prepare: func(t *testing.T, rig *automationRig, plan core.Plan) live.View {
+				return startedPlan(t, rig, plan, "scheduled", "")
+			},
+			posts: 1, state: "running",
+		},
+		{
+			// The intent is durable in submitting: a restart must not add a
+			// second entry.
+			name: "submitting_persisted",
+			prepare: func(t *testing.T, rig *automationRig, plan core.Plan) live.View {
+				return startedPlan(t, rig, plan, "submitting", "")
+			},
+			posts: 1, state: "running",
+		},
+		{
+			// The venue may hold the entry and the reply never arrived.
+			name: "entry_unknown",
+			prepare: func(t *testing.T, rig *automationRig, plan core.Plan) live.View {
+				return startedPlan(t, rig, plan, "unknown", "unknown-entry")
+			},
+			posts: 0, state: "halted_unknown", frozen: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := rig(t, nil)
+			plan := rig.plan(t)
+			tc.prepare(t, rig, plan)
+			rt := rig.runtime(t, nil)
+			// A frozen breakpoint may report an error; the run state and the
+			// POST count are what the matrix asserts.
+			_ = rt.Recover(context.Background(), "alice", "account")
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) {
+				if _, frozen := rt.frozenReason("account"); frozen == tc.frozen {
+					break
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			if got := rig.venue.placeCount(); got > tc.posts {
+				t.Fatalf("%s: recovery submitted %d entries, at most %d allowed", tc.name, got, tc.posts)
+			}
+			if _, frozen := rt.frozenReason("account"); frozen != tc.frozen {
+				t.Fatalf("%s: frozen=%v, want %v", tc.name, frozen, tc.frozen)
+			}
+			runs := runStates(t, rig.db)
+			if len(runs) != 1 {
+				t.Fatalf("%s: expected one run, got %d", tc.name, len(runs))
+			}
+			if runs[0].State != tc.state {
+				t.Fatalf("%s: run state %q, want %q", tc.name, runs[0].State, tc.state)
+			}
+		})
+	}
+}
+
+// plan builds and drafts the compiled plan the fixture authorizes.
+func (r *automationRig) plan(t *testing.T) core.Plan {
+	t.Helper()
+	limits, err := live.ManagedAccountLimits(r.policy, r.venue.snapshot, r.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := core.Compile(r.book, limits, r.idea(), r.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &planning.DraftStore{DB: r.db, UserID: "alice", ExchangeID: "exchange", Venue: "binance"}
+	if err := store.Add([]core.Plan{plan}); err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
+// entryClientID mirrors the controller's own derivation; a fixture that made
+// its own ID would test a run the controller would refuse to load.
+func entryClientID(run string, index int) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s/%d/entry/", run, index)))
+	return hex.EncodeToString(sum[:16])
+}
+
+func approvedPlan(t *testing.T, r *automationRig, plan core.Plan) live.View {
+	t.Helper()
+	v, err := r.ctrl.Approve(context.Background(), "alice", plan.ID, plan.Hash, "APPROVE LIVE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+// startedPlan writes the durable run row a crashed process would have left
+// behind: started, with one entry order in the requested status.
+func startedPlan(t *testing.T, r *automationRig, plan core.Plan, status, orderID string) live.View {
+	t.Helper()
+	v := approvedPlan(t, r, plan)
+	now := r.now
+	deadline := now.Add(time.Hour)
+	// The basket must match the approval exactly, including the derived client
+	// ID, or the controller refuses to touch the run at all.
+	specs := plan.Orders
+	if len(specs) == 0 {
+		specs = []core.OrderSpec{{Index: 1, Price: plan.Idea.Entry, Quantity: plan.Quantity}}
+	}
+	var orders []live.Order
+	for _, spec := range specs {
+		// A confirmed fill must report its own quantity: protection is sized
+		// from confirmed fills, and a filled entry claiming zero is refused.
+		filled := execution.Decimal("0")
+		if status == "FILLED" {
+			filled = spec.Quantity
+		}
+		orders = append(orders, live.Order{ClientID: entryClientID(v.ID, spec.Index), OrderID: orderID, Role: "entry", Symbol: plan.Snapshot.Symbol, Side: plan.Idea.Side, Price: spec.Price, Quantity: spec.Quantity, Status: status, Filled: filled})
+	}
+	raw, err := json.Marshal(orders)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := "running"
+	if status == "unknown" {
+		state = "halted_unknown"
+	}
+	if err := r.ctrl.DB.Model(&live.Run{}).Where("id = ?", v.ID).Updates(map[string]any{"state": state, "orders_json": string(raw), "started_at": &now, "deadline": &deadline}).Error; err != nil {
+		t.Fatal(err)
+	}
+	v.State, v.StartedAt, v.Deadline, v.Orders = state, &now, &deadline, orders
+	return v
 }
 
 // TestRecoveryExternalPosition proves an unknown position freezes the account

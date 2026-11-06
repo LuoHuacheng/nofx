@@ -241,7 +241,12 @@ func (s *Server) handleAutomationReset(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "latch_version and reason are required"})
 		return
 	}
-	if err := s.riskStore().Reset(c.Request.Context(), b.UserID, b.ID, body.LatchVersion, time.Now().UTC()); err != nil {
+	store := s.riskStore()
+	if store == nil {
+		c.JSON(500, gin.H{"error": "the risk store is unavailable"})
+		return
+	}
+	if err := store.Reset(c.Request.Context(), b.UserID, b.ID, body.LatchVersion, time.Now().UTC()); err != nil {
 		c.JSON(409, gin.H{"error": err.Error()})
 		return
 	}

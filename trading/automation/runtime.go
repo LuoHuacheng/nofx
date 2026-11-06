@@ -560,29 +560,33 @@ func (r *Runtime) StartAccount(ctx context.Context, user, accountKey, version st
 	return r.Recover(ctx, user, accountKey)
 }
 
-// PauseAccount cancels unfilled entries and latches new ones. It never touches
-// live protection: a pause must not leave a position unguarded.
+// PauseAccount latches new entries. Unfilled entries are refused by the same
+// per-entry risk gate, and live protection is never touched: a pause must not
+// leave a position unguarded. The latch is durable, so a restart keeps the
+// pause and only an explicit reset lifts it.
 func (r *Runtime) PauseAccount(ctx context.Context, user, accountKey, reason string) error {
-	if _, err := r.binding(ctx, accountKey); err != nil {
+	binding, err := r.binding(ctx, accountKey)
+	if err != nil {
 		return err
+	}
+	if binding.UserID != user {
+		return errors.New("automation: no managed account binding owns this account")
 	}
 	if reason == "" {
 		reason = "operator pause"
 	}
-	// The latch is checked before every entry leaves the process, so a pause
-	// stops unfilled entries without touching the live stop or target.
-	if err := r.risks.Pause(ctx, user, accountKey, reason); err != nil {
-		return err
-	}
-	r.freeze(accountKey, "operator pause: "+reason, freezeSafety)
-	return nil
+	return r.risks.Pause(ctx, user, accountKey, reason)
 }
 
 // FlattenAccount exits through the controller's own reduction state machine, so
 // a flatten never becomes a second, unreviewed order path.
 func (r *Runtime) FlattenAccount(ctx context.Context, user, accountKey, reason string) error {
-	if _, err := r.binding(ctx, accountKey); err != nil {
+	binding, err := r.binding(ctx, accountKey)
+	if err != nil {
 		return err
+	}
+	if binding.UserID != user {
+		return errors.New("automation: no managed account binding owns this account")
 	}
 	views, err := r.controller.ListContext(ctx, user)
 	if err != nil {
@@ -640,18 +644,18 @@ func (r *Runtime) AccountStatus(ctx context.Context, user, accountKey string) (S
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return Status{}, err
 	}
+	// A freeze outranks a breaker pause: the freeze is the harder stop, and
+	// reporting the softer one would send an operator to the wrong recovery.
 	if reason, frozen := r.frozenReason(accountKey); frozen {
 		out.State = "frozen"
 		out.Reason = reason
-	} else {
-		out.State = "running"
-	}
-	decision, err := r.risks.Evaluate(ctx, user, accountKey, r.clock())
-	if err != nil {
+	} else if decision, err := r.risks.Evaluate(ctx, user, accountKey, r.clock()); err != nil {
 		out.Reason = err.Error()
 	} else if decision.Action != risk.ActionAllow {
 		out.State = "paused"
 		out.Reason = decision.Reason
+	} else {
+		out.State = "running"
 	}
 	r.mu.Lock()
 	if state, ok := r.accounts[accountKey]; ok {

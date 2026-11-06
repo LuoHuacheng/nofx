@@ -173,11 +173,7 @@ func (r *Runtime) postAlert(ctx context.Context, endpoint string, a Alert) error
 	req.Header.Set("Content-Type", "application/json")
 	client := r.alertClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
-			// The IP is re-checked at dial time, so a DNS answer that changed
-			// after validation cannot reach a private host.
-			DialContext: (&net.Dialer{Timeout: 5 * time.Second, Control: guardDial(nil)}).DialContext,
-		}}
+		client = newAlertClient(nil)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -253,5 +249,18 @@ func guardDial(control func(network, address string, c syscall.RawConn) error) f
 			return control(network, address, c)
 		}
 		return nil
+	}
+}
+
+// newAlertClient is the only client used for alert delivery. It re-checks the
+// address at dial time and refuses every redirect: the target was validated
+// once, so no later hop may carry the body to another host or to plaintext.
+func newAlertClient(control func(network, address string, c syscall.RawConn) error) *http.Client {
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{Timeout: 5 * time.Second, Control: guardDial(control)}).DialContext,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 }

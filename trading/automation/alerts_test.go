@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,19 @@ func TestAlertTargetValidation(t *testing.T) {
 		return []net.IP{net.ParseIP("203.0.113.10")}, nil
 	}); err != nil || got != "https://alerts.example.test/hook" {
 		t.Fatalf("a public https target was refused: %q %v", got, err)
+	}
+}
+
+// TestAlertRedirectRefused proves the delivery client never follows a redirect:
+// the target was validated, so another hop could carry the body elsewhere.
+func TestAlertRedirectRefused(t *testing.T) {
+	client := newAlertClient(nil)
+	if client.CheckRedirect == nil {
+		t.Fatal("the alert client follows redirects")
+	}
+	err := client.CheckRedirect(&http.Request{URL: &url.URL{Scheme: "http", Host: "elsewhere.example.test"}}, nil)
+	if !errors.Is(err, http.ErrUseLastResponse) {
+		t.Fatalf("the alert client followed a redirect: %v", err)
 	}
 }
 

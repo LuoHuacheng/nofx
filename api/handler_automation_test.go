@@ -240,8 +240,18 @@ func TestAutomationPauseVsFlatten(t *testing.T) {
 		t.Fatalf("pause latch = %+v", latch)
 	}
 	// Pause is a latch, not a cancellation: it must not create a flatten.
-	if w := f.call(t, "alice", "GET", "/api/automation/alice-account/status", ""); w.Code != http.StatusOK {
+	w := f.call(t, "alice", "GET", "/api/automation/alice-account/status", "")
+	if w.Code != http.StatusOK {
 		t.Fatalf("status after pause = %d %s", w.Code, w.Body.String())
+	}
+	var paused automation.Status
+	if err := json.Unmarshal(w.Body.Bytes(), &paused); err != nil {
+		t.Fatal(err)
+	}
+	// An operator pause is the documented `paused` state, not `frozen`: the
+	// recovery differs, and the manual sends an operator to `reset`.
+	if paused.State != "paused" || !strings.Contains(paused.Reason, "ops review") {
+		t.Fatalf("a pause reported %q (%q)", paused.State, paused.Reason)
 	}
 	if w := f.call(t, "alice", "POST", "/api/automation/alice-account/flatten", `{"reason":"ops flatten"}`); w.Code != http.StatusConflict {
 		t.Fatalf("flatten without a live run = %d %s", w.Code, w.Body.String())
@@ -263,5 +273,18 @@ func TestAutomationPauseVsFlatten(t *testing.T) {
 	}
 	if after.Action != risk.ActionAllow && after.Reason != "no risk policy for this account" {
 		t.Fatalf("a reset left the latch active: %+v", after)
+	}
+	// A reset must also lift the reported state, or an operator keeps seeing a
+	// pause that no longer blocks entries.
+	w = f.call(t, "alice", "GET", "/api/automation/alice-account/status", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status after reset = %d %s", w.Code, w.Body.String())
+	}
+	var cleared automation.Status
+	if err := json.Unmarshal(w.Body.Bytes(), &cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared.State == "paused" {
+		t.Fatalf("the status still reports a pause after reset: %q", cleared.Reason)
 	}
 }
