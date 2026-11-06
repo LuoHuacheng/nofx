@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"nofx/logger"
+	"nofx/trader/execution"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,10 @@ func getBrOrderID() string {
 // FuturesTrader Binance futures trader
 type FuturesTrader struct {
 	client *futures.Client
+
+	// managedEnvironment is set only by NewManagedAccountTrader; the legacy
+	// constructors leave it empty and keep their existing endpoints.
+	managedEnvironment execution.Environment
 
 	// dualSide is the account position mode: true = dual-side (Hedge Mode),
 	// false = one-way mode. Set at init; order positionSide adapts to it.

@@ -9,10 +9,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"nofx/logger"
+	"nofx/trader/execution"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +36,7 @@ const (
 	okxAlgoPendingPath   = "/api/v5/trade/orders-algo-pending"
 	okxPositionModePath  = "/api/v5/account/set-position-mode"
 	okxAccountConfigPath = "/api/v5/account/config"
+	okxLeverageInfoPath  = "/api/v5/account/leverage-info"
 )
 
 // OKXTrader OKX futures trader
@@ -48,6 +51,10 @@ type OKXTrader struct {
 
 	// Position mode: "long_short_mode" (hedge) or "net_mode" (one-way)
 	positionMode string
+
+	// environment is set only by NewManagedAccountTrader. Empty keeps the legacy
+	// live endpoint behaviour for existing callers.
+	environment execution.Environment
 
 	// HTTP client (proxy disabled)
 	httpClient *http.Client
@@ -234,8 +241,12 @@ func (t *OKXTrader) doRequestContext(ctx context.Context, method, path string, b
 	req.Header.Set("OK-ACCESS-TIMESTAMP", timestamp)
 	req.Header.Set("OK-ACCESS-PASSPHRASE", t.passphrase)
 	req.Header.Set("Content-Type", "application/json")
-	// Set request header
-	req.Header.Set("x-simulated-trading", "0")
+	// Demo trading shares the live host and is selected only by this header.
+	if t.environment == execution.EnvironmentSandbox {
+		req.Header.Set("x-simulated-trading", "1")
+	} else {
+		req.Header.Set("x-simulated-trading", "0")
+	}
 
 	// Signed credentials must never be forwarded to a redirect destination.
 	client := *t.httpClient
@@ -342,4 +353,15 @@ func NewAccountTrader(apiKey, secretKey, passphrase string) *OKXTrader {
 
 	trader.accountOnly = true
 	return trader
+}
+
+// NewManagedAccountTrader builds an account reader pinned to one environment.
+// It never changes position mode, leverage or orders.
+func NewManagedAccountTrader(ctx context.Context, apiKey, secretKey, passphrase string, env execution.Environment) (*OKXTrader, error) {
+	if !env.Valid() {
+		return nil, errors.New("managed OKX environment must be sandbox or live")
+	}
+	t := NewAccountTrader(apiKey, secretKey, passphrase)
+	t.environment = env
+	return t, nil
 }

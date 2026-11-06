@@ -3,10 +3,12 @@ package okx
 import (
 	"context"
 	"errors"
+	"net/url"
 	"nofx/trader/execution"
 	"nofx/trader/types"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (t *OKXTrader) frontierPositions() ([]map[string]interface{}, error) {
@@ -140,3 +142,269 @@ func (t *OKXTrader) frontierBalance() (map[string]interface{}, error) {
 	}
 	return nil, errors.New("OKX USDT trading balance unavailable")
 }
+
+func (t *OKXTrader) ManagedCapabilities() execution.Capabilities {
+	return execution.Capabilities{}
+}
+
+func (t *OKXTrader) AmendStop(context.Context, execution.Order, execution.Decimal) (execution.Order, error) {
+	return execution.Order{}, execution.ErrUnsupported
+}
+
+func (t *OKXTrader) Events(context.Context, func(execution.AccountEvent) error) error {
+	return execution.ErrUnsupported
+}
+
+// okxManagedSide names the position an order acts on. One-way orders carry
+// posSide=net, so their direction is the opposite of the order side.
+func okxManagedSide(posSide, side string) (string, error) {
+	switch posSide {
+	case "long", "short":
+		return posSide, nil
+	case "net", "":
+	default:
+		return "", errors.New("unknown OKX position side")
+	}
+	switch side {
+	case "sell":
+		return "long", nil
+	case "buy":
+		return "short", nil
+	}
+	return "", errors.New("unknown OKX order side")
+}
+
+// ManagedSnapshot reads the venue state used to verify unattended positions.
+// Contract counts never leave the adapter; any unreadable field fails the read.
+func (t *OKXTrader) ManagedSnapshot(ctx context.Context) (execution.ManagedAccount, error) {
+	out := execution.ManagedAccount{
+		Venue:       t.Venue(),
+		Environment: t.environment,
+		Positions:   []execution.ManagedPosition{},
+		Orders:      []execution.Order{},
+		ObservedAt:  time.Now().UTC(),
+	}
+	if !t.environment.Valid() {
+		return out, errors.New("managed OKX environment is not set")
+	}
+	mode, err := t.executionMode(ctx)
+	if err != nil {
+		return out, err
+	}
+	out.PositionMode = "hedge"
+	if mode == "net_mode" {
+		out.PositionMode = "one_way"
+	}
+	var balances []struct {
+		Details []struct{ Ccy, Eq, AvailEq, AvailBal string }
+	}
+	if err := t.readExecution(ctx, okxAccountPath+"?ccy=USDT", &balances); err != nil {
+		return out, err
+	}
+	found := false
+	for _, b := range balances {
+		for _, d := range b.Details {
+			if d.Ccy != "USDT" {
+				continue
+			}
+			available := d.AvailEq
+			if available == "" {
+				available = d.AvailBal
+			}
+			if out.Equity, err = execution.BalanceDecimal(d.Eq); err != nil {
+				return out, errors.New("OKX account equity is unavailable")
+			}
+			if out.Available, err = execution.BalanceDecimal(available); err != nil {
+				return out, errors.New("OKX available margin is unavailable")
+			}
+			found = true
+		}
+	}
+	if !found {
+		return out, errors.New("OKX USDT trading balance unavailable")
+	}
+
+	instruments := map[string]exactInstrument{}
+	marginModes := map[string]bool{}
+	rows, err := t.executionPositions(ctx, "")
+	if err != nil {
+		return out, err
+	}
+	for _, p := range rows {
+		v, err := execution.Number(p.Pos)
+		if err != nil {
+			return out, errors.New("invalid OKX position size")
+		}
+		if v.Sign() == 0 || !strings.HasSuffix(p.InstId, "-USDT-SWAP") {
+			continue
+		}
+		inst, ok := instruments[p.InstId]
+		if !ok {
+			if inst, err = t.executionInstrument(ctx, p.InstId); err != nil {
+				return out, err
+			}
+			instruments[p.InstId] = inst
+		}
+		contracts, err := execution.ExactDecimal(v.Abs(v))
+		if err != nil {
+			return out, err
+		}
+		if !execution.Aligned(string(contracts), inst.LotSz) {
+			return out, errors.New("OKX position quantity is not an exact contract lot step")
+		}
+		qty, err := execution.Multiply(string(contracts), inst.CtVal)
+		if err != nil {
+			return out, err
+		}
+		side := p.PosSide
+		if side == "net" || side == "" {
+			side = "long"
+			if v.Sign() < 0 {
+				side = "short"
+			}
+		}
+		if side != "long" && side != "short" {
+			return out, errors.New("unknown OKX position direction")
+		}
+		if p.MgnMode != "cross" && p.MgnMode != "isolated" {
+			return out, errors.New("unknown OKX margin mode")
+		}
+		margin := p.Imr
+		if margin == "" {
+			margin = "0"
+		}
+		out.Positions = append(out.Positions, execution.ManagedPosition{
+			Symbol:      p.InstId,
+			Side:        side,
+			Quantity:    qty,
+			Entry:       execution.Decimal(p.AvgPx),
+			Mark:        execution.Decimal(p.MarkPx),
+			Liquidation: execution.Decimal(p.LiqPx),
+			Margin:      execution.Decimal(margin),
+		})
+		marginModes[p.MgnMode] = true
+	}
+	if len(marginModes) == 1 {
+		for mode := range marginModes {
+			out.MarginMode = mode
+		}
+	}
+
+	pendings, err := t.pendingExecution(ctx, "")
+	if err != nil {
+		return out, err
+	}
+	for _, r := range pendings {
+		if !strings.HasSuffix(r.InstId, "-USDT-SWAP") {
+			continue
+		}
+		inst, ok := instruments[r.InstId]
+		if !ok {
+			if inst, err = t.executionInstrument(ctx, r.InstId); err != nil {
+				return out, err
+			}
+			instruments[r.InstId] = inst
+		}
+		qty, err := execution.Multiply(r.Sz, inst.CtVal)
+		if err != nil {
+			return out, errors.New("invalid OKX pending order size")
+		}
+		side, err := okxManagedSide(r.PosSide, r.Side)
+		if err != nil {
+			return out, err
+		}
+		role, orderType, price := "entry", r.OrdType, r.Px
+		if r.AlgoId != "" {
+			orderType = "market"
+			switch {
+			case r.SlTriggerPx != "":
+				role, price = "sl", r.SlTriggerPx
+			case r.TpTriggerPx != "":
+				role, price = "tp", r.TpTriggerPx
+			case r.TriggerPx != "":
+				role, price = "sl", r.TriggerPx
+			default:
+				return out, errors.New("OKX protective order has no trigger price")
+			}
+		}
+		id, clientID := r.OrdId, r.ClOrdId
+		if id == "" {
+			id = r.AlgoId
+		}
+		if clientID == "" {
+			clientID = r.AlgoClOrdId
+		}
+		out.Orders = append(out.Orders, execution.Order{
+			Type:          orderType,
+			VenueClientID: clientID,
+			OrderID:       id,
+			Role:          role,
+			Symbol:        r.InstId,
+			Side:          side,
+			Price:         execution.Decimal(price),
+			Quantity:      qty,
+			Status:        r.State,
+		})
+	}
+	for i, p := range out.Positions {
+		var stop execution.Decimal
+		for _, o := range out.Orders {
+			if o.Role != "sl" || o.Symbol != p.Symbol || o.Side != p.Side || !execution.Equal(string(o.Quantity), string(p.Quantity)) {
+				continue
+			}
+			if stop != "" && !execution.Equal(string(stop), string(o.Price)) {
+				stop = "" // ambiguous protection is not confirmed
+				break
+			}
+			stop = o.Price
+		}
+		out.Positions[i].StopPrice = stop
+	}
+	return out, nil
+}
+
+// VerifyManagedSettings only reads: it never switches position or margin mode
+// and never sets leverage.
+func (t *OKXTrader) VerifyManagedSettings(ctx context.Context, symbol string, leverage int) error {
+	if !t.environment.Valid() {
+		return errors.New("managed OKX environment is not set")
+	}
+	if symbol == "" || leverage < 1 || leverage > 125 {
+		return errors.New("invalid managed OKX settings request")
+	}
+	mode, err := t.executionMode(ctx)
+	if err != nil {
+		return err
+	}
+	if mode != "net_mode" {
+		return errors.New("OKX account is in long/short mode; unattended execution requires net mode")
+	}
+	positions, err := t.executionPositions(ctx, symbol)
+	if err != nil {
+		return err
+	}
+	for _, p := range positions {
+		if p.InstId != symbol {
+			continue
+		}
+		v, err := execution.Number(p.Pos)
+		if err != nil {
+			return errors.New("invalid OKX position size")
+		}
+		if v.Sign() != 0 && p.MgnMode != "isolated" {
+			return errors.New("OKX position is not in isolated margin mode")
+		}
+	}
+	var rows []struct{ InstId, MgnMode, Lever string }
+	if err := t.readExecution(ctx, okxLeverageInfoPath+"?instType=SWAP&instId="+url.QueryEscape(symbol)+"&mgnMode=isolated", &rows); err != nil {
+		return err
+	}
+	for _, r := range rows {
+		if (r.InstId == "" || r.InstId == symbol) && r.MgnMode == "isolated" && execution.Equal(r.Lever, strconv.Itoa(leverage)) {
+			return nil
+		}
+	}
+	return errors.New("OKX leverage does not match the approved value")
+}
+
+var _ execution.ManagedTrader = (*OKXTrader)(nil)

@@ -58,7 +58,7 @@ func (t *OKXTrader) executionMode(ctx context.Context) (string, error) {
 	return rows[0].PosMode, nil
 }
 
-type executionPosition struct{ InstId, Pos, PosSide, MgnMode, AvgPx, MarkPx, Upl, Lever, LiqPx string }
+type executionPosition struct{ InstId, Pos, PosSide, MgnMode, AvgPx, MarkPx, Upl, Lever, LiqPx, Imr string }
 
 func (t *OKXTrader) executionPositions(ctx context.Context, symbol string) ([]executionPosition, error) {
 	var rows []executionPosition
@@ -73,13 +73,17 @@ type executionReceipt struct {
 }
 
 func (t *OKXTrader) pendingExecution(ctx context.Context, symbol string) ([]executionReceipt, error) {
+	filter := "?instType=SWAP"
+	if symbol != "" {
+		filter += "&instId=" + url.QueryEscape(symbol)
+	}
 	var result []executionReceipt
-	if e := t.readExecution(ctx, okxPendingOrdersPath+"?instType=SWAP&instId="+url.QueryEscape(symbol), &result); e != nil {
+	if e := t.readExecution(ctx, okxPendingOrdersPath+filter, &result); e != nil {
 		return nil, e
 	}
 	for _, kind := range []string{"conditional", "oco", "trigger", "move_order_stop"} {
 		var rows []executionReceipt
-		if e := t.readExecution(ctx, okxAlgoPendingPath+"?instType=SWAP&instId="+url.QueryEscape(symbol)+"&ordType="+kind, &rows); e != nil {
+		if e := t.readExecution(ctx, okxAlgoPendingPath+filter+"&ordType="+kind, &rows); e != nil {
 			return nil, e
 		}
 		result = append(result, rows...)

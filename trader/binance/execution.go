@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"nofx/hook"
 	"nofx/trader/execution"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -348,3 +350,282 @@ func (b *FuturesTrader) CancelExecutionOrder(ctx context.Context, o execution.Or
 }
 
 var _ execution.Trader = (*FuturesTrader)(nil)
+
+// managedEndpoint is a test seam only: no production caller can supply a URL,
+// so a sandbox trader cannot be redirected at production or vice versa.
+type managedEndpoint struct {
+	baseURL string
+	client  *http.Client
+}
+
+// managedBinanceEndpoint pins each environment to one host. Binance USDⓈ-M hosts
+// are the pinned SDK constants (v2.8.9, checked 2026-11-06).
+func managedBinanceEndpoint(env execution.Environment) (string, error) {
+	switch env {
+	case execution.EnvironmentSandbox:
+		return futures.BaseApiTestnetUrl, nil
+	case execution.EnvironmentLive:
+		return futures.BaseApiMainUrl, nil
+	}
+	return "", errors.New("managed Binance environment must be sandbox or live")
+}
+
+// NewManagedAccountTrader builds an account reader for unattended execution.
+// It never changes account settings, leverage or orders.
+func NewManagedAccountTrader(ctx context.Context, key, secret, userID string, env execution.Environment) (*FuturesTrader, error) {
+	return newManagedAccountTrader(ctx, key, secret, userID, env, nil)
+}
+
+func newManagedAccountTrader(ctx context.Context, key, secret, userID string, env execution.Environment, seam *managedEndpoint) (*FuturesTrader, error) {
+	endpoint, err := managedBinanceEndpoint(env)
+	if err != nil {
+		return nil, err
+	}
+	b := NewExecutionTrader(key, secret, userID)
+	b.managedEnvironment = env
+	b.client.SetApiEndpoint(endpoint)
+	if seam != nil {
+		b.client.BaseURL = seam.baseURL
+		b.client.HTTPClient = seam.client
+	}
+	if err := b.calibrateClock(ctx); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (b *FuturesTrader) ManagedCapabilities() execution.Capabilities {
+	return execution.Capabilities{}
+}
+
+func (b *FuturesTrader) AmendStop(context.Context, execution.Order, execution.Decimal) (execution.Order, error) {
+	return execution.Order{}, execution.ErrUnsupported
+}
+
+func (b *FuturesTrader) Events(context.Context, func(execution.AccountEvent) error) error {
+	return execution.ErrUnsupported
+}
+
+func binanceSideName(side futures.SideType) string {
+	if side == futures.SideTypeBuy {
+		return "short" // one-way BUY reduces a short position
+	}
+	return "long"
+}
+
+func binanceManagedSide(positionSide futures.PositionSideType, side futures.SideType) string {
+	switch positionSide {
+	case futures.PositionSideTypeLong:
+		return "long"
+	case futures.PositionSideTypeShort:
+		return "short"
+	}
+	return binanceSideName(side)
+}
+
+func binanceRiskFor(risks []*futures.PositionRisk, symbol string, side futures.PositionSideType) *futures.PositionRisk {
+	for _, r := range risks {
+		if r.Symbol != symbol {
+			continue
+		}
+		if side == futures.PositionSideTypeBoth || r.PositionSide == string(side) {
+			return r
+		}
+	}
+	return nil
+}
+
+// ManagedSnapshot reads the venue state used to verify unattended positions.
+// Any unreadable field fails the whole snapshot instead of reporting empty state.
+func (b *FuturesTrader) ManagedSnapshot(ctx context.Context) (execution.ManagedAccount, error) {
+	out := execution.ManagedAccount{
+		Venue:       b.Venue(),
+		Environment: b.managedEnvironment,
+		Positions:   []execution.ManagedPosition{},
+		Orders:      []execution.Order{},
+		ObservedAt:  time.Now().UTC(),
+	}
+	if !b.managedEnvironment.Valid() {
+		return out, errors.New("managed Binance environment is not set")
+	}
+	mode, err := b.client.NewGetPositionModeService().Do(ctx)
+	if err != nil {
+		return out, binanceReadError("verify the Binance position mode", err)
+	}
+	out.PositionMode = "one_way"
+	if mode.DualSidePosition {
+		out.PositionMode = "hedge"
+	}
+	account, err := b.client.NewGetAccountService().Do(ctx)
+	if err != nil {
+		return out, binanceReadError("read the Binance account", err)
+	}
+	if out.Equity, err = execution.BalanceDecimal(account.TotalMarginBalance); err != nil {
+		return out, fmt.Errorf("Binance account equity is unavailable: %w", err)
+	}
+	if out.Available, err = execution.BalanceDecimal(account.AvailableBalance); err != nil {
+		return out, fmt.Errorf("Binance account available balance is unavailable: %w", err)
+	}
+	if out.MarginUsed, err = execution.BalanceDecimal(account.TotalPositionInitialMargin); err != nil {
+		return out, fmt.Errorf("Binance account margin usage is unavailable: %w", err)
+	}
+	risks, err := b.client.NewGetPositionRiskService().Do(ctx)
+	if err != nil {
+		return out, binanceReadError("read Binance position risk", err)
+	}
+	open, err := b.client.NewListOpenOrdersService().Do(ctx)
+	if err != nil {
+		return out, binanceReadError("read Binance open orders", err)
+	}
+	algos, err := b.client.NewListOpenAlgoOrdersService().Do(ctx)
+	if err != nil {
+		return out, binanceReadError("read Binance protective orders", err)
+	}
+
+	marginModes := map[string]bool{}
+	for _, p := range account.Positions {
+		amt, err := execution.Number(p.PositionAmt)
+		if err != nil {
+			return out, fmt.Errorf("Binance position quantity is invalid: %w", err)
+		}
+		if amt.Sign() == 0 {
+			continue
+		}
+		risk := binanceRiskFor(risks, p.Symbol, p.PositionSide)
+		if risk == nil {
+			return out, fmt.Errorf("Binance position %s has no risk data", p.Symbol)
+		}
+		margin := risk.IsolatedMargin
+		if margin == "" {
+			margin = p.InitialMargin
+		}
+		if margin == "" {
+			margin = p.IsolatedWallet
+		}
+		side := ""
+		switch risk.PositionSide {
+		case string(futures.PositionSideTypeLong):
+			side = "long"
+		case string(futures.PositionSideTypeShort):
+			side = "short"
+		case string(futures.PositionSideTypeBoth):
+			side = "long"
+			if strings.HasPrefix(risk.PositionAmt, "-") {
+				side = "short"
+			}
+		default:
+			return out, fmt.Errorf("unknown Binance position side %q", risk.PositionSide)
+		}
+		out.Positions = append(out.Positions, execution.ManagedPosition{
+			Symbol:      p.Symbol,
+			Side:        side,
+			Quantity:    execution.Decimal(strings.TrimPrefix(risk.PositionAmt, "-")),
+			Entry:       execution.Decimal(risk.EntryPrice),
+			Mark:        execution.Decimal(risk.MarkPrice),
+			Liquidation: execution.Decimal(risk.LiquidationPrice),
+			Margin:      execution.Decimal(margin),
+		})
+		marginModes[risk.MarginType] = true
+	}
+	if len(marginModes) == 1 {
+		for mode := range marginModes {
+			out.MarginMode = mode
+		}
+	}
+
+	for _, o := range open {
+		oType := "limit"
+		if o.Type == futures.OrderTypeMarket {
+			oType = "market"
+		}
+		out.Orders = append(out.Orders, execution.Order{
+			Type:          oType,
+			ReduceOnly:    o.ReduceOnly,
+			PostOnly:      o.TimeInForce == futures.TimeInForceTypeGTX,
+			VenueClientID: o.ClientOrderID,
+			OrderID:       fmt.Sprint(o.OrderID),
+			Role:          "entry",
+			Symbol:        o.Symbol,
+			Side:          binanceManagedSide(o.PositionSide, o.Side),
+			Price:         execution.Decimal(o.Price),
+			Quantity:      execution.Decimal(o.OrigQuantity),
+			Status:        string(o.Status),
+			Filled:        execution.Decimal(o.ExecutedQuantity),
+			Average:       execution.Decimal(o.AvgPrice),
+		})
+	}
+	for _, a := range algos {
+		role := "sl"
+		switch a.OrderType {
+		case futures.AlgoOrderTypeStopMarket, futures.AlgoOrderTypeStop:
+		case futures.AlgoOrderTypeTakeProfitMarket, futures.AlgoOrderTypeTakeProfit:
+			role = "tp"
+		default:
+			continue
+		}
+		out.Orders = append(out.Orders, execution.Order{
+			Type:          "market",
+			ReduceOnly:    a.ReduceOnly,
+			VenueClientID: a.ClientAlgoId,
+			OrderID:       fmt.Sprint(a.AlgoId),
+			Role:          role,
+			Symbol:        a.Symbol,
+			Side:          binanceManagedSide(a.PositionSide, a.Side),
+			Price:         execution.Decimal(a.TriggerPrice),
+			Quantity:      execution.Decimal(a.Quantity),
+			Status:        a.AlgoStatus,
+		})
+	}
+	for i, p := range out.Positions {
+		var stop execution.Decimal
+		for _, o := range out.Orders {
+			if o.Role != "sl" || o.Symbol != p.Symbol || o.Side != p.Side || !execution.Equal(string(o.Quantity), string(p.Quantity)) {
+				continue
+			}
+			if stop != "" && !execution.Equal(string(stop), string(o.Price)) {
+				stop = "" // ambiguous protection is not confirmed
+				break
+			}
+			stop = o.Price
+		}
+		out.Positions[i].StopPrice = stop
+	}
+	return out, nil
+}
+
+// VerifyManagedSettings only reads: it never switches mode or sets leverage.
+// A flat symbol has no risk row, so margin mode and leverage are unverifiable.
+func (b *FuturesTrader) VerifyManagedSettings(ctx context.Context, symbol string, leverage int) error {
+	if !b.managedEnvironment.Valid() {
+		return errors.New("managed Binance environment is not set")
+	}
+	if symbol == "" || leverage < 1 || leverage > 20 {
+		return errors.New("invalid managed Binance settings request")
+	}
+	mode, err := b.client.NewGetPositionModeService().Do(ctx)
+	if err != nil {
+		return binanceReadError("verify the Binance position mode", err)
+	}
+	if mode.DualSidePosition {
+		return errors.New("Binance account is in hedge mode; unattended execution requires one-way mode")
+	}
+	risks, err := b.client.NewGetPositionRiskService().Symbol(symbol).Do(ctx)
+	if err != nil {
+		return binanceReadError("read Binance position risk", err)
+	}
+	if len(risks) == 0 {
+		return fmt.Errorf("cannot verify Binance margin mode and leverage for %s", symbol)
+	}
+	for _, r := range risks {
+		if r.MarginType != "isolated" {
+			return fmt.Errorf("Binance %s is not in isolated margin mode", symbol)
+		}
+		lever, err := strconv.Atoi(r.Leverage)
+		if err != nil || lever != leverage {
+			return fmt.Errorf("Binance %s leverage does not match the approved value", symbol)
+		}
+	}
+	return nil
+}
+
+var _ execution.ManagedTrader = (*FuturesTrader)(nil)
