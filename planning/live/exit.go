@@ -125,47 +125,48 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 	if err != nil {
 		return v, err
 	}
-	if cmp(position, "0") > 0 {
-		if pendingExit {
-			return c.halt(&v, "An earlier exit is still open at the exchange. Reconcile it before another exit is sent.")
+	// A resting entry can fill after this call, and a halted run has no
+	// supervisor left to cancel it: entries are always cancelled first, flat or
+	// not, before any exit decision is taken.
+	entries := len(v.Plan.Orders)
+	if entries == 0 {
+		entries = 1
+	}
+	for i := 0; i < entries; i++ {
+		o := &v.Orders[i]
+		if o.Status == "scheduled" {
+			o.Status = "CANCELED"
+			continue
 		}
+		if closeOrderTerminal(o.Status) {
+			continue
+		}
+		observed, er := broker.Lookup(ctx, *o)
+		if er != nil || !validReceipt(*o, observed) || (o.OrderID != "" && o.OrderID != observed.OrderID) {
+			return c.halt(&v, "A live entry could not be confirmed before the exit. No exit was sent; check exchange orders.")
+		}
+		*o = observed
+		switch observed.Status {
+		case "NEW", "PARTIALLY_FILLED":
+			if er = broker.Cancel(ctx, observed); er != nil {
+				return c.halt(&v, "An entry cancellation is unconfirmed before the exit. No exit was sent; check exchange orders.")
+			}
+			o.Status = "CANCELED"
+		default:
+			if !closeOrderTerminal(observed.Status) {
+				return c.halt(&v, "An entry is still open at the exchange. No exit was sent; reconcile it first.")
+			}
+		}
+	}
+	if err = c.save(&v); err != nil {
+		return v, err
+	}
+	if pendingExit {
+		return c.halt(&v, "An earlier exit is still open at the exchange. Reconcile it before another exit is sent.")
+	}
+	if cmp(position, "0") > 0 {
 		if c.isStopped() {
 			return v, errors.New("Service is shutting down; no exit was sent")
-		}
-		// A resting entry would fill after the exit, and the halted run has no
-		// supervisor left to cancel it: cancel this run's entries first.
-		entries := len(v.Plan.Orders)
-		if entries == 0 {
-			entries = 1
-		}
-		for i := 0; i < entries; i++ {
-			o := &v.Orders[i]
-			if o.Status == "scheduled" {
-				o.Status = "CANCELED"
-				continue
-			}
-			if closeOrderTerminal(o.Status) {
-				continue
-			}
-			observed, er := broker.Lookup(ctx, *o)
-			if er != nil || !validReceipt(*o, observed) || (o.OrderID != "" && o.OrderID != observed.OrderID) {
-				return c.halt(&v, "A live entry could not be confirmed before the exit. No exit was sent; check exchange orders.")
-			}
-			*o = observed
-			switch observed.Status {
-			case "NEW", "PARTIALLY_FILLED":
-				if er = broker.Cancel(ctx, observed); er != nil {
-					return c.halt(&v, "An entry cancellation is unconfirmed before the exit. No exit was sent; check exchange orders.")
-				}
-				o.Status = "CANCELED"
-			default:
-				if !closeOrderTerminal(observed.Status) {
-					return c.halt(&v, "An entry is still open at the exchange. No exit was sent; reconcile it first.")
-				}
-			}
-		}
-		if err = c.save(&v); err != nil {
-			return v, err
 		}
 		// The venue position may hold size this run never opened (a manual trade,
 		// another hedge side, an over-filled basket); only the run's remaining

@@ -488,3 +488,88 @@ func TestManagedExitCancelsEntries(t *testing.T) {
 		}
 	})
 }
+
+// A resting entry with no venue position yet is still a future unprotected
+// fill: it must be cancelled before the run reports flat.
+func TestManagedExitCancelsEntryWhenFlat(t *testing.T) {
+	c, b, _, p, _ := managedSetup(t, "limit")
+	v := started(t, c, p)
+	c.step(context.Background(), "alice", v.ID) // entry is live, nothing filled
+	b.mu.Lock()
+	entryID := v.Orders[0].ClientID
+	live := b.orders[entryID]
+	position := b.account.Position
+	b.mu.Unlock()
+	if live.Status != "NEW" || cmp(position, "0") != 0 {
+		t.Fatalf("fixture is not a resting entry on a flat account: %s %s", live.Status, position)
+	}
+	got, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Lock()
+	cancelled := strings.Join(b.cancelled, ",")
+	entry := b.orders[entryID]
+	b.mu.Unlock()
+	if !strings.Contains(cancelled, entryID) || entry.Status != "CANCELED" {
+		t.Fatalf("the resting entry was left live: %s %+v", cancelled, entry)
+	}
+	if len(exitOrders(b)) != 0 {
+		t.Fatal("a flat account was closed again")
+	}
+	if got.State != "completed" {
+		t.Fatalf("a cancelled flat run is %q, not completed", got.State)
+	}
+}
+
+// A venue position this run never opened cannot be closed by its exit.
+func TestManagedExitRefusesForeignExposure(t *testing.T) {
+	c, b, _, p, _ := managedSetup(t, "limit")
+	v := started(t, c, p)
+	c.step(context.Background(), "alice", v.ID) // entry is live, nothing filled
+	b.mu.Lock()
+	b.account.Position = "0.02"
+	b.mu.Unlock()
+	if _, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline"); err == nil {
+		t.Fatal("a position above this run's exposure was closed")
+	}
+	if len(exitOrders(b)) != 0 {
+		t.Fatal("an exit was sent for a position this run never opened")
+	}
+	got, err := c.Get("alice", v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != runHaltedUnknown {
+		t.Fatalf("run is %q, not halted", got.State)
+	}
+	for _, o := range got.Orders {
+		if o.Role == "exit" {
+			t.Fatalf("a refused exit was recorded: %+v", o)
+		}
+	}
+}
+
+// An unreadable entry is unknown, never cancelled or skipped.
+func TestManagedExitEntryLookupFailure(t *testing.T) {
+	c, b, _, v := managedRestingEntry(t)
+	b.mu.Lock()
+	b.lookupErr = true
+	b.mu.Unlock()
+	if _, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline"); err == nil {
+		t.Fatal("an unreadable entry was treated as cancelled")
+	}
+	if len(exitOrders(b)) != 0 {
+		t.Fatal("an exit was sent while the entry state was unknown")
+	}
+	got, err := c.Get("alice", v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != runHaltedUnknown {
+		t.Fatalf("run is %q, not halted", got.State)
+	}
+	if got.Orders[0].Status == "CANCELED" {
+		t.Fatal("an unreadable entry was marked cancelled")
+	}
+}
