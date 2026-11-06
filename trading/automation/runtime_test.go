@@ -36,6 +36,7 @@ type managedTraderFixture struct {
 	prepared  []string
 	settings  map[string]int
 	amendErr  error
+	history   execution.HistoryReader
 }
 
 func (f *managedTraderFixture) Venue() string { return f.venue }
@@ -107,6 +108,8 @@ func (f *managedTraderFixture) AmendStop(context.Context, execution.Order, execu
 func (f *managedTraderFixture) Events(context.Context, func(execution.AccountEvent) error) error {
 	return execution.ErrUnsupported
 }
+
+func (f *managedTraderFixture) ManagedHistory() execution.HistoryReader { return f.history }
 
 func (f *managedTraderFixture) placeCount() int {
 	f.mu.Lock()
@@ -309,6 +312,9 @@ func TestRuntimePolicyPipeline(t *testing.T) {
 	if runs[0].PolicyVersion != rig.policy.Version {
 		t.Fatalf("run is not bound to the policy version: %q", runs[0].PolicyVersion)
 	}
+	if got := rig.venue.placeCount(); got != 0 {
+		t.Fatalf("an entry was submitted before authorization completed: %d", got)
+	}
 	rig.waitPlaced(t, 1)
 	if len(rig.venue.prepared) == 0 {
 		t.Fatal("leverage was never prepared before the entry")
@@ -411,3 +417,61 @@ func TestRecoveryExternalPosition(t *testing.T) {
 }
 
 func contains(s, want string) bool { return strings.Contains(s, want) }
+
+// TestRecoveryHaltedUnknownStaysFrozen proves an unresolved exit is never
+// replayed: the run stays halted, the account stays frozen, and no entry is
+// submitted on the same tick or the next one.
+func TestRecoveryHaltedUnknownStaysFrozen(t *testing.T) {
+	rig := rig(t, nil)
+	rig.source.signals = []Signal{{ID: "signal-1", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
+	rt := rig.runtime(t, rig.source)
+	if err := rt.Tick(context.Background(), "alice", "account"); err != nil {
+		t.Fatal(err)
+	}
+	rig.waitPlaced(t, 1)
+
+	var run live.Run
+	if err := rig.db.First(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := rig.db.Model(&live.Run{}).Where("id = ?", run.ID).
+		Updates(map[string]any{"state": "halted_unknown", "error": "exit unknown"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	before := rig.venue.placeCount()
+	rig.source.signals = []Signal{{ID: "signal-2", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
+	if err := rt.Recover(context.Background(), "alice", "account"); err != nil {
+		t.Fatal(err)
+	}
+	if _, frozen := rt.frozenReason("account"); !frozen {
+		t.Fatal("an unresolved exit left the account open for new entries")
+	}
+	rig.advance(SignalInterval)
+	if err := rt.Tick(context.Background(), "alice", "account"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rig.venue.placeCount(); got != before {
+		t.Fatalf("a halted run replayed %d orders", got-before)
+	}
+	if state := runStates(t, rig.db)[0].State; state != "halted_unknown" {
+		t.Fatalf("recovery moved the halted run to %q", state)
+	}
+}
+
+// TestFreezeKindsAreIsolated proves a recovered risk read cannot lift a
+// safety freeze, and a safety recovery cannot lift a risk freeze.
+func TestFreezeKindsAreIsolated(t *testing.T) {
+	rig := rig(t, nil)
+	rt := rig.runtime(t, nil)
+	ctx := context.Background()
+	rig.venue.snapshot.Positions = []execution.ManagedPosition{{Symbol: "ETHUSDT", Side: "long", Quantity: "1.5"}}
+	if err := rt.Recover(ctx, "alice", "account"); err == nil {
+		t.Fatal("an external position was accepted")
+	}
+	if err := rt.Tick(ctx, "alice", "account"); err != nil {
+		t.Fatal(err)
+	}
+	if reason, frozen := rt.frozenReason("account"); !frozen || reason == "" {
+		t.Fatal("the external-position freeze was cleared by a healthy risk read")
+	}
+}

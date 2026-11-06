@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"gorm.io/gorm"
 	"nofx/logger"
 	"nofx/planning/live"
 	"nofx/trader/execution"
@@ -24,43 +25,39 @@ func (r *Runtime) Recover(ctx context.Context, user, accountKey string) error {
 
 	binding, err := r.binding(ctx, accountKey)
 	if err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return err
 	}
 	trader, err := r.trader(ctx, user, binding.ExchangeID)
 	if err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return err
 	}
 	account, err := trader.ManagedSnapshot(ctx)
 	if err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return fmt.Errorf("automation: could not read the managed account: %w", err)
 	}
 	if account.AccountKey != accountKey {
 		reason := fmt.Sprintf("automation: the venue reported account %q instead of %q", account.AccountKey, accountKey)
-		r.freeze(accountKey, reason)
+		r.freeze(accountKey, reason, freezeSafety)
 		return errors.New(reason)
 	}
 	// Settings are verified before any run is reconciled: a hedge-mode or
 	// wrong-leverage account must not be supervised as if it were correct.
 	if err := r.verifySettings(ctx, trader, account, user, accountKey); err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return err
 	}
 
 	views, err := r.controller.ListContext(ctx, user)
 	if err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return fmt.Errorf("automation: could not list runs: %w", err)
 	}
-	owned, err := r.ownedExposure(views, accountKey)
-	if err != nil {
-		r.freeze(accountKey, err.Error())
-		return err
-	}
+	owned := r.ownedExposure(views, accountKey)
 	if err := r.checkExternal(ctx, account, owned, accountKey); err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return err
 	}
 
@@ -72,10 +69,10 @@ func (r *Runtime) Recover(ctx context.Context, user, accountKey string) error {
 		case "halted_unknown":
 			// Keep the freeze: the unresolved exit may only be settled by the
 			// original client ID, and re-submitting would double the position.
-			r.freeze(accountKey, "a run halted with an unresolved exit; resolve it before new entries")
+			r.freeze(accountKey, "a run halted with an unresolved exit; resolve it before new entries", freezeSafety)
 		case "running", "stopping", "position_open", "needs_attention":
 			if _, err := r.controller.ReconcileContext(ctx, user, v.ID); err != nil {
-				r.freeze(accountKey, err.Error())
+				r.freeze(accountKey, err.Error(), freezeSafety)
 				return fmt.Errorf("automation: could not reconcile run %s: %w", v.ID, err)
 			}
 		}
@@ -83,16 +80,16 @@ func (r *Runtime) Recover(ctx context.Context, user, accountKey string) error {
 
 	now := r.clock()
 	if err := r.risks.Observe(ctx, account, nil, now); err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return fmt.Errorf("automation: could not record the equity observation: %w", err)
 	}
 	decision, err := r.risks.Evaluate(ctx, user, accountKey, now)
 	if err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return fmt.Errorf("automation: could not evaluate the risk breaker: %w", err)
 	}
 	if decision.Action != risk.ActionAllow {
-		r.freeze(accountKey, decision.Reason)
+		r.freeze(accountKey, decision.Reason, freezeRisk)
 		return nil
 	}
 	r.clearReconcile(accountKey)
@@ -102,10 +99,13 @@ func (r *Runtime) Recover(ctx context.Context, user, accountKey string) error {
 
 func (r *Runtime) verifySettings(ctx context.Context, trader execution.ManagedTrader, account execution.ManagedAccount, user, accountKey string) error {
 	policy, err := r.risks.Policy(ctx, user, accountKey)
-	if err != nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// No policy yet means nothing to verify; the binding check in Tick and
 		// AuthorizePolicy still gate any entry.
 		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("automation: could not read the risk policy: %w", err)
 	}
 	for _, p := range account.Positions {
 		if err := trader.VerifyManagedSettings(ctx, p.Symbol, policy.MaxLeverage); err != nil {
@@ -117,7 +117,7 @@ func (r *Runtime) verifySettings(ctx context.Context, trader execution.ManagedTr
 
 // ownedExposure sums the quantities of runs this runtime believes it holds, so
 // an unknown venue position can be told apart from one we are supervising.
-func (r *Runtime) ownedExposure(views []live.View, accountKey string) (map[string]bool, error) {
+func (r *Runtime) ownedExposure(views []live.View, accountKey string) map[string]bool {
 	owned := map[string]bool{}
 	for _, v := range views {
 		if v.AccountKey != accountKey {
@@ -128,7 +128,7 @@ func (r *Runtime) ownedExposure(views []live.View, accountKey string) (map[strin
 		}
 		owned[v.Plan.Snapshot.Symbol] = true
 	}
-	return owned, nil
+	return owned
 }
 
 // checkExternal refuses to take over a position no run accounts for: an
@@ -136,7 +136,11 @@ func (r *Runtime) ownedExposure(views []live.View, accountKey string) (map[strin
 func (r *Runtime) checkExternal(ctx context.Context, account execution.ManagedAccount, owned map[string]bool, accountKey string) error {
 	for _, p := range account.Positions {
 		qty, err := execution.Number(string(p.Quantity))
-		if err != nil || qty.Sign() == 0 {
+		if err != nil {
+			// An unreadable quantity is exactly the case a takeover must refuse.
+			return errors.New("automation: the venue reported a position quantity that cannot be read")
+		}
+		if qty.Sign() == 0 {
 			continue
 		}
 		if !owned[p.Symbol] {

@@ -182,3 +182,26 @@ func (t boundTrader) Events(ctx context.Context, fn func(AccountEvent) error) er
 		return fn(e)
 	})
 }
+
+// ManagedHistory tags replayed events with the durable binding ID, exactly as
+// the live stream does, so a replayed fill is attributable to the same account.
+func (t boundTrader) ManagedHistory() HistoryReader {
+	reader, ok := t.ManagedTrader.(HistoryReader)
+	if !ok {
+		return nil
+	}
+	return boundHistory{HistoryReader: reader, binding: t.binding}
+}
+
+type boundHistory struct {
+	HistoryReader
+	binding Binding
+}
+
+func (h boundHistory) History(ctx context.Context, fromTime time.Time, pageCursor string) ([]AccountEvent, string, bool, error) {
+	events, next, complete, err := h.HistoryReader.History(ctx, fromTime, pageCursor)
+	for i := range events {
+		events[i].AccountKey = h.binding.ID
+	}
+	return events, next, complete, err
+}

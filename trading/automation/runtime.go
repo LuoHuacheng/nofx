@@ -21,6 +21,9 @@ const (
 	SignalInterval    = 60 * time.Second
 	EntryFillWindow   = 30 * time.Second
 	MaxHold           = 24 * time.Hour
+	// SignalFailureTolerance is how many consecutive source failures only
+	// pause new signals, per the plan's global constraints.
+	SignalFailureTolerance = 3
 )
 
 // Factory builds the managed adapter for one saved exchange configuration. It
@@ -31,9 +34,10 @@ type Factory func(context.Context, string, string) (execution.ManagedTrader, exe
 // clocks, so a slow account never starves another and restarts do not depend on
 // timers surviving the process.
 type accountState struct {
-	user          string
-	lastReconcile time.Time
-	lastSignal    time.Time
+	user           string
+	lastReconcile  time.Time
+	lastSignal     time.Time
+	signalFailures int
 }
 
 // Runtime supervises unattended execution: it reconciles what the venue shows,
@@ -50,8 +54,10 @@ type Runtime struct {
 	mu        sync.Mutex
 	accounts  map[string]*accountState
 	locks     map[string]*sync.Mutex
-	frozen    map[string]string
+	frozen    map[string]freezeState
 	reconcile map[string]string
+	pending   map[string][]execution.AccountEvent
+	known     []managedAccount
 	ctx       context.Context
 	cancel    context.CancelFunc
 	started   bool
@@ -65,10 +71,10 @@ func NewRuntime(db *gorm.DB, controller *live.Controller, risks *risk.Store, fac
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	if err := db.AutoMigrate(&execution.Binding{}); err != nil {
+	if err := db.AutoMigrate(&execution.Binding{}, &EventCursor{}); err != nil {
 		return nil, err
 	}
-	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]string{}, reconcile: map[string]string{}}, nil
+	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]freezeState{}, reconcile: map[string]string{}, pending: map[string][]execution.AccountEvent{}}, nil
 }
 
 func (r *Runtime) clock() time.Time { return r.now().UTC() }
@@ -115,6 +121,8 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
+		// The waiter above is bounded by the supervisor itself, which exits as
+		// soon as its context is cancelled; nothing is abandoned here.
 		return errors.New("automation: timed out waiting for the supervisor to stop")
 	}
 }
@@ -142,13 +150,24 @@ type managedAccount struct{ user, key string }
 func (r *Runtime) managedAccounts(ctx context.Context) []managedAccount {
 	var rows []execution.Binding
 	if err := r.db.WithContext(ctx).Where("enabled = ? AND verified_at IS NOT NULL", true).Find(&rows).Error; err != nil {
+		// A failed list must not stop supervision of accounts already known:
+		// that would abandon live protection on a transient database fault.
 		logger.Warnf("automation: could not list managed accounts: %v", err)
-		return nil
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		out := make([]managedAccount, 0, len(r.known))
+		for _, account := range r.known {
+			out = append(out, account)
+		}
+		return out
 	}
 	out := make([]managedAccount, 0, len(rows))
 	for _, b := range rows {
 		out = append(out, managedAccount{user: b.UserID, key: b.ID})
 	}
+	r.mu.Lock()
+	r.known = out
+	r.mu.Unlock()
 	return out
 }
 
@@ -174,29 +193,47 @@ func (r *Runtime) state(accountKey, user string) *accountState {
 	return s
 }
 
+// Freeze kinds. Only the kind that set a freeze may clear it: a recovered
+// risk read must never lift a safety stop (an unowned position, an unresolved
+// exit) or a source failure, and vice versa.
+const (
+	freezeSafety = iota + 1
+	freezeRisk
+	freezeSignal
+)
+
+type freezeState struct {
+	reason string
+	kind   int
+}
+
 // freeze stops new entries for one account. Protection supervision keeps
 // running, because abandoning a live stop-loss would be worse than the fault.
-func (r *Runtime) freeze(accountKey, reason string) {
+func (r *Runtime) freeze(accountKey, reason string, kind int) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if previous, ok := r.frozen[accountKey]; ok && previous == reason {
+	previous, had := r.frozen[accountKey]
+	r.frozen[accountKey] = freezeState{reason: reason, kind: kind}
+	r.mu.Unlock()
+	if had && previous.reason == reason && previous.kind == kind {
 		return
 	}
-	r.frozen[accountKey] = reason
 	logger.Warnf("automation: %s frozen for new entries: %s", accountKey, reason)
 }
 
-func (r *Runtime) thaw(accountKey string) {
+// thaw clears only freezes of the given kind.
+func (r *Runtime) thaw(accountKey string, kind int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.frozen, accountKey)
+	if current, ok := r.frozen[accountKey]; ok && current.kind == kind {
+		delete(r.frozen, accountKey)
+	}
 }
 
 func (r *Runtime) frozenReason(accountKey string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	reason, ok := r.frozen[accountKey]
-	return reason, ok
+	current, ok := r.frozen[accountKey]
+	return current.reason, ok
 }
 
 func (r *Runtime) markReconcile(accountKey, reason string) {
@@ -230,18 +267,23 @@ func (r *Runtime) Tick(ctx context.Context, user, accountKey string) error {
 	state := r.state(accountKey, user)
 
 	if err := r.superviseRuns(ctx, user, accountKey); err != nil {
-		r.freeze(accountKey, err.Error())
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return err
 	}
 	now := r.clock()
 	if state.lastReconcile.IsZero() || now.Sub(state.lastReconcile) >= ReconcileInterval {
 		if err := r.reconcileAccount(ctx, user, accountKey); err != nil {
-			r.freeze(accountKey, err.Error())
+			r.freeze(accountKey, err.Error(), freezeRisk)
 			return err
 		}
 		state.lastReconcile = now
 	}
 	if r.source == nil {
+		return nil
+	}
+	// A stream that went quiet or broke must be reconciled before another
+	// signal: the venue may already hold a fill this process never saw.
+	if r.reconciling(accountKey) {
 		return nil
 	}
 	if _, frozen := r.frozenReason(accountKey); frozen {
@@ -251,11 +293,19 @@ func (r *Runtime) Tick(ctx context.Context, user, accountKey string) error {
 		state.lastSignal = now
 		if err := r.signal(ctx, user, accountKey); err != nil {
 			if errors.Is(err, ErrNoSignal) {
+				state.signalFailures = 0
 				return nil
 			}
-			r.freeze(accountKey, err.Error())
+			// A failing source pauses new signals after SignalFailureTolerance
+			// consecutive rounds; a single bad reply must not cost a whole day.
+			state.signalFailures++
+			if state.signalFailures >= SignalFailureTolerance {
+				r.freeze(accountKey, err.Error(), freezeSignal)
+			}
 			return err
 		}
+		state.signalFailures = 0
+		r.thaw(accountKey, freezeSignal)
 	}
 	return nil
 }
@@ -278,7 +328,7 @@ func (r *Runtime) superviseRuns(ctx context.Context, user, accountKey string) er
 			}
 		case "halted_unknown":
 			// Frozen by design: only the original exit client ID may resolve it.
-			r.freeze(accountKey, "a run halted with an unresolved exit; resolve it before new entries")
+			r.freeze(accountKey, "a run halted with an unresolved exit; resolve it before new entries", freezeSafety)
 		}
 	}
 	return nil
@@ -296,15 +346,26 @@ func (r *Runtime) reconcileAccount(ctx context.Context, user, accountKey string)
 	if err != nil {
 		return err
 	}
+	// History first: the events it returns are attributed to the snapshot below,
+	// so funding and fees land in the same ledger day as the equity they explain.
+	if reader, ok := trader.(historySource); ok {
+		if err := r.syncHistory(ctx, user, accountKey, binding.Venue, reader.ManagedHistory()); err != nil {
+			return err
+		}
+	}
+	events := r.drainEvents(accountKey)
 	account, err := trader.ManagedSnapshot(ctx)
 	if err != nil {
+		r.bufferEvents(accountKey, events)
+		r.markReconcile(accountKey, "account read failed")
 		return fmt.Errorf("automation: could not read the managed account: %w", err)
 	}
 	if account.AccountKey != accountKey {
+		r.bufferEvents(accountKey, events)
 		return fmt.Errorf("automation: the venue reported account %q instead of %q", account.AccountKey, accountKey)
 	}
 	now := r.clock()
-	if err := r.risks.Observe(ctx, account, nil, now); err != nil {
+	if err := r.risks.Observe(ctx, account, events, now); err != nil {
 		return fmt.Errorf("automation: could not record the equity observation: %w", err)
 	}
 	decision, err := r.risks.Evaluate(ctx, user, accountKey, now)
@@ -312,12 +373,17 @@ func (r *Runtime) reconcileAccount(ctx context.Context, user, accountKey string)
 		return fmt.Errorf("automation: could not evaluate the risk breaker: %w", err)
 	}
 	if decision.Action != risk.ActionAllow {
-		r.freeze(accountKey, decision.Reason)
+		r.freeze(accountKey, decision.Reason, freezeRisk)
 	} else {
-		r.thaw(accountKey)
+		r.thaw(accountKey, freezeRisk)
 	}
 	r.clearReconcile(accountKey)
 	return nil
+}
+
+// historySource is an adapter that can replay the account's money movements.
+type historySource interface {
+	ManagedHistory() execution.HistoryReader
 }
 
 func (r *Runtime) binding(ctx context.Context, accountKey string) (execution.Binding, error) {

@@ -65,6 +65,13 @@ type Capabilities struct {
 	PrivateEvents bool
 }
 
+// HistoryReader replays the account's own record of money movements. complete
+// is true only for the last page of the requested window, so a caller that
+// stops early never mistakes a partial page for a finished one.
+type HistoryReader interface {
+	History(ctx context.Context, fromTime time.Time, pageCursor string) (events []AccountEvent, nextCursor string, complete bool, err error)
+}
+
 // ManagedTrader is the unattended-execution contract. Snapshots and settings
 // verification must reflect the venue or fail; they never degrade to defaults.
 type ManagedTrader interface {
