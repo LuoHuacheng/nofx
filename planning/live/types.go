@@ -58,6 +58,12 @@ type Run struct {
 	ProtectionObservedAt *time.Time `json:"protection_observed_at,omitempty"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 	Error                string     `json:"error,omitempty"`
+	// Managed marks a run whose account is an enabled execution.Binding; its
+	// reservation identity is fixed at approval and never re-read at execution.
+	Managed       bool   `gorm:"default:false" json:"-"`
+	PolicyID      string `json:"-"`
+	PolicyVersion string `json:"-"`
+	PortfolioID   string `json:"-"`
 }
 
 func (Run) TableName() string { return "planning_live_runs" }

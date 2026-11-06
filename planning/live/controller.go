@@ -17,6 +17,7 @@ import (
 	"nofx/planning"
 	"nofx/planning/core"
 	"nofx/trader/execution"
+	"nofx/trading/risk"
 )
 
 type Market interface {
@@ -26,6 +27,7 @@ type Controller struct {
 	DB       *gorm.DB
 	Factory  Factory
 	Market   Market
+	Risk     *risk.Store      // nil keeps the manual, unreserved behaviour
 	Now      func() time.Time // nil means UTC wall clock; tests inject it
 	mu       sync.Mutex
 	workers  map[string]context.CancelFunc
@@ -134,6 +136,25 @@ func (c *Controller) ApproveReplacing(ctx context.Context, user, planID, hash, p
 	if account == "" {
 		return View{}, errors.New("account identity unavailable")
 	}
+	// A managed account fixes its reservation identity now; execution never
+	// re-reads the policy, so a re-authorisation cannot change a live run.
+	var binding execution.Binding
+	managed := false
+	var policy risk.Policy
+	if err := c.DB.WithContext(ctx).Where("user_id = ? AND exchange_id = ? AND enabled = ?", user, d.ExchangeID, true).First(&binding).Error; err == nil {
+		managed = true
+		if c.Risk == nil {
+			return View{}, errors.New("managed account requires the risk store")
+		}
+		if policy, err = c.Risk.Policy(ctx, user, account); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return View{}, errors.New("managed account has no risk policy")
+			}
+			return View{}, err
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return View{}, err
+	}
 	// Resolve a previously closed trade using exchange reads before acquiring a
 	// new lease. The transaction below still arbitrates concurrent approvals.
 	var previousLease Lease
@@ -152,7 +173,10 @@ func (c *Controller) ApproveReplacing(ctx context.Context, user, planID, hash, p
 		return View{}, err
 	}
 	now := time.Now().UTC()
-	r := Run{ID: uuid.NewString(), UserID: user, ExchangeID: d.ExchangeID, AccountKey: account, PlanID: p.ID, PlanHash: p.Hash, ApprovalHash: digest(p, user, d.ExchangeID, account), State: "approved", PlanJSON: d.Body, OrdersJSON: "[]", ApprovedAt: now, UpdatedAt: now}
+	r := Run{ID: uuid.NewString(), UserID: user, ExchangeID: d.ExchangeID, AccountKey: account, PlanID: p.ID, PlanHash: p.Hash, ApprovalHash: digest(p, user, d.ExchangeID, account), State: "approved", PlanJSON: d.Body, OrdersJSON: "[]", ApprovedAt: now, UpdatedAt: now, Managed: managed}
+	if managed {
+		r.PolicyID, r.PolicyVersion, r.PortfolioID = policy.ID, policy.Version, policy.PortfolioID
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e = c.DB.Transaction(func(tx *gorm.DB) error {
@@ -169,7 +193,7 @@ func (c *Controller) ApproveReplacing(ctx context.Context, user, planID, hash, p
 			if v.PlanID == p.ID || v.State != "approved" || v.ID != replaceID || v.ApprovalHash != replaceHash {
 				return errors.New("An earlier trade is reserving this account. Review the current trade before confirming a new order.")
 			}
-			if er = retireUnusedApproval(tx, v, "cancelled", "Unused approval replaced by a newly confirmed order; no exchange order was submitted."); er != nil {
+			if er = retireUnusedApproval(tx, v, "cancelled", "Unused approval replaced by a newly confirmed order; no exchange order was submitted.", c.Risk); er != nil {
 				return er
 			}
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -228,6 +252,23 @@ func cid(run string, index int, role, quantity string) string {
 	h := sha256.Sum256([]byte(fmt.Sprintf("%s/%d/%s/%s", run, index, role, quantity)))
 	return hex.EncodeToString(h[:16])
 }
+
+// saveStarted persists the run start and its risk reservation in one
+// transaction: no order may be placed before the hold commits.
+func (c *Controller) saveStarted(v *View, now time.Time) error {
+	raw, err := json.Marshal(v.Orders)
+	if err != nil {
+		return err
+	}
+	v.OrdersJSON, v.UpdatedAt = string(raw), now
+	return c.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Run{}).Where("id = ? AND user_id = ?", v.ID, v.UserID).Updates(map[string]any{"state": v.State, "orders_json": v.OrdersJSON, "started_at": v.StartedAt, "deadline": v.Deadline, "protection_state": v.ProtectionState, "protection_observed_at": v.ProtectionObservedAt, "updated_at": v.UpdatedAt, "error": v.Error}).Error; err != nil {
+			return err
+		}
+		return c.reserveRisk(tx, v, now)
+	})
+}
+
 func (c *Controller) save(v *View) error {
 	raw, e := json.Marshal(v.Orders)
 	if e != nil {
@@ -378,9 +419,13 @@ func (c *Controller) Execute(ctx context.Context, user, id, hash string) (out Vi
 		}
 		v.Orders = append(v.Orders, intent)
 	}
-	if e = c.save(&v); e != nil {
+	started := v
+	if e = c.saveStarted(&started, now); e != nil {
+		// Nothing was placed: hand the approval back to the deferred retire path.
+		v.State, v.StartedAt, v.Deadline, v.Orders = "approved", nil, nil, nil
 		return v, e
 	}
+	v = started
 	c.launch(v.ID, user)
 	return v, nil
 }
@@ -464,6 +509,10 @@ func (c *Controller) StopContext(ctx context.Context, user, id, hash string) (Vi
 				return e
 			}
 			if e := tx.Where("run_id = ?", v.ID).Delete(&Lease{}).Error; e != nil {
+				return e
+			}
+			// A cancelled approval never submits, so its hold is terminal here.
+			if e := c.releaseRisk(tx, &v); e != nil {
 				return e
 			}
 			return tx.Model(&planning.Draft{}).Where("user_id = ? AND id = ?", user, v.PlanID).Update("status", "cancelled").Error
@@ -639,6 +688,10 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 				return true
 			}
 			if cmp(receipt.Filled, "0") > 0 {
+				// Record the exposure before the position leaves the reservation.
+				if er = c.exposeRisk(ctx, &v); er != nil {
+					attention("Risk exposure could not be recorded; further entries stopped")
+				}
 				break
 			} // protect a new fill before releasing another entry
 		}
@@ -696,6 +749,10 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 					return err
 				}
 				if err = tx.Where("run_id = ?", v.ID).Delete(&Lease{}).Error; err != nil {
+					return err
+				}
+				// This branch completes the run too, so it owes the same release.
+				if err = c.releaseRisk(tx, &v); err != nil {
 					return err
 				}
 				return tx.Model(&planning.Draft{}).Where("user_id = ? AND id = ?", user, v.PlanID).Update("status", "completed").Error

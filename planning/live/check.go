@@ -160,6 +160,10 @@ func (c *Controller) complete(v *View) error {
 		if err := tx.Where("run_id = ? AND user_id = ?", v.ID, v.UserID).Delete(&Lease{}).Error; err != nil {
 			return err
 		}
+		// Completion is the terminal proof that frees the account's hold.
+		if err := c.releaseRisk(tx, v); err != nil {
+			return err
+		}
 		return tx.Model(&planning.Draft{}).Where("user_id = ? AND id = ?", v.UserID, v.PlanID).Update("status", "completed").Error
 	})
 }

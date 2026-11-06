@@ -60,6 +60,9 @@ func (s *Store) ReserveTx(ctx context.Context, tx *gorm.DB, r Reservation, now t
 	if err := r.Validate(); err != nil {
 		return err
 	}
+	if r.State != StateReserved {
+		return errors.New("risk: a new reservation must start reserved")
+	}
 	now = now.UTC()
 	day := now.Format(ledgerDayLayout)
 

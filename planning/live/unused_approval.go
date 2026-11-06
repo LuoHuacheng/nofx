@@ -1,16 +1,18 @@
 package live
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"gorm.io/gorm"
 	"nofx/planning"
+	"nofx/trading/risk"
 )
 
 // Callers hold the run lock. Only an approval with no persisted submission
 // intent can be retired locally; exchange orders are never touched here.
-func retireUnusedApproval(tx *gorm.DB, v View, state, reason string) error {
+func retireUnusedApproval(tx *gorm.DB, v View, state, reason string, store *risk.Store) error {
 	if v.State != "approved" || v.StartedAt != nil || len(v.Orders) != 0 {
 		return errors.New("This trade has started. Verify its exchange orders before choosing another entry.")
 	}
@@ -25,12 +27,18 @@ func retireUnusedApproval(tx *gorm.DB, v View, state, reason string) error {
 	if err := tx.Where("account_key = ? AND run_id = ? AND user_id = ?", v.AccountKey, v.ID, v.UserID).Delete(&Lease{}).Error; err != nil {
 		return err
 	}
+	// An approval that never submitted is terminal; its hold must not survive.
+	if v.Managed && store != nil {
+		if err := store.ReleaseTx(context.Background(), tx, v.ID); err != nil {
+			return err
+		}
+	}
 	return tx.Model(&planning.Draft{}).Where("user_id = ? AND id = ?", v.UserID, v.PlanID).Update("status", state).Error
 }
 
 func (c *Controller) retireUnusedApproval(v *View, state, reason string) error {
 	if err := c.DB.Transaction(func(tx *gorm.DB) error {
-		return retireUnusedApproval(tx, *v, state, reason)
+		return retireUnusedApproval(tx, *v, state, reason, c.Risk)
 	}); err != nil {
 		return err
 	}

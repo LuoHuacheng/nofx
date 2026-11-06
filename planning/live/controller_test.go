@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm/logger"
 	"nofx/planning"
 	"nofx/planning/core"
+	"nofx/trader/execution"
+	"nofx/trading/risk"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -495,4 +497,39 @@ func TestMarketIntentAndReceiptCannotBecomeRestingLimit(t *testing.T) {
 	if validateIntent(v) == nil {
 		t.Fatal("persisted market intent became a resting limit")
 	}
+}
+
+// managedRisk installs a permissive risk policy so a fixture that binds a
+// managed account can pass the approval gate. Permissive on purpose: those
+// tests exercise protection and exit behaviour, not the risk gate.
+func managedRisk(t *testing.T, c *Controller, venue string, equity execution.Decimal) *risk.Store {
+	t.Helper()
+	store, e := risk.NewStore(c.DB)
+	if e != nil {
+		t.Fatal(e)
+	}
+	c.Risk = store
+	acct := execution.ManagedAccount{
+		AccountKey: "account", Venue: venue, Environment: execution.EnvironmentLive,
+		Equity: equity, Available: equity,
+	}
+	// A live day start only completes when it was observed within DayStartGrace
+	// of 00:00 UTC, so the fixture proves it explicitly and then records a
+	// fresh baseline that the staleness check accepts.
+	dayStart := time.Now().UTC().Truncate(24 * time.Hour).Add(time.Second)
+	if e = store.Observe(context.Background(), acct, nil, dayStart); e != nil {
+		t.Fatal(e)
+	}
+	if e = store.Observe(context.Background(), acct, nil, time.Now().UTC()); e != nil {
+		t.Fatal(e)
+	}
+	p := risk.DefaultPolicy("alice", "account", "portfolio", venue, execution.EnvironmentLive)
+	p.Symbols = []string{"BTCUSDT"}
+	if p.Version, e = risk.PolicyVersion(p); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = store.PutPolicy(context.Background(), p); e != nil {
+		t.Fatal(e)
+	}
+	return store
 }
