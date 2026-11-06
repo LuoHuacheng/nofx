@@ -24,11 +24,20 @@ type managedTestVenue struct {
 	accountErr   error
 	amendErr     error
 	exitAckLost  bool
+	cancelEntErr error
 	beforeExit   func()
 	amended      []execution.Order
 }
 
 func (v *managedTestVenue) RouteClientID(id string) (string, error) { return id, nil }
+
+// CancelExecutionOrder can fail for an entry so cancellation stays unconfirmed.
+func (v *managedTestVenue) CancelExecutionOrder(ctx context.Context, o Order) error {
+	if v.cancelEntErr != nil && o.Role == "entry" {
+		return v.cancelEntErr
+	}
+	return v.testNOFXTrader.CancelExecutionOrder(ctx, o)
+}
 
 func (v *managedTestVenue) PrepareExecutionLeverage(context.Context, string, int) error {
 	return nil
@@ -391,4 +400,91 @@ func TestMoveStopRequiresAnOpenRun(t *testing.T) {
 	if _, err := c.MoveStop(context.Background(), "alice", v.ID, "99500"); err == nil {
 		t.Fatal("a stop was moved on an unapproved-live run")
 	}
+}
+
+// managedRestingEntry leaves the first entry partially filled with the rest
+// still live at the venue, together with its protection pair.
+func managedRestingEntry(t *testing.T) (*Controller, *testBroker, *managedTestVenue, View) {
+	t.Helper()
+	c, b, venue, p, _ := managedSetup(t, "limit")
+	v := started(t, c, p)
+	c.step(context.Background(), "alice", v.ID)
+	entryFilled(t, c, b, v.ID, "PARTIALLY_FILLED", "0.003", "0.003")
+	c.step(context.Background(), "alice", v.ID) // submits the stop and target
+	c.step(context.Background(), "alice", v.ID) // confirms them at the venue
+	v, err := c.Get("alice", v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c, b, venue, v
+}
+
+// The venue position may hold size this run never opened. Only the run's own
+// exposure may be exited, and the persisted order must stay decodable.
+func TestManagedExitClampsToRunExposure(t *testing.T) {
+	c, b, _, v := managedProtected(t, "limit")
+	basket := v.Plan.Quantity
+	b.mu.Lock()
+	b.account.Position = "0.05"
+	b.mu.Unlock()
+	if _, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline"); err == nil {
+		t.Fatal("a position above this run's exposure was reported flat")
+	}
+	exits := exitOrders(b)
+	if len(exits) != 1 || cmp(exits[0].Quantity, basket) != 0 {
+		t.Fatalf("exit closed %v instead of this run's exposure %v", exits, basket)
+	}
+	if _, err := c.Get("alice", v.ID); err != nil {
+		t.Fatal("the persisted exit no longer decodes:", err)
+	}
+	if _, err := c.ListContext(context.Background(), "alice"); err != nil {
+		t.Fatal("one clamped exit broke every run of the user:", err)
+	}
+}
+
+// A live entry would fill after the exit with no supervisor left to cancel it.
+func TestManagedExitCancelsEntries(t *testing.T) {
+	t.Run("an unconfirmed entry cancellation blocks the exit", func(t *testing.T) {
+		c, b, venue, v := managedRestingEntry(t)
+		venue.cancelEntErr = errors.New("cancel timeout")
+		if _, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline"); err == nil {
+			t.Fatal("an exit was sent while an entry was still live")
+		}
+		if len(exitOrders(b)) != 0 {
+			t.Fatal("the exit reached the venue before the entry was cancelled")
+		}
+		got, err := c.Get("alice", v.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.State != runHaltedUnknown {
+			t.Fatalf("run is %q, not halted", got.State)
+		}
+		var leases int64
+		c.DB.Model(&Lease{}).Count(&leases)
+		if leases != 1 {
+			t.Fatal("the halted run released its account")
+		}
+	})
+	t.Run("an acknowledged cancellation releases the exit", func(t *testing.T) {
+		c, b, _, v := managedRestingEntry(t)
+		entryID := v.Orders[0].ClientID
+		got, err := c.Flatten(context.Background(), "alice", v.ID, "protection deadline")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.State != "completed" {
+			t.Fatalf("run is %q, not completed", got.State)
+		}
+		b.mu.Lock()
+		cancelled := strings.Join(b.cancelled, ",")
+		entry := b.orders[entryID]
+		b.mu.Unlock()
+		if !strings.Contains(cancelled, entryID) || entry.Status != "CANCELED" {
+			t.Fatalf("the live entry was not cancelled: %s %+v", cancelled, entry)
+		}
+		if exits := exitOrders(b); len(exits) != 1 || cmp(exits[0].Quantity, "0.003") != 0 {
+			t.Fatalf("exit did not close this run's exposure: %v", exits)
+		}
+	})
 }

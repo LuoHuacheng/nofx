@@ -132,6 +132,52 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 		if c.isStopped() {
 			return v, errors.New("Service is shutting down; no exit was sent")
 		}
+		// A resting entry would fill after the exit, and the halted run has no
+		// supervisor left to cancel it: cancel this run's entries first.
+		entries := len(v.Plan.Orders)
+		if entries == 0 {
+			entries = 1
+		}
+		for i := 0; i < entries; i++ {
+			o := &v.Orders[i]
+			if o.Status == "scheduled" {
+				o.Status = "CANCELED"
+				continue
+			}
+			if closeOrderTerminal(o.Status) {
+				continue
+			}
+			observed, er := broker.Lookup(ctx, *o)
+			if er != nil || !validReceipt(*o, observed) || (o.OrderID != "" && o.OrderID != observed.OrderID) {
+				return c.halt(&v, "A live entry could not be confirmed before the exit. No exit was sent; check exchange orders.")
+			}
+			*o = observed
+			switch observed.Status {
+			case "NEW", "PARTIALLY_FILLED":
+				if er = broker.Cancel(ctx, observed); er != nil {
+					return c.halt(&v, "An entry cancellation is unconfirmed before the exit. No exit was sent; check exchange orders.")
+				}
+				o.Status = "CANCELED"
+			default:
+				if !closeOrderTerminal(observed.Status) {
+					return c.halt(&v, "An entry is still open at the exchange. No exit was sent; reconcile it first.")
+				}
+			}
+		}
+		if err = c.save(&v); err != nil {
+			return v, err
+		}
+		// The venue position may hold size this run never opened (a manual trade,
+		// another hedge side, an over-filled basket); only the run's remaining
+		// exposure may be closed, and it must still be non-zero.
+		exposure := filledExposure(v.Orders)
+		if cmp(exposure, "0") <= 0 {
+			return c.halt(&v, "The live position is not this run's remaining exposure. Check the exchange before this account is reused.")
+		}
+		quantity := position
+		if cmp(quantity, exposure) > 0 {
+			quantity = exposure
+		}
 		generation := 0
 		for _, o := range v.Orders {
 			if o.Role == "exit" {
@@ -139,7 +185,7 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 			}
 		}
 		// The position side keeps the exit direction of this run's protectors.
-		exit := Order{ClientID: cid(v.ID, generation+1, "exit", ""), Role: "exit", Type: "market", ReduceOnly: true, Symbol: symbol, Side: v.Plan.Idea.Side, Price: v.Plan.Idea.Entry, Quantity: position, Status: "submitting", Filled: "0", Error: reason}
+		exit := Order{ClientID: cid(v.ID, generation+1, "exit", ""), Role: "exit", Type: "market", ReduceOnly: true, Symbol: symbol, Side: v.Plan.Idea.Side, Price: v.Plan.Idea.Entry, Quantity: quantity, Status: "submitting", Filled: "0", Error: reason}
 		if exit, err = routedOrder(broker, exit); err != nil {
 			return v, errors.New("Exit route is unconfirmed; no exit was sent")
 		}
