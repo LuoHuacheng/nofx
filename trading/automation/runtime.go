@@ -215,9 +215,15 @@ type freezeState struct {
 
 // freeze stops new entries for one account. Protection supervision keeps
 // running, because abandoning a live stop-loss would be worse than the fault.
+// A weaker freeze never replaces a stronger one: otherwise a transient risk
+// fault could overwrite a safety stop that only a human or a restart may lift.
 func (r *Runtime) freeze(accountKey, reason string, kind int) {
 	r.mu.Lock()
 	previous, had := r.frozen[accountKey]
+	if had && previous.kind <= kind {
+		r.mu.Unlock()
+		return
+	}
 	r.frozen[accountKey] = freezeState{reason: reason, kind: kind}
 	r.mu.Unlock()
 	if had && previous.reason == reason && previous.kind == kind {
@@ -233,6 +239,14 @@ func (r *Runtime) thaw(accountKey string, kind int) {
 	if current, ok := r.frozen[accountKey]; ok && current.kind == kind {
 		delete(r.frozen, accountKey)
 	}
+}
+
+// frozenKind reports the kind of the active freeze, if any.
+func (r *Runtime) frozenKind(accountKey string) (int, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current, ok := r.frozen[accountKey]
+	return current.kind, ok
 }
 
 func (r *Runtime) frozenReason(accountKey string) (string, bool) {
@@ -292,14 +306,19 @@ func (r *Runtime) Tick(ctx context.Context, user, accountKey string) error {
 	if r.reconciling(accountKey) {
 		return nil
 	}
-	if _, frozen := r.frozenReason(accountKey); frozen {
+	// A source freeze only pauses new signals, so the attempt below must still
+	// run: a successful read is what lifts it. Safety and risk freezes stop it.
+	if kind, frozen := r.frozenKind(accountKey); frozen && kind != freezeSignal {
 		return nil
 	}
 	if state.lastSignal.IsZero() || now.Sub(state.lastSignal) >= SignalInterval {
 		state.lastSignal = now
 		if err := r.signal(ctx, user, accountKey); err != nil {
 			if errors.Is(err, ErrNoSignal) {
+				// The source answered, it simply has no idea: that is a healthy
+				// read and must lift a source freeze like any other success.
 				state.signalFailures = 0
+				r.thaw(accountKey, freezeSignal)
 				return nil
 			}
 			// A failing source pauses new signals after SignalFailureTolerance

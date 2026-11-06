@@ -132,13 +132,18 @@ func (m *automationMarket) Snapshot(_ context.Context, _, _ string) (core.Snapsh
 
 // automationSource hands out one pre-built signal, or ErrNoSignal.
 type automationSource struct {
-	mu      sync.Mutex
-	signals []Signal
+	mu       sync.Mutex
+	signals  []Signal
+	failures int
 }
 
 func (s *automationSource) Next(context.Context, risk.Policy) (Signal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.failures > 0 {
+		s.failures--
+		return Signal{}, errors.New("automation: the model is unavailable")
+	}
 	if len(s.signals) == 0 {
 		return Signal{}, ErrNoSignal
 	}
@@ -473,5 +478,30 @@ func TestFreezeKindsAreIsolated(t *testing.T) {
 	}
 	if reason, frozen := rt.frozenReason("account"); !frozen || reason == "" {
 		t.Fatal("the external-position freeze was cleared by a healthy risk read")
+	}
+}
+
+// TestSignalFreezePausesOnlyNewSignals proves a source failure stops entries
+// without becoming permanent: the next successful read lifts it.
+func TestSignalFreezePausesOnlyNewSignals(t *testing.T) {
+	rig := rig(t, nil)
+	rig.source.failures = SignalFailureTolerance
+	rt := rig.runtime(t, rig.source)
+	ctx := context.Background()
+	for i := 0; i < SignalFailureTolerance; i++ {
+		if err := rt.Tick(ctx, "alice", "account"); err == nil {
+			t.Fatal("a failing source reported success")
+		}
+		rig.advance(SignalInterval)
+	}
+	if kind, frozen := rt.frozenKind("account"); !frozen || kind != freezeSignal {
+		t.Fatalf("source failures did not freeze new signals: kind=%d frozen=%v", kind, frozen)
+	}
+	// The frozen source recovers: one good round must clear the pause.
+	if err := rt.Tick(ctx, "alice", "account"); err != nil {
+		t.Fatalf("a recovered source stayed frozen: %v", err)
+	}
+	if _, frozen := rt.frozenKind("account"); frozen {
+		t.Fatal("a successful signal read did not lift the source freeze")
 	}
 }

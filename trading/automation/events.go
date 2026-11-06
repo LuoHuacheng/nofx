@@ -88,7 +88,9 @@ func (r *Runtime) Ingest(ctx context.Context, user, accountKey string, events []
 		return err
 	}
 	if err := r.superviseRuns(ctx, user, accountKey); err != nil {
-		r.freeze(accountKey, err.Error(), freezeRisk)
+		// A run-reconcile failure is a safety stop, exactly as in Tick: a
+		// healthy risk read must not lift it.
+		r.freeze(accountKey, err.Error(), freezeSafety)
 		return err
 	}
 	return nil
