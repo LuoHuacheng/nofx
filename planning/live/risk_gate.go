@@ -120,3 +120,25 @@ func (c *Controller) checkRisk(ctx context.Context, v *View) error {
 	}
 	return c.applyRisk(v, decision)
 }
+
+// checkPolicy re-reads the automation policy immediately before any submission,
+// so a disabled policy or a version change stops orders that were already planned.
+func (c *Controller) checkPolicy(ctx context.Context, v *View) error {
+	if !v.Managed || v.AuthorizationMode != "policy" {
+		return nil
+	}
+	if c.Risk == nil {
+		return errors.New("managed account requires the risk store")
+	}
+	p, err := c.Risk.Policy(ctx, v.UserID, v.AccountKey)
+	if err != nil {
+		return err
+	}
+	if !p.Enabled {
+		return errors.New("automation policy is disabled")
+	}
+	if p.Version != v.PolicyVersion {
+		return errors.New("automation policy version changed; re-authorize")
+	}
+	return nil
+}

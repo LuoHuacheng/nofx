@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"nofx/planning"
 	"nofx/planning/core"
@@ -47,8 +46,12 @@ func New(db *gorm.DB, f Factory, m Market) (*Controller, error) {
 	}
 	return c, nil
 }
+
+// liveExecutionText pins the execution semantics a manual approval covers.
+const liveExecutionText = "LIVE/GTC/%dx/fixed-limit/partial-fill-reduce-only-protection/no-strategy"
+
 func digest(p core.Plan, user, exchange, account string) string {
-	raw, _ := json.Marshal([]any{p.Hash, user, exchange, account, fmt.Sprintf("LIVE/GTC/%dx/fixed-limit/partial-fill-reduce-only-protection/no-strategy", p.Constraints.EffectiveLeverage())})
+	raw, _ := json.Marshal([]any{p.Hash, user, exchange, account, fmt.Sprintf(liveExecutionText, p.Constraints.EffectiveLeverage())})
 	h := sha256.Sum256(raw)
 	return hex.EncodeToString(h[:])
 }
@@ -58,7 +61,7 @@ func decode(r Run) (View, error) {
 	if json.Unmarshal([]byte(r.PlanJSON), &p) != nil || json.Unmarshal([]byte(r.OrdersJSON), &orders) != nil {
 		return View{}, errors.New("invalid persisted live plan")
 	}
-	if p.Hash != r.PlanHash || p.Digest() != p.Hash || digest(p, r.UserID, r.ExchangeID, r.AccountKey) != r.ApprovalHash {
+	if p.Hash != r.PlanHash || p.Digest() != p.Hash || r.approvalDigest(p) != r.ApprovalHash {
 		return View{}, errors.New("persisted approval digest mismatch")
 	}
 	view := View{Run: r, Plan: p, Orders: orders}
@@ -101,120 +104,13 @@ func (c *Controller) ListContext(ctx context.Context, user string) ([]View, erro
 	return out, nil
 }
 func (c *Controller) Approve(ctx context.Context, user, planID, hash, phrase string) (View, error) {
-	return c.ApproveReplacing(ctx, user, planID, hash, phrase, "", "")
+	return c.approve(ctx, approvalRequest{User: user, PlanID: planID, Hash: hash, Phrase: phrase})
 }
 
 // Replacement is bound to the exact unused approval shown during the user's
 // new order review. Concurrent or started trades cannot be replaced.
 func (c *Controller) ApproveReplacing(ctx context.Context, user, planID, hash, phrase, replaceID, replaceHash string) (View, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	if phrase != "APPROVE LIVE" {
-		return View{}, errors.New("Type APPROVE LIVE to approve live trading")
-	}
-	var d planning.Draft
-	if e := c.DB.Where("user_id = ? AND id = ?", user, planID).First(&d).Error; e != nil {
-		return View{}, errors.New("plan not found or not owned")
-	}
-	var p core.Plan
-	if json.Unmarshal([]byte(d.Body), &p) != nil || p.Hash != hash {
-		return View{}, errors.New("full plan hash required")
-	}
-	if e := p.Verify(time.Now().UTC()); e != nil {
-		return View{}, e
-	}
-	if p.Constraints.PlanningOnly {
-		return View{}, errors.New(EquityPreviewReviewMessage)
-	}
-	broker, account, e := c.Factory(ctx, user, d.ExchangeID)
-	if e != nil {
-		return View{}, e
-	}
-	if broker.Venue() != p.Snapshot.Venue {
-		return View{}, errors.New("Plan venue differs from the trading account. Generate a new plan.")
-	}
-	if account == "" {
-		return View{}, errors.New("account identity unavailable")
-	}
-	// A managed account fixes its reservation identity now; execution never
-	// re-reads the policy, so a re-authorisation cannot change a live run.
-	var binding execution.Binding
-	managed := false
-	var policy risk.Policy
-	if err := c.DB.WithContext(ctx).Where("user_id = ? AND exchange_id = ? AND enabled = ?", user, d.ExchangeID, true).First(&binding).Error; err == nil {
-		managed = true
-		if c.Risk == nil {
-			return View{}, errors.New("managed account requires the risk store")
-		}
-		if policy, err = c.Risk.Policy(ctx, user, account); err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return View{}, errors.New("managed account has no risk policy")
-			}
-			return View{}, err
-		}
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return View{}, err
-	}
-	// Resolve a previously closed trade using exchange reads before acquiring a
-	// new lease. The transaction below still arbitrates concurrent approvals.
-	var previousLease Lease
-	if err := c.DB.Where("account_key = ?", account).First(&previousLease).Error; err == nil {
-		if previousLease.UserID == user {
-			if _, err = c.CheckStatus(ctx, user, previousLease.RunID); err != nil {
-				return View{}, err
-			}
-			lock := c.runLock(previousLease.RunID)
-			if err = lock.LockContext(ctx); err != nil {
-				return View{}, err
-			}
-			defer lock.Unlock()
-		}
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return View{}, err
-	}
-	now := time.Now().UTC()
-	r := Run{ID: uuid.NewString(), UserID: user, ExchangeID: d.ExchangeID, AccountKey: account, PlanID: p.ID, PlanHash: p.Hash, ApprovalHash: digest(p, user, d.ExchangeID, account), State: "approved", PlanJSON: d.Body, OrdersJSON: "[]", ApprovedAt: now, UpdatedAt: now, Managed: managed}
-	if managed {
-		r.PolicyID, r.PolicyVersion, r.PortfolioID = policy.ID, policy.Version, policy.PortfolioID
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e = c.DB.Transaction(func(tx *gorm.DB) error {
-		var lease Lease
-		if err := tx.Where("account_key = ?", account).First(&lease).Error; err == nil {
-			var previous Run
-			if lease.RunID != previousLease.RunID || lease.UserID != user || tx.Where("id = ? AND user_id = ?", lease.RunID, user).First(&previous).Error != nil {
-				return errors.New("Account approval changed. Refresh and review the order again.")
-			}
-			v, er := decode(previous)
-			if er != nil {
-				return er
-			}
-			if v.PlanID == p.ID || v.State != "approved" || v.ID != replaceID || v.ApprovalHash != replaceHash {
-				return errors.New("An earlier trade is reserving this account. Review the current trade before confirming a new order.")
-			}
-			if er = retireUnusedApproval(tx, v, "cancelled", "Unused approval replaced by a newly confirmed order; no exchange order was submitted.", c.Risk); er != nil {
-				return er
-			}
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		res := tx.Model(&planning.Draft{}).Where("user_id = ? AND id = ? AND status = ?", user, p.ID, "draft").Update("status", "approved")
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected != 1 {
-			return errors.New("only an unchanged draft can be approved")
-		}
-		if er := tx.Create(&Lease{AccountKey: account, RunID: r.ID, UserID: user, ExchangeID: d.ExchangeID}).Error; er != nil {
-			return errors.New("An earlier trade is reserving this account. Open Positions & orders to check its status or cancel its unused approval.")
-		}
-		return tx.Create(&r).Error
-	})
-	if e != nil {
-		return View{}, e
-	}
-	return decode(r)
+	return c.approve(ctx, approvalRequest{User: user, PlanID: planID, Hash: hash, Phrase: phrase, ReplaceID: replaceID, ReplaceHash: replaceHash})
 }
 func decimal(d core.Decimal) (*big.Rat, error) {
 	if !nativeDecimal.MatchString(string(d)) {
@@ -440,6 +336,14 @@ func (c *Controller) Execute(ctx context.Context, user, id, hash string) (out Vi
 		return v, e
 	}
 	v = started
+	// An automatic authorization is void once its policy is disabled or
+	// revised; the hold is released because nothing was submitted.
+	if e = c.checkPolicy(ctx, &v); e != nil {
+		if fail := c.failStarted(&v); fail != nil {
+			return v, fmt.Errorf("%w; could not record the refusal: %v", e, fail)
+		}
+		return v, e
+	}
 	if e = c.checkRisk(ctx, &v); e != nil {
 		// The hold is committed but nothing was submitted yet: persist the
 		// refusal and release it in one transaction, then report the reason.
@@ -705,6 +609,12 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 			}
 			if er = core.CheckBook(v.Plan, book, time.Now().UTC()); er != nil {
 				attention("Market no longer satisfies the locked plan:" + er.Error())
+				break
+			}
+			// Revocation is checked against the venue-side policy right before
+			// the order leaves the process, not only when the run started.
+			if er = c.checkPolicy(ctx, &v); er != nil {
+				attention("Automation policy revoked; further entries stopped: " + er.Error())
 				break
 			}
 			o.Status = "submitting"

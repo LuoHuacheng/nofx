@@ -42,7 +42,7 @@ type Run struct {
 	ID           string     `gorm:"primaryKey" json:"id"`
 	UserID       string     `gorm:"index;not null" json:"-"`
 	ExchangeID   string     `gorm:"index;not null" json:"exchange_id"`
-	AccountKey   string     `json:"-"`
+	AccountKey   string     `gorm:"uniqueIndex:managed_policy_signal,where:authorization_mode = 'policy' AND signal_id <> ''" json:"-"`
 	PlanID       string     `gorm:"index;not null" json:"plan_id"`
 	PlanHash     string     `json:"plan_hash"`
 	ApprovalHash string     `json:"approval_hash"`
@@ -64,6 +64,10 @@ type Run struct {
 	PolicyID      string `json:"-"`
 	PolicyVersion string `json:"-"`
 	PortfolioID   string `json:"-"`
+	// AuthorizationMode "policy" marks an automatic authorization bound to a
+	// policy version and a signal; empty is a historical human approval.
+	AuthorizationMode string `json:"-"`
+	SignalID          string `gorm:"uniqueIndex:managed_policy_signal,where:authorization_mode = 'policy' AND signal_id <> ''" json:"-"`
 }
 
 func (Run) TableName() string { return "planning_live_runs" }
