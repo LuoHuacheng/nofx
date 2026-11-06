@@ -78,6 +78,14 @@ func (r *Runtime) Recover(ctx context.Context, user, accountKey string) error {
 		}
 	}
 
+	// A flat account with no unresolved exit is the one fact that lifts a
+	// safety freeze: the position it was protecting is gone. Anything else
+	// keeps the freeze, so an unknown state is never reset by assumption.
+	if reason, frozen := r.frozenReason(accountKey); frozen && flatAccount(account) && !unresolvedExit(views, accountKey) {
+		logger.Infof("automation: %s recovered flat, lifting the safety freeze: %s", accountKey, reason)
+		r.thaw(accountKey, freezeSafety)
+	}
+
 	now := r.clock()
 	if err := r.risks.Observe(ctx, account, nil, now); err != nil {
 		r.freeze(accountKey, err.Error(), freezeSafety)
@@ -149,4 +157,26 @@ func (r *Runtime) checkExternal(ctx context.Context, account execution.ManagedAc
 		}
 	}
 	return nil
+}
+
+// flatAccount reports whether the venue holds no position at all. A quantity
+// this process cannot read counts as a position, not as flat.
+func flatAccount(account execution.ManagedAccount) bool {
+	for _, p := range account.Positions {
+		qty, err := execution.Number(string(p.Quantity))
+		if err != nil || qty.Sign() != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// unresolvedExit reports a run whose exit client ID was never confirmed.
+func unresolvedExit(views []live.View, accountKey string) bool {
+	for _, v := range views {
+		if v.AccountKey == accountKey && v.State == "halted_unknown" {
+			return true
+		}
+	}
+	return false
 }

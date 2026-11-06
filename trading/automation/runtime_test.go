@@ -423,6 +423,31 @@ func TestRecoveryExternalPosition(t *testing.T) {
 
 func contains(s, want string) bool { return strings.Contains(s, want) }
 
+// TestRecoveryLiftsSafetyFreezeWhenFlat proves the only automatic exit from a
+// safety freeze: the venue holds nothing and no exit is unresolved.
+func TestRecoveryLiftsSafetyFreezeWhenFlat(t *testing.T) {
+	rig := rig(t, nil)
+	rig.venue.snapshot.Positions = []execution.ManagedPosition{{Symbol: "ETHUSDT", Side: "long", Quantity: "1.5", Entry: "4000", Mark: "4000"}}
+	rt := rig.runtime(t, nil)
+	if err := rt.Recover(context.Background(), "alice", "account"); err == nil {
+		t.Fatal("recovery adopted a position no run owns")
+	}
+	if _, frozen := rt.frozenReason("account"); !frozen {
+		t.Fatal("an external position did not freeze new entries")
+	}
+	// The operator closes the position by hand; the next recovery sees flat.
+	rig.venue.snapshot.Positions = nil
+	if err := rt.Recover(context.Background(), "alice", "account"); err != nil {
+		t.Fatalf("a flat account stayed frozen: %v", err)
+	}
+	if reason, frozen := rt.frozenReason("account"); frozen {
+		t.Fatalf("a flat account kept the safety freeze: %s", reason)
+	}
+	if rig.venue.placeCount() != 0 {
+		t.Fatal("recovery placed an order")
+	}
+}
+
 // TestRecoveryHaltedUnknownStaysFrozen proves an unresolved exit is never
 // replayed: the run stays halted, the account stays frozen, and no entry is
 // submitted on the same tick or the next one.
