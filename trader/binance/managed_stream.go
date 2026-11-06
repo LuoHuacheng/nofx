@@ -12,11 +12,12 @@ import (
 	"nofx/trader/execution"
 )
 
-// binanceStreamPing is the venue's user-stream keepalive cadence. The listen key
-// itself expires after 60 minutes unless it is extended, so a healthy socket
-// must keep both the ping and the extension running.
+// Binance user-stream keepalive. The listen key itself expires after 60 minutes
+// unless it is extended, so a healthy socket needs the extension running. No
+// client-side ping is needed: golang.org/x/net/websocket answers a venue ping
+// frame with a pong inside its own read loop (websocket/hybi.go), so an unused
+// ping cadence here would only be a constant nobody honours.
 const (
-	binanceStreamPing       = 3 * time.Minute
 	binanceListenKeyExtend  = 30 * time.Minute
 	binanceStreamBackoff    = 5 * time.Second
 	binanceStreamMaxBackoff = time.Minute

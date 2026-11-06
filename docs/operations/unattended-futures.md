@@ -46,7 +46,7 @@
 | `state=paused`，reason 含 `daily loss` | 当日亏损触阈 | 复盘后 `reset`（带闩锁版本），并检查策略参数。 |
 | `state=paused`，reason 含 `drawdown` | 峰值回撤触阈 | 复位只对日亏损有效；回撤需要人工评估是否重建账户基准。 |
 | `protection_state=exit_required` | 保护缺失或与计划不符 | 立即 `flatten`；这是唯一被允许的自动减仓入口。 |
-| `ledger_complete=false` | 当日权益账本有未补页的窗口 | 保持只读，等待 REST 补偿补齐；不要手工改账本。 |
+| `ledger_complete=false` | 当日权益账本有未补页的窗口 | 保持只读，等待 REST 补偿补齐；不要手工改账本。若冻结原因含 `did not finish within one reconcile`，说明单次对账超过 200 页（约 20 万条 Binance income 或 2 万条 OKX 账单），REST 补偿永远追不上：先确认交易所账单接口是否异常，再按日志里的时间窗口人工补账，**不要**直接 reset。 |
 | `last_ws` 长期不更新 | 私有事件通道掉线 | 正常：REST 每 10s 补偿仍在跑；检查日志中 `PrivateEvents` 能力与重连告警。 |
 
 ## 5. 凭据轮换

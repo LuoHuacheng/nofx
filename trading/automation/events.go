@@ -23,8 +23,12 @@ const EventOverlap = 60 * time.Second
 // spin forever inside a supervision tick. A window larger than the page budget
 // therefore stays incomplete and keeps the account frozen: the operator sees
 // it in `status`, and the alternative — advancing a cursor over unread rows —
-// would silently skip money movements.
-const historyPageLimit = 50
+// would silently skip money movements. The budget is generous on purpose (200
+// pages is 200k Binance income rows or 20k OKX bills per reconcile), so tripping
+// it means the venue is answering abnormally, not that the account is busy;
+// `docs/operations/unattended-futures.md` §4 states the manual recovery, because
+// waiting for the next tick never clears it.
+const historyPageLimit = 200
 
 // EventCursor records the last fully read window for one account and venue.
 // Category is the venue: a reader returns every record type it owns, so one

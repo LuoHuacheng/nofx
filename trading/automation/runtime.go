@@ -284,9 +284,6 @@ func (r *Runtime) freeze(accountKey, reason string, kind int) {
 	}
 	r.frozen[accountKey] = freezeState{reason: reason, kind: kind}
 	r.mu.Unlock()
-	if had && previous.reason == reason && previous.kind == kind {
-		return
-	}
 	logger.Warnf("automation: %s frozen for new entries: %s", accountKey, reason)
 	// A freeze is only auditable if it outlives the process: the outbox row is
 	// written best-effort, and a failure here must not weaken the freeze itself.

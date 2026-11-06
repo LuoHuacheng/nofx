@@ -237,11 +237,12 @@ func TestManagedReplayMatchesTheFullFixture(t *testing.T) {
 	}
 }
 
-// TestManagedEventsPartialFillWakeup proves an event wakes protection in the
-// same call instead of waiting for the reconcile tick.
 // TestManagedEventsStreamReachesProtection drives the real stream path: the
 // fixture venue pushes a fill through Events, the runtime ingests it, and the
 // affected account is re-read without waiting for the REST cadence.
+// Wakeup latency is bounded by ReconcileInterval, not immediate: Ingest reuses
+// the reconcile slot (see TestManagedEventsBurstRespectsCadence), so a burst of
+// fills costs one venue read per window.
 func TestManagedEventsStreamReachesProtection(t *testing.T) {
 	r := rig(t, &automationSource{})
 	r.venue.stream = make(chan execution.AccountEvent)
