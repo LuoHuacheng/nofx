@@ -201,15 +201,16 @@ func latchBreach(tx *gorm.DB, accountKey, portfolioID, reason string, decision *
 	return nil
 }
 
-// writeLatchTx records a latch. A stronger action replaces a weaker one; a
-// weaker action never replaces a stronger one, and an unchanged active latch
-// keeps its version so a reset's expected version stays valid.
+// writeLatchTx records a latch. While the existing latch is active a stronger
+// action replaces a weaker one and a weaker one is ignored; a reset row is inert,
+// so any new latch may take it over. An unchanged active latch keeps its version
+// so a reset's expected version stays valid.
 func writeLatchTx(tx *gorm.DB, scope, scopeID, action, reason string, now time.Time) error {
 	var existing Breaker
 	err := tx.Where("scope = ? AND scope_id = ?", scope, scopeID).First(&existing).Error
 	switch {
 	case err == nil:
-		if existing.Action == ActionFlatten && action != ActionFlatten {
+		if existing.ResetAt.IsZero() && existing.Action == ActionFlatten && action != ActionFlatten {
 			return nil
 		}
 		if existing.ResetAt.IsZero() && existing.Action == action {

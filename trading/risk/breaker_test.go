@@ -244,3 +244,31 @@ func TestRiskBreakerPauseAndOwner(t *testing.T) {
 		t.Fatalf("a paused account reported %q", decision.Action)
 	}
 }
+
+// TestRiskBreakerPauseAfterReset pins that a reset row is inert: the operator's
+// pause must still latch, or an acknowledged incident would silently leave the
+// account free to submit entries.
+func TestRiskBreakerPauseAfterReset(t *testing.T) {
+	ctx := context.Background()
+	store, db, _ := breakerSetup(t)
+	day := time.Date(2026, 11, 5, 0, 0, 5, 0, time.UTC)
+	breakerObserve(t, store, "100", day)
+	breakerObserve(t, store, "98", day.Add(time.Minute))
+	now := day.Add(time.Minute + 2*time.Second)
+	if decision := breakerDecision(t, store, now); decision.Action != ActionFlatten {
+		t.Fatalf("the fixture did not latch: %q", decision.Action)
+	}
+	if err := store.Reset(ctx, breakerUser, breakerAccount, breakerLatch(t, db).Version, now); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+
+	if err := store.Pause(ctx, breakerUser, breakerAccount, "operator pause"); err != nil {
+		t.Fatalf("pause after a reset: %v", err)
+	}
+	if decision := breakerDecision(t, store, now); decision.Action != ActionPauseEntries || decision.Reason != "operator pause" {
+		t.Fatalf("pause after a reset returned %q (%s)", decision.Action, decision.Reason)
+	}
+	if err := store.Pause(ctx, "someone-else", breakerAccount, "foreign pause"); err == nil {
+		t.Fatal("pause accepted a foreign owner")
+	}
+}

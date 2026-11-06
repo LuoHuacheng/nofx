@@ -515,12 +515,16 @@ func managedRisk(t *testing.T, c *Controller, venue string, equity execution.Dec
 	}
 	// A live day start only completes when it was observed within DayStartGrace
 	// of 00:00 UTC, so the fixture proves it explicitly and then records a
-	// fresh baseline that the staleness check accepts.
-	dayStart := time.Now().UTC().Truncate(24 * time.Hour).Add(time.Second)
+	// fresh baseline that the staleness check accepts. Both observations use
+	// the controller clock: fixtures that install a fake clock must set it
+	// before calling here, otherwise advancing that clock by protectionGrace
+	// makes this baseline look stale to the breaker check.
+	now := c.now()
+	dayStart := now.Truncate(24 * time.Hour).Add(time.Second)
 	if e = store.Observe(context.Background(), acct, nil, dayStart); e != nil {
 		t.Fatal(e)
 	}
-	if e = store.Observe(context.Background(), acct, nil, time.Now().UTC()); e != nil {
+	if e = store.Observe(context.Background(), acct, nil, now); e != nil {
 		t.Fatal(e)
 	}
 	p := risk.DefaultPolicy("alice", "account", "portfolio", venue, execution.EnvironmentLive)

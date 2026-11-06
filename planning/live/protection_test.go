@@ -51,10 +51,10 @@ func supervisedSetup(t *testing.T, kind string) (*Controller, *testBroker, *prot
 	if e := c.DB.Create(&binding).Error; e != nil {
 		t.Fatal(e)
 	}
-	managedRisk(t, c, "binance", "10000")
 	clock := new(time.Time)
 	*clock = time.Now().UTC()
 	c.Now = func() time.Time { return *clock }
+	managedRisk(t, c, "binance", "10000")
 	return c, b, venue, p, clock
 }
 
