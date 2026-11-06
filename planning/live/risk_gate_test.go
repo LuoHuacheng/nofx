@@ -15,6 +15,13 @@ import (
 // so approval takes the managed path and Execute must reserve before any order.
 func riskSetup(t *testing.T, kind string) (*Controller, *testBroker, *testMarket, core.Plan, *risk.Store) {
 	t.Helper()
+	return riskSetupVenue(t, kind, "binance")
+}
+
+// riskSetupVenue builds the same managed fixture for a policy that names
+// another venue, which is how a mismatched policy reaches the approval gate.
+func riskSetupVenue(t *testing.T, kind, policyVenue string) (*Controller, *testBroker, *testMarket, core.Plan, *risk.Store) {
+	t.Helper()
 	c, b, m, p := setup(t, kind)
 	c.Factory = func(context.Context, string, string) (Broker, string, error) {
 		return NOFXBroker{Trader: testNOFXTrader{b}}, "account", nil
@@ -23,7 +30,7 @@ func riskSetup(t *testing.T, kind string) (*Controller, *testBroker, *testMarket
 	if e := c.DB.Create(&binding).Error; e != nil {
 		t.Fatal(e)
 	}
-	return c, b, m, p, managedRisk(t, c, "binance", "10000")
+	return c, b, m, p, managedRisk(t, c, policyVenue, "10000")
 }
 
 // runRisk approves the plan and starts it, which is where the reservation commits.

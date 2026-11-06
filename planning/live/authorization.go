@@ -53,7 +53,7 @@ func (c *Controller) AuthorizePolicy(ctx context.Context, user, planID, planHash
 func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if req.Mode == "" && req.Phrase != "APPROVE LIVE" {
+	if req.Mode != "policy" && req.Phrase != "APPROVE LIVE" {
 		return View{}, errors.New("Type APPROVE LIVE to approve live trading")
 	}
 	if req.Mode == "policy" && (req.SignalID == "" || len(req.SignalID) > 128) {
@@ -127,6 +127,18 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 			return View{}, errors.New("plan leverage exceeds the policy maximum")
 		}
 	}
+	// The same signal may be replayed by a retrying planner: resolve it to the
+	// run it already authorized before any exchange read or run lock, so a
+	// replay cannot block on a run that is still stepping.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if req.Mode == "policy" {
+		if v, ok, er := c.policyRun(account, req.SignalID, p.Hash); er != nil {
+			return View{}, er
+		} else if ok {
+			return v, nil
+		}
+	}
 	// Resolve a previously closed trade using exchange reads before acquiring a
 	// new lease. The transaction below still arbitrates concurrent approvals.
 	var previousLease Lease
@@ -150,17 +162,6 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 		r.PolicyID, r.PolicyVersion, r.PortfolioID = policy.ID, policy.Version, policy.PortfolioID
 	}
 	r.ApprovalHash = r.approvalDigest(p)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// The same signal may be replayed by a retrying planner: it must resolve to
-	// the run it already authorized instead of consuming another approval.
-	if req.Mode == "policy" {
-		if v, ok, er := c.policyRun(account, req.SignalID, p.Hash); er != nil {
-			return View{}, er
-		} else if ok {
-			return v, nil
-		}
-	}
 	e = c.DB.Transaction(func(tx *gorm.DB) error {
 		var lease Lease
 		if err := tx.Where("account_key = ?", account).First(&lease).Error; err == nil {
