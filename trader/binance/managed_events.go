@@ -50,8 +50,14 @@ func (h binanceHistory) History(ctx context.Context, fromTime time.Time, pageCur
 	events := make([]execution.AccountEvent, 0, len(rows))
 	var last int64
 	for _, row := range rows {
-		if row == nil || row.TranID == 0 {
+		if row == nil {
 			continue
+		}
+		if row.TranID == 0 {
+			// A row without the venue's own id cannot be deduped, and dropping it
+			// would silently widen the day's loss budget. Fail the window instead:
+			// the cursor stays put and the next attempt re-reads it.
+			return nil, "", false, errors.New("income history row carries no tranId")
 		}
 		if row.Time > last {
 			last = row.Time
@@ -66,9 +72,18 @@ func (h binanceHistory) History(ctx context.Context, fromTime time.Time, pageCur
 		})
 	}
 	if len(rows) < binanceIncomeLimit {
-		return events, time.Now().UTC().Format(time.RFC3339), true, nil
+		// The window end is the last row the venue returned, not the wall clock:
+		// a row that appears later with an older timestamp must still fall inside
+		// the overlapping replay. An empty page has nothing to miss, so it ends now.
+		if last == 0 {
+			return events, time.Now().UTC().Format(time.RFC3339), true, nil
+		}
+		return events, time.UnixMilli(last).UTC().Format(time.RFC3339), true, nil
 	}
-	return events, strconv.FormatInt(last+1, 10), false, nil
+	// Advance to the boundary millisecond itself, not past it: funding settles at
+	// one timestamp across many symbols, so last+1 would skip the rest of that
+	// millisecond. Dedup is by tranId, so re-reading a page costs nothing.
+	return events, strconv.FormatInt(last, 10), false, nil
 }
 
 // binanceIncomeKind maps the venue's income type onto the ledger vocabulary.

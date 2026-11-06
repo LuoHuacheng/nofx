@@ -93,11 +93,49 @@ func TestManagedHistoryPaging(t *testing.T) {
 	if complete {
 		t.Fatal("a full page was reported as the last page")
 	}
-	if next == "" {
-		t.Fatal("a full page returned no cursor")
+	// The cursor stops at the boundary millisecond itself: funding settles at
+	// one timestamp across many symbols, so advancing past it would skip them.
+	if want := "1700000000000"; next != want {
+		t.Fatalf("the page cursor = %q, wanted the boundary %q", next, want)
 	}
 	if len(events) != binanceIncomeLimit {
 		t.Fatalf("read %d rows from a full page", len(events))
+	}
+}
+
+// TestManagedHistoryFailsOnUnidentifiedRows proves a row without the venue's
+// own id fails the window instead of being dropped: it moved money, so a
+// silent skip would widen the day's loss budget.
+func TestManagedHistoryFailsOnUnidentifiedRows(t *testing.T) {
+	b, _, _ := newManagedBinanceFixture(t, func(r *http.Request) (int, string) {
+		if r.URL.Path != "/fapi/v1/income" {
+			return 200, ""
+		}
+		return 200, `[{"incomeType":"FUNDING_FEE","income":"-0.01","asset":"USDT","time":1700000000000,"tranId":0}]`
+	})
+	if _, _, _, err := b.ManagedHistory().History(context.Background(), time.Unix(0, 0), ""); err == nil {
+		t.Fatal("an income row without a tranId was silently dropped")
+	}
+}
+
+// TestManagedHistoryWindowEndsAtLastRow proves the completed window ends at the
+// newest row read rather than the wall clock.
+func TestManagedHistoryWindowEndsAtLastRow(t *testing.T) {
+	b, _, _ := newManagedBinanceFixture(t, func(r *http.Request) (int, string) {
+		if r.URL.Path != "/fapi/v1/income" {
+			return 200, ""
+		}
+		return 200, `[{"incomeType":"FUNDING_FEE","income":"-0.01","asset":"USDT","time":1700000007000,"tranId":301}]`
+	})
+	_, next, complete, err := b.ManagedHistory().History(context.Background(), time.Unix(0, 0), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !complete {
+		t.Fatal("a short page was reported as unfinished")
+	}
+	if want := time.UnixMilli(1700000007000).UTC().Format(time.RFC3339); next != want {
+		t.Fatalf("the window ended at %q, wanted %q", next, want)
 	}
 }
 

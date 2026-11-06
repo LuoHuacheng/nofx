@@ -64,32 +64,48 @@ func (h okxHistory) History(ctx context.Context, fromTime time.Time, pageCursor 
 		return nil, "", false, fmt.Errorf("could not parse the account bills: %w", err)
 	}
 	events := make([]execution.AccountEvent, 0, len(bills))
+	var last int64
 	for _, bill := range bills {
-		event, ok := okxBillEvent(bill)
+		event, ok, err := okxBillEvent(bill)
+		if err != nil {
+			// A bill that cannot be deduped or read still changed equity. Dropping
+			// it would silently widen the day's loss budget, so the window fails
+			// instead and the cursor stays where it was.
+			return nil, "", false, err
+		}
 		if !ok {
 			continue
+		}
+		if ts := event.OccurredAt.UnixMilli(); ts > last {
+			last = ts
 		}
 		events = append(events, event)
 	}
 	if len(bills) < limit {
-		return events, time.Now().UTC().Format(time.RFC3339), true, nil
+		// The window ends at the newest row read, not at the wall clock, so a row
+		// that lands later with an older timestamp still falls inside the overlap.
+		if last == 0 {
+			return events, time.Now().UTC().Format(time.RFC3339), true, nil
+		}
+		return events, time.UnixMilli(last).UTC().Format(time.RFC3339), true, nil
 	}
 	return events, bills[len(bills)-1].BillID, false, nil
 }
 
-// okxBillEvent converts one bill row. A row without a billId cannot be deduped,
-// so it is dropped rather than replayed twice on every restart.
-func okxBillEvent(bill okxBill) (execution.AccountEvent, bool) {
+// okxBillEvent converts one bill row. A row the ledger cannot attribute fails
+// the window: it moved money, so skipping it would quietly widen the day's
+// loss budget. The bool reports rows that are not a balance movement at all.
+func okxBillEvent(bill okxBill) (execution.AccountEvent, bool, error) {
 	if bill.BillID == "" {
-		return execution.AccountEvent{}, false
+		return execution.AccountEvent{}, false, errors.New("account bill carries no billId")
 	}
 	ts, err := strconv.ParseInt(bill.TS, 10, 64)
 	if err != nil {
-		return execution.AccountEvent{}, false
+		return execution.AccountEvent{}, false, errors.New("account bill has an unparsable timestamp")
 	}
 	amount, err := okxBillAmount(bill)
 	if err != nil {
-		return execution.AccountEvent{}, false
+		return execution.AccountEvent{}, false, err
 	}
 	return execution.AccountEvent{
 		ID:         okxBillPrefix + bill.BillID,
@@ -98,7 +114,7 @@ func okxBillEvent(bill okxBill) (execution.AccountEvent, bool) {
 		Amount:     amount,
 		Currency:   bill.Ccy,
 		OccurredAt: time.UnixMilli(ts).UTC(),
-	}, true
+	}, true, nil
 }
 
 // okxBillAmount prefers the balance change the venue already computed; a bill

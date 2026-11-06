@@ -148,8 +148,138 @@ func TestManagedEventsReconnect(t *testing.T) {
 	}
 }
 
+// TestManagedEventsBurstRespectsCadence proves a burst of stream events cannot
+// outrun the REST budget: events inside the reconcile slot are buffered, and the
+// next snapshot attributes every one of them.
+func TestManagedEventsBurstRespectsCadence(t *testing.T) {
+	r := rig(t, nil)
+	rt := r.runtime(t, nil)
+	ctx := context.Background()
+	r.venue.history = &historyFixture{pages: [][]execution.AccountEvent{{}}, window: r.now}
+
+	// First ingest takes the slot.
+	first := fundingEvent("binance:income:1", "-1", r.now)
+	if err := rt.Ingest(ctx, "alice", "account", []execution.AccountEvent{first}); err != nil {
+		t.Fatal(err)
+	}
+	before := r.venue.snapshotCalls()
+	burst := []execution.AccountEvent{
+		fundingEvent("binance:income:2", "-2", r.now.Add(time.Millisecond)),
+		fundingEvent("binance:income:3", "-3", r.now.Add(2*time.Millisecond)),
+	}
+	if err := rt.Ingest(ctx, "alice", "account", burst); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.venue.snapshotCalls(); got != before {
+		t.Fatalf("a burst inside the reconcile slot re-read the venue: %d calls", got-before)
+	}
+	// The buffered events must survive to the next snapshot, not be dropped.
+	r.advance(ReconcileInterval + time.Second)
+	if err := rt.Tick(ctx, "alice", "account"); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, row := range ledgerRows(t, r) {
+		ids[row.EventID] = true
+	}
+	for _, e := range burst {
+		if !ids[e.ID] {
+			t.Fatalf("a buffered event was lost: %s", e.ID)
+		}
+	}
+}
+
+// TestManagedReplayMatchesTheFullFixture proves the disconnect compensation and
+// a full replay end in the same ledger, the same cursor and the same quantity:
+// the 60s overlap plus native-id dedup is what makes the two paths equal.
+func TestManagedReplayMatchesTheFullFixture(t *testing.T) {
+	pages := [][]execution.AccountEvent{
+		{fundingEvent("binance:income:1", "-1", time.Unix(1700000000, 0).UTC())},
+		{fundingEvent("binance:income:2", "-2", time.Unix(1700000100, 0).UTC())},
+	}
+	window := time.Unix(1700000200, 0).UTC()
+
+	replay := func(t *testing.T, failFirst int) ([]risk.LedgerEvent, time.Time) {
+		t.Helper()
+		r := rig(t, nil)
+		rt := r.runtime(t, nil)
+		reader := &historyFixture{pages: pages, window: window, failOn: failFirst}
+		r.venue.history = reader
+		ctx := context.Background()
+		// A failing read leaves the cursor where it was; the retry re-reads the
+		// same window and reaches the same end.
+		_ = rt.syncHistory(ctx, "alice", "account", "binance", reader)
+		reader.calls = 0
+		reader.failOn = 0
+		if err := rt.syncHistory(ctx, "alice", "account", "binance", reader); err != nil {
+			t.Fatal(err)
+		}
+		var cursor EventCursor
+		if err := r.db.Where("account_key = ?", "account").First(&cursor).Error; err != nil {
+			t.Fatal(err)
+		}
+		rows := ledgerRows(t, r)
+		return rows, cursor.Complete
+	}
+
+	fullRows, fullCursor := replay(t, 0)
+	compRows, compCursor := replay(t, 2)
+	if !fullCursor.Equal(compCursor) {
+		t.Fatalf("the compensated cursor ended at %s, the full replay at %s", compCursor, fullCursor)
+	}
+	if len(fullRows) != len(compRows) {
+		t.Fatalf("recovered %d ledger rows, the full replay %d", len(compRows), len(fullRows))
+	}
+	for i := range fullRows {
+		if fullRows[i].EventID != compRows[i].EventID || fullRows[i].Amount != compRows[i].Amount {
+			t.Fatalf("row %d differs: %+v vs %+v", i, compRows[i], fullRows[i])
+		}
+	}
+}
+
 // TestManagedEventsPartialFillWakeup proves an event wakes protection in the
 // same call instead of waiting for the reconcile tick.
+// TestManagedEventsStreamReachesProtection drives the real stream path: the
+// fixture venue pushes a fill through Events, the runtime ingests it, and the
+// affected account is re-read without waiting for the REST cadence.
+func TestManagedEventsStreamReachesProtection(t *testing.T) {
+	r := rig(t, &automationSource{})
+	r.venue.stream = make(chan execution.AccountEvent)
+	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Idea: r.idea(), CreatedAt: r.now, ExpiresAt: r.now.Add(SignalExpiry)})
+	rt := r.runtime(t, r.source)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := rt.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		stop, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelStop()
+		if err := rt.Shutdown(stop); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	// The supervisor's own tick must place the entry: that proves the stream
+	// goroutine started and supervision still works beside it.
+	r.waitPlaced(t, 1)
+
+	// Past the reconcile slot, so the pushed event — not the cadence — re-reads.
+	r.advance(ReconcileInterval + time.Second)
+	before := r.venue.snapshotCalls()
+	select {
+	case r.venue.stream <- execution.AccountEvent{ID: "binance:trade:42", Kind: execution.KindFill, Symbol: "BTCUSDT", Order: execution.Order{Symbol: "BTCUSDT", Filled: "0.05", Status: "partially_filled"}, OccurredAt: r.now}:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the fixture stream is not being read")
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && r.venue.snapshotCalls() <= before {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := r.venue.snapshotCalls(); got <= before {
+		t.Fatalf("a streamed fill did not wake the runtime: %d calls", got)
+	}
+}
+
 func TestManagedEventsPartialFillWakeup(t *testing.T) {
 	r := rig(t, &automationSource{})
 	rt := r.runtime(t, r.source)
@@ -160,8 +290,10 @@ func TestManagedEventsPartialFillWakeup(t *testing.T) {
 	}
 	r.waitPlaced(t, 1)
 
+	// Past the reconcile slot, so the event — not the cadence — is what re-reads.
+	r.advance(ReconcileInterval + time.Second)
 	before := r.venue.snapshotCalls()
-	// No clock advance: only the event itself can trigger the extra read.
+	// No further clock advance: only the event can trigger the extra read.
 	fill := execution.AccountEvent{
 		ID:         "binance:trade:42",
 		Kind:       risk.KindCashflow,

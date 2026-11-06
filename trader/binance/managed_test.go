@@ -191,13 +191,15 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 
 	t.Run("unsupported_capabilities", func(t *testing.T) {
 		b := &FuturesTrader{managedEnvironment: execution.EnvironmentSandbox}
-		if caps := b.ManagedCapabilities(); caps.SafeStopAmend || caps.PrivateEvents {
-			t.Fatalf("capabilities over-reported: %+v", caps)
+		if caps := b.ManagedCapabilities(); caps.SafeStopAmend || !caps.PrivateEvents {
+			t.Fatalf("capabilities mis-reported: %+v", caps)
 		}
 		if _, err := b.AmendStop(context.Background(), execution.Order{}, "1"); !errors.Is(err, execution.ErrUnsupported) {
 			t.Fatalf("amend stop must be unsupported: %v", err)
 		}
-		if err := b.Events(context.Background(), func(execution.AccountEvent) error { return nil }); !errors.Is(err, execution.ErrUnsupported) {
+		// A trader built without the managed endpoint has no pinned socket, so
+		// events must fail rather than report a quiet account.
+		if err := b.Events(context.Background(), func(execution.AccountEvent) error { return nil }); err == nil {
 			t.Fatalf("events must be unsupported: %v", err)
 		}
 		var _ execution.ManagedTrader = b

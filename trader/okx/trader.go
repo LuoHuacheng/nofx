@@ -56,6 +56,10 @@ type OKXTrader struct {
 	// live endpoint behaviour for existing callers.
 	environment execution.Environment
 
+	// managedStreamURL is the private socket pinned by the environment. Empty for
+	// legacy traders, which never stream.
+	managedStreamURL string
+
 	// HTTP client (proxy disabled)
 	httpClient *http.Client
 
@@ -370,5 +374,10 @@ func NewManagedAccountTrader(ctx context.Context, apiKey, secretKey, passphrase 
 	}
 	t := NewAccountTrader(apiKey, secretKey, passphrase)
 	t.environment = env
+	url, err := okxStreamEndpoint(env)
+	if err != nil {
+		return nil, err
+	}
+	t.managedStreamURL = url
 	return t, nil
 }

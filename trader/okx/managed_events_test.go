@@ -61,19 +61,39 @@ func TestManagedHistoryReadsBillsOnce(t *testing.T) {
 	}
 }
 
-func TestManagedHistorySkipsUnidentifiedBills(t *testing.T) {
+// TestManagedHistoryFailsOnUnidentifiedBills proves a bill the ledger cannot
+// attribute fails the window instead of being dropped: it moved money, so
+// skipping it would silently widen the day's loss budget.
+func TestManagedHistoryFailsOnUnidentifiedBills(t *testing.T) {
 	trader := okxFixture(t, "net", `[]`, func(r *http.Request) string {
 		if r.URL.Path != okxBillsPath {
 			return ""
 		}
-		// A row without billId cannot be deduped, so it must not become an event.
 		return `[{"billId":"","type":"8","ts":"1700000000001","bal":"-0.03","ccy":"USDT"},{"billId":"701","type":"8","ts":"1700000000002","bal":"-0.04","ccy":"USDT"}]`
 	})
-	events, _, _, err := trader.ManagedHistory().History(context.Background(), time.Unix(0, 0), "")
+	if _, _, _, err := trader.ManagedHistory().History(context.Background(), time.Unix(0, 0), ""); err == nil {
+		t.Fatal("an unidentifiable bill was silently dropped")
+	}
+}
+
+// TestManagedHistoryWindowEndsAtLastRow proves the completed window ends at the
+// newest row read, so a row that lands later with an older timestamp is still
+// inside the overlapping replay.
+func TestManagedHistoryWindowEndsAtLastRow(t *testing.T) {
+	trader := okxFixture(t, "net", `[]`, func(r *http.Request) string {
+		if r.URL.Path != okxBillsPath {
+			return ""
+		}
+		return `[{"billId":"702","type":"8","ts":"1700000005000","bal":"-0.04","ccy":"USDT"}]`
+	})
+	_, next, complete, err := trader.ManagedHistory().History(context.Background(), time.Unix(0, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].ID != "okx:bill:701" {
-		t.Fatalf("an unidentifiable bill became an event: %+v", events)
+	if !complete {
+		t.Fatal("a short page was reported as unfinished")
+	}
+	if want := time.UnixMilli(1700000005000).UTC().Format(time.RFC3339); next != want {
+		t.Fatalf("the window ended at %q, wanted %q", next, want)
 	}
 }

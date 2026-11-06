@@ -20,7 +20,10 @@ const EventOverlap = 60 * time.Second
 
 // historyPageLimit bounds how many pages one reconcile may walk. A venue that
 // keeps returning full pages is a signal to stop and try again later, not to
-// spin forever inside a supervision tick.
+// spin forever inside a supervision tick. A window larger than the page budget
+// therefore stays incomplete and keeps the account frozen: the operator sees
+// it in `status`, and the alternative — advancing a cursor over unread rows —
+// would silently skip money movements.
 const historyPageLimit = 50
 
 // EventCursor records the last fully read window for one account and venue.
@@ -54,6 +57,9 @@ func (r *Runtime) bufferEvents(accountKey string, events []execution.AccountEven
 			continue
 		}
 		seen[e.ID] = true
+		if !streamOnly(e.Kind) {
+			e.Kind = ledgerKind(e.Kind)
+		}
 		r.pending[accountKey] = append(r.pending[accountKey], e)
 	}
 }
@@ -78,11 +84,29 @@ func (r *Runtime) Ingest(ctx context.Context, user, accountKey string, events []
 	if user == "" || accountKey == "" {
 		return errors.New("automation: ingest requires a user and an account")
 	}
+	gap := false
+	for _, e := range events {
+		if e.Kind == execution.KindReconcile {
+			gap = true
+		}
+	}
 	r.bufferEvents(accountKey, events)
-	r.noteEvent(accountKey, r.clock())
+	now := r.clock()
+	r.noteEvent(accountKey, now)
 	lock := r.lock(accountKey)
 	lock.Lock()
 	defer lock.Unlock()
+	if gap {
+		// A reconnect means this process cannot know what happened while the
+		// socket was down: the venue record is the authority, so it is re-read
+		// now and new entries stay blocked until that read succeeds.
+		r.markReconcile(accountKey, "the private stream reconnected; the venue record must be re-read")
+	} else if state := r.state(accountKey, user); !state.lastReconcile.IsZero() && now.Sub(state.lastReconcile) < ReconcileInterval {
+		// A stream delivers per-fill events far faster than the REST cadence.
+		// Reusing the reconcile slot keeps the venue budget and the ledger
+		// aligned: the buffered events survive to the next snapshot.
+		return nil
+	}
 	if err := r.reconcileAccount(ctx, user, accountKey); err != nil {
 		r.freeze(accountKey, err.Error(), freezeRisk)
 		return err
@@ -155,10 +179,11 @@ func (r *Runtime) saveCursor(ctx context.Context, accountKey, venue string, end 
 	return nil
 }
 
-// ledgerKinds is the fixed event vocabulary the risk ledger understands. An
+// ledgerKind is the fixed event vocabulary the risk ledger understands. An
 // unknown money movement is recorded as a gap so the day stays incomplete
-// instead of silently rounding the equity.
-func ledgerKinds(kind string) string {
+// instead of silently rounding the equity. Every event goes through it, whether
+// it arrived on a private stream or on the REST replay.
+func ledgerKind(kind string) string {
 	switch kind {
 	case risk.KindCashflow, risk.KindFunding, risk.KindFee, risk.KindFundingGap:
 		return kind
@@ -166,14 +191,9 @@ func ledgerKinds(kind string) string {
 	return risk.KindFundingGap
 }
 
-// fillEvent reports whether an event is evidence that a run's exposure changed.
-func fillEvent(e execution.AccountEvent) bool {
-	if e.Order.Filled == "" {
-		return false
-	}
-	filled, err := execution.Number(string(e.Order.Filled))
-	if err != nil {
-		return false
-	}
-	return filled.Sign() > 0
+// streamOnly reports kinds a private stream uses to drive supervision. They are
+// never money movements: an execution report proves exposure changed, and a
+// reconcile marker proves the process must re-read the venue record.
+func streamOnly(kind string) bool {
+	return kind == execution.KindFill || kind == execution.KindReconcile
 }

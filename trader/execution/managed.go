@@ -65,6 +65,18 @@ type Capabilities struct {
 	PrivateEvents bool
 }
 
+// Event kinds the automation layer interprets before the ledger sees them.
+// They are declared here so an adapter and its consumer agree on one spelling.
+const (
+	// KindFill marks an execution report: it never moves money, it only proves
+	// a run's exposure changed, so it wakes protection without touching the
+	// ledger's day.
+	KindFill = "fill"
+	// KindReconcile marks a stream gap. The venue record is authoritative; a
+	// reconnect means the process must re-read it before trusting its own view.
+	KindReconcile = "reconcile_required"
+)
+
 // HistoryReader replays the account's own record of money movements. complete
 // is true only for the last page of the requested window, so a caller that
 // stops early never mistakes a partial page for a finished one.

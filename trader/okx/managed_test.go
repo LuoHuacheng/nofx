@@ -260,14 +260,16 @@ func TestManagedEnvironmentAndSettings(t *testing.T) {
 
 	t.Run("capabilities", func(t *testing.T) {
 		b := &OKXTrader{environment: execution.EnvironmentSandbox}
-		if caps := b.ManagedCapabilities(); !caps.SafeStopAmend || caps.PrivateEvents {
-			t.Fatalf("capabilities over-reported: %+v", caps)
+		if caps := b.ManagedCapabilities(); !caps.SafeStopAmend || !caps.PrivateEvents {
+			t.Fatalf("capabilities under-reported: %+v", caps)
 		}
 		if _, err := b.AmendStop(context.Background(), execution.Order{}, "1"); err == nil || errors.Is(err, execution.ErrUnsupported) {
 			t.Fatalf("amend stop must be unsupported: %v", err)
 		}
-		if err := b.Events(context.Background(), func(execution.AccountEvent) error { return nil }); !errors.Is(err, execution.ErrUnsupported) {
-			t.Fatalf("events must be unsupported: %v", err)
+		// A legacy trader has no pinned stream, so events must fail rather than
+		// report an account that is really unread.
+		if err := b.Events(context.Background(), func(execution.AccountEvent) error { return nil }); err == nil {
+			t.Fatal("a trader without a managed stream reported healthy events")
 		}
 		var _ execution.ManagedTrader = b
 	})
@@ -332,8 +334,8 @@ func TestManagedStopAmend(t *testing.T) {
 		return 200, okxManagedData(fmt.Sprintf(`[{"algoId":"7","algoClOrdId":%q,"instId":"BTC-USDT-SWAP","side":"sell","posSide":"net","ordType":"conditional","sz":"10","slTriggerPx":"96","slTriggerPxType":"mark","slOrdPx":"-1","state":"live","reduceOnly":true}]`, client))
 	}
 	b, calls := newManagedOKXFixture(t, execution.EnvironmentSandbox, routes)
-	if caps := b.ManagedCapabilities(); !caps.SafeStopAmend || caps.PrivateEvents {
-		t.Fatalf("capabilities over-reported: %+v", caps)
+	if caps := b.ManagedCapabilities(); !caps.SafeStopAmend || !caps.PrivateEvents {
+		t.Fatalf("capabilities mis-reported: %+v", caps)
 	}
 	stop := execution.Order{ClientID: client, VenueClientID: client, OrderID: "7", Role: "sl", Symbol: "BTC-USDT-SWAP", Side: "long", Price: "95", Quantity: "0.1", Status: "NEW"}
 	if _, err := b.AmendStop(context.Background(), stop, "96.05"); err == nil || amends != 0 {

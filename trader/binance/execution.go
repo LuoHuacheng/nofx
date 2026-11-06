@@ -369,6 +369,9 @@ var _ execution.Trader = (*FuturesTrader)(nil)
 type managedEndpoint struct {
 	baseURL string
 	client  *http.Client
+	// streamURL overrides the user-data socket. Only a test supplies it: no
+	// production caller can point a sandbox account at a live stream.
+	streamURL string
 }
 
 // managedBinanceEndpoint pins each environment to one host. Binance USDⓈ-M hosts
@@ -397,9 +400,16 @@ func newManagedAccountTrader(ctx context.Context, key, secret, userID string, en
 	b := NewExecutionTrader(key, secret, userID)
 	b.managedEnvironment = env
 	b.client.SetApiEndpoint(endpoint)
+	b.managedStreamURL, err = binanceStreamEndpoint(env)
+	if err != nil {
+		return nil, err
+	}
 	if seam != nil {
 		b.client.BaseURL = seam.baseURL
 		b.client.HTTPClient = seam.client
+		if seam.streamURL != "" {
+			b.managedStreamURL = seam.streamURL
+		}
 	}
 	if err := b.calibrateClock(ctx); err != nil {
 		return nil, err
@@ -408,15 +418,15 @@ func newManagedAccountTrader(ctx context.Context, key, secret, userID string, en
 }
 
 func (b *FuturesTrader) ManagedCapabilities() execution.Capabilities {
-	return execution.Capabilities{}
+	return execution.Capabilities{PrivateEvents: true}
 }
 
 func (b *FuturesTrader) AmendStop(context.Context, execution.Order, execution.Decimal) (execution.Order, error) {
 	return execution.Order{}, execution.ErrUnsupported
 }
 
-func (b *FuturesTrader) Events(context.Context, func(execution.AccountEvent) error) error {
-	return execution.ErrUnsupported
+func (b *FuturesTrader) Events(ctx context.Context, fn func(execution.AccountEvent) error) error {
+	return b.ManagedEvents(ctx, fn)
 }
 
 func binanceSideName(side futures.SideType) string {

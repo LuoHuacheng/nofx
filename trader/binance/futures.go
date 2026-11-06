@@ -54,6 +54,10 @@ type FuturesTrader struct {
 	// constructors leave it empty and keep their existing endpoints.
 	managedEnvironment execution.Environment
 
+	// managedStreamURL is the user-data socket pinned by the environment. Empty
+	// for legacy traders, which never stream.
+	managedStreamURL string
+
 	// dualSide is the account position mode: true = dual-side (Hedge Mode),
 	// false = one-way mode. Set at init; order positionSide adapts to it.
 	dualSide atomic.Bool

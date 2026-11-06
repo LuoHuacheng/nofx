@@ -40,6 +40,11 @@ type managedTraderFixture struct {
 	settings  map[string]int
 	amendErr  error
 	history   execution.HistoryReader
+	// stream is the private event source; a test pushes events into it to
+	// exercise the stream path instead of the REST poll.
+	stream chan execution.AccountEvent
+	// clock makes the fixture report a snapshot as fresh as the test's fake now.
+	clock *time.Time
 }
 
 func (f *managedTraderFixture) Venue() string { return f.venue }
@@ -108,7 +113,11 @@ func (f *managedTraderFixture) ManagedSnapshot(context.Context) (execution.Manag
 		f.snapErrs--
 		return execution.ManagedAccount{}, errors.New("venue unavailable")
 	}
-	return f.snapshot, nil
+	// The venue answers "now": a fixture that reported a frozen timestamp would
+	// fail the snapshot-age gate as soon as the test advanced its clock.
+	account := f.snapshot
+	account.ObservedAt = *f.clock
+	return account, nil
 }
 func (f *managedTraderFixture) VerifyManagedSettings(_ context.Context, s string, l int) error {
 	f.mu.Lock()
@@ -124,8 +133,26 @@ func (f *managedTraderFixture) ManagedCapabilities() execution.Capabilities {
 func (f *managedTraderFixture) AmendStop(context.Context, execution.Order, execution.Decimal) (execution.Order, error) {
 	return execution.Order{}, execution.ErrUnsupported
 }
-func (f *managedTraderFixture) Events(context.Context, func(execution.AccountEvent) error) error {
-	return execution.ErrUnsupported
+func (f *managedTraderFixture) Events(ctx context.Context, fn func(execution.AccountEvent) error) error {
+	f.mu.Lock()
+	stream := f.stream
+	f.mu.Unlock()
+	if stream == nil {
+		return execution.ErrUnsupported
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case e, ok := <-stream:
+			if !ok {
+				return nil
+			}
+			if err := fn(e); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (f *managedTraderFixture) ManagedHistory() execution.HistoryReader { return f.history }
@@ -185,10 +212,19 @@ func (f *managedTraderFixture) snapshotCalls() int {
 }
 
 // automationMarket serves the same perpetual book the controller tests use.
-type automationMarket struct{ book core.Snapshot }
+type automationMarket struct {
+	book  core.Snapshot
+	clock *time.Time
+}
 
 func (m *automationMarket) Snapshot(_ context.Context, _, _ string) (core.Snapshot, error) {
-	return m.book, nil
+	if m.clock == nil {
+		return m.book, nil
+	}
+	// A test clock that advanced must not look like a stale market read.
+	book := m.book
+	book.Observed = *m.clock
+	return book, nil
 }
 
 // automationSource hands out one pre-built signal, or ErrNoSignal.
@@ -240,8 +276,8 @@ func rig(t *testing.T, source IdeaSource) *automationRig {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	clock := now
-	market := &automationMarket{book: core.Snapshot{Venue: "binance", Symbol: "BTCUSDT", Kind: "perpetual", Bid: "99999", Ask: "100000", BidSize: "100", AskSize: "100", Tick: "1", Step: "0.001", MinQty: "0.001", MinNotional: "10", Observed: now}}
-	venue := &managedTraderFixture{venue: "binance", key: "account", env: execution.EnvironmentLive, orders: map[string]execution.Order{}, settings: map[string]int{}}
+	market := &automationMarket{clock: &clock, book: core.Snapshot{Venue: "binance", Symbol: "BTCUSDT", Kind: "perpetual", Bid: "99999", Ask: "100000", BidSize: "100", AskSize: "100", Tick: "1", Step: "0.001", MinQty: "0.001", MinNotional: "10", Observed: now}}
+	venue := &managedTraderFixture{venue: "binance", key: "account", env: execution.EnvironmentLive, clock: &clock, orders: map[string]execution.Order{}, settings: map[string]int{}}
 	venue.snapshot = execution.ManagedAccount{AccountKey: "account", Venue: "binance", Environment: execution.EnvironmentLive, PositionMode: "one-way", MarginMode: "isolated", Equity: "10000", Available: "10000", MarginUsed: "0", ObservedAt: now}
 
 	ctrl, err := live.New(db, func(context.Context, string, string) (live.Broker, string, error) {

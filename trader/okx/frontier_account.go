@@ -148,7 +148,7 @@ func (t *OKXTrader) frontierBalance() (map[string]interface{}, error) {
 // ManagedCapabilities reports the amend-in-place guarantee only for the stop
 // trigger, which /trade/amend-algos changes without cancelling the order.
 func (t *OKXTrader) ManagedCapabilities() execution.Capabilities {
-	return execution.Capabilities{SafeStopAmend: true}
+	return execution.Capabilities{SafeStopAmend: true, PrivateEvents: true}
 }
 
 // okxAmendAlgoPath changes a stop trigger in place. It is not a cancel-then-place
@@ -195,8 +195,8 @@ func (t *OKXTrader) AmendStop(ctx context.Context, o execution.Order, price exec
 	return observed, nil
 }
 
-func (t *OKXTrader) Events(context.Context, func(execution.AccountEvent) error) error {
-	return execution.ErrUnsupported
+func (t *OKXTrader) Events(ctx context.Context, fn func(execution.AccountEvent) error) error {
+	return t.ManagedEvents(ctx, fn)
 }
 
 // okxManagedSide names the position an order acts on. One-way orders carry

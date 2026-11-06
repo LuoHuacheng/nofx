@@ -58,6 +58,7 @@ type Runtime struct {
 	locks     map[string]*sync.Mutex
 	frozen    map[string]freezeState
 	reconcile map[string]string
+	streams   map[string]bool
 	pending   map[string][]execution.AccountEvent
 	known     []managedAccount
 	alertURL  string
@@ -80,7 +81,7 @@ func NewRuntime(db *gorm.DB, controller *live.Controller, risks *risk.Store, fac
 	if err := db.AutoMigrate(&execution.Binding{}, &EventCursor{}, &Alert{}); err != nil {
 		return nil, err
 	}
-	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]freezeState{}, reconcile: map[string]string{}, pending: map[string][]execution.AccountEvent{}, lastEvent: map[string]time.Time{}}, nil
+	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]freezeState{}, reconcile: map[string]string{}, streams: map[string]bool{}, pending: map[string][]execution.AccountEvent{}, lastEvent: map[string]time.Time{}}, nil
 }
 
 func (r *Runtime) clock() time.Time { return r.now().UTC() }
@@ -139,6 +140,7 @@ func (r *Runtime) supervise(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
+			r.startStream(ctx, account)
 			if err := r.Tick(ctx, account.user, account.key); err != nil {
 				logger.Warnf("automation: %s supervision failed: %v", account.key, err)
 			}
@@ -149,6 +151,57 @@ func (r *Runtime) supervise(ctx context.Context) {
 		case <-time.After(ReconcileInterval):
 		}
 	}
+}
+
+// startStream opens the account's private event stream once per process. The
+// stream only shortens the time a fill waits for protection; the REST window
+// stays the authority, so a broken stream is logged and re-read rather than
+// trusted or treated as a quiet account.
+func (r *Runtime) startStream(ctx context.Context, account managedAccount) {
+	r.mu.Lock()
+	if r.streams[account.key] {
+		r.mu.Unlock()
+		return
+	}
+	r.streams[account.key] = true
+	r.wg.Add(1)
+	r.mu.Unlock()
+	go func() {
+		defer r.wg.Done()
+		defer func() {
+			r.mu.Lock()
+			delete(r.streams, account.key)
+			r.mu.Unlock()
+		}()
+		r.streamAccount(ctx, account.user, account.key)
+	}()
+}
+
+func (r *Runtime) streamAccount(ctx context.Context, user, accountKey string) {
+	binding, err := r.binding(ctx, accountKey)
+	if err != nil {
+		logger.Warnf("automation: %s private stream unavailable: %v", accountKey, err)
+		return
+	}
+	trader, err := r.trader(ctx, user, binding.ExchangeID)
+	if err != nil {
+		logger.Warnf("automation: %s private stream unavailable: %v", accountKey, err)
+		return
+	}
+	err = trader.Events(ctx, func(e execution.AccountEvent) error {
+		// Every stream event is ingested on its own so a partial fill reaches
+		// protection immediately instead of waiting for a batch boundary.
+		return r.Ingest(ctx, user, accountKey, []execution.AccountEvent{e})
+	})
+	if ctx.Err() != nil {
+		return
+	}
+	// The stream ended on its own: the venue record is now the only source, so
+	// the next tick must re-read it before anything trusts this process's view.
+	if err != nil {
+		logger.Warnf("automation: %s private stream ended: %v", accountKey, err)
+	}
+	r.markReconcile(accountKey, "the private stream is not running; the venue record is the only source")
 }
 
 type managedAccount struct{ user, key string }
@@ -262,6 +315,16 @@ func (r *Runtime) markReconcile(accountKey, reason string) {
 	r.reconcile[accountKey] = reason
 }
 
+// noteReconcile records the slot under the lock: Ingest reads the same clock
+// from another goroutine and must never see a stale value.
+func (r *Runtime) noteReconcile(accountKey string, now time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.accounts[accountKey]; ok {
+		s.lastReconcile = now
+	}
+}
+
 func (r *Runtime) clearReconcile(accountKey string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -296,7 +359,6 @@ func (r *Runtime) Tick(ctx context.Context, user, accountKey string) error {
 			r.freeze(accountKey, err.Error(), freezeRisk)
 			return err
 		}
-		state.lastReconcile = now
 	}
 	if r.source == nil {
 		return nil
@@ -378,7 +440,7 @@ func (r *Runtime) reconcileAccount(ctx context.Context, user, accountKey string)
 			return err
 		}
 	}
-	events := r.drainEvents(accountKey)
+	events := r.ledgerEvents(r.drainEvents(accountKey))
 	account, err := trader.ManagedSnapshot(ctx)
 	if err != nil {
 		r.bufferEvents(accountKey, events)
@@ -403,7 +465,25 @@ func (r *Runtime) reconcileAccount(ctx context.Context, user, accountKey string)
 		r.thaw(accountKey, freezeRisk)
 	}
 	r.clearReconcile(accountKey)
+	// The slot is claimed here rather than by each caller: Tick and a stream
+	// event both read the venue, and only one of them may pay for it per window.
+	r.noteReconcile(accountKey, now)
 	return nil
+}
+
+// ledgerEvents keeps only money movements. A stream event that merely proves
+// exposure changed, or that the venue record must be re-read, is supervision
+// input: the ledger rejects it, and a reconcile marker has already done its work
+// by landing here at all.
+func (r *Runtime) ledgerEvents(events []execution.AccountEvent) []execution.AccountEvent {
+	out := make([]execution.AccountEvent, 0, len(events))
+	for _, e := range events {
+		if streamOnly(e.Kind) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // historySource is an adapter that can replay the account's money movements.
