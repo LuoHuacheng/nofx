@@ -33,10 +33,13 @@ func (s *Server) StartManagedTrading(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
+	if e := rt.Start(ctx); e != nil {
+		return e
+	}
 	s.planningMu.Lock()
 	s.managedRuntime = rt
 	s.planningMu.Unlock()
-	return rt.Start(ctx)
+	return nil
 }
 
 // managedRuntimeHandle returns the supervisor when StartManagedTrading ran.
