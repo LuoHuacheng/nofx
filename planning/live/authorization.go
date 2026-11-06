@@ -129,11 +129,12 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 	}
 	// The same signal may be replayed by a retrying planner: resolve it to the
 	// run it already authorized before any exchange read or run lock, so a
-	// replay cannot block on a run that is still stepping.
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// replay cannot block on a run that is still stepping. c.mu is taken only
+	// for this lookup and released before the run lock below, because launch
+	// takes c.mu while holding a run lock: holding c.mu across the run lock
+	// here would deadlock the two.
 	if req.Mode == "policy" {
-		if v, ok, er := c.policyRun(account, req.SignalID, p.Hash); er != nil {
+		if v, ok, er := c.replayPolicyRun(account, req.SignalID, p.Hash); er != nil {
 			return View{}, er
 		} else if ok {
 			return v, nil
@@ -162,6 +163,8 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 		r.PolicyID, r.PolicyVersion, r.PortfolioID = policy.ID, policy.Version, policy.PortfolioID
 	}
 	r.ApprovalHash = r.approvalDigest(p)
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	e = c.DB.Transaction(func(tx *gorm.DB) error {
 		var lease Lease
 		if err := tx.Where("account_key = ?", account).First(&lease).Error; err == nil {
@@ -205,6 +208,14 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 		return View{}, e
 	}
 	return decode(r)
+}
+
+// replayPolicyRun resolves a replayed signal under c.mu without holding it
+// across any run lock or exchange read.
+func (c *Controller) replayPolicyRun(account, signal, hash string) (View, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.policyRun(account, signal, hash)
 }
 
 // policyRun reports the run one signal already authorized. The bool reports
