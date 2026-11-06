@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"gorm.io/gorm"
+
 	"nofx/logger"
 	"nofx/planning"
 	"nofx/planning/core"
@@ -58,10 +60,14 @@ type Runtime struct {
 	reconcile map[string]string
 	pending   map[string][]execution.AccountEvent
 	known     []managedAccount
-	ctx       context.Context
-	cancel    context.CancelFunc
-	started   bool
-	wg        sync.WaitGroup
+	alertURL  string
+	lastEvent map[string]time.Time
+	// alertClient is the delivery seam; production uses a guarded dialer.
+	alertClient *http.Client
+	ctx         context.Context
+	cancel      context.CancelFunc
+	started     bool
+	wg          sync.WaitGroup
 }
 
 func NewRuntime(db *gorm.DB, controller *live.Controller, risks *risk.Store, factory Factory, source IdeaSource, now func() time.Time) (*Runtime, error) {
@@ -71,10 +77,10 @@ func NewRuntime(db *gorm.DB, controller *live.Controller, risks *risk.Store, fac
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	if err := db.AutoMigrate(&execution.Binding{}, &EventCursor{}); err != nil {
+	if err := db.AutoMigrate(&execution.Binding{}, &EventCursor{}, &Alert{}); err != nil {
 		return nil, err
 	}
-	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]freezeState{}, reconcile: map[string]string{}, pending: map[string][]execution.AccountEvent{}}, nil
+	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]freezeState{}, reconcile: map[string]string{}, pending: map[string][]execution.AccountEvent{}, lastEvent: map[string]time.Time{}}, nil
 }
 
 func (r *Runtime) clock() time.Time { return r.now().UTC() }
@@ -498,4 +504,172 @@ func (r *Runtime) compileIdea(ctx context.Context, policy risk.Policy, limits co
 // The controller keeps its own entry deadline; this only refuses to extend it.
 func holdExpired(startedAt *time.Time, now time.Time) bool {
 	return startedAt != nil && now.Sub(*startedAt) >= MaxHold
+}
+
+// StartAccount enables unattended entries for one account, but only for the
+// policy version the operator saw and only in the environment the binding was
+// verified against. A breaker latch refuses the start: a reset is its own
+// explicit action, never a side effect of starting.
+func (r *Runtime) StartAccount(ctx context.Context, user, accountKey, version string, env execution.Environment) error {
+	binding, err := r.binding(ctx, accountKey)
+	if err != nil {
+		return err
+	}
+	if binding.UserID != user {
+		return errors.New("automation: the account does not belong to this user")
+	}
+	if binding.Environment != env {
+		return errors.New("automation: the account is bound to a different environment")
+	}
+	policy, err := r.risks.Policy(ctx, user, accountKey)
+	if err != nil {
+		return fmt.Errorf("automation: could not read the risk policy: %w", err)
+	}
+	if version == "" || policy.Version != version {
+		return fmt.Errorf("automation: policy version %q is not the current %q", version, policy.Version)
+	}
+	if !policy.Enabled {
+		return errors.New("automation: the risk policy is not enabled")
+	}
+	decision, err := r.risks.Evaluate(ctx, user, accountKey, r.clock())
+	if err != nil {
+		return fmt.Errorf("automation: could not evaluate the risk breaker: %w", err)
+	}
+	if decision.Action != risk.ActionAllow {
+		return fmt.Errorf("automation: the risk breaker holds this account: %s", decision.Reason)
+	}
+	return r.Recover(ctx, user, accountKey)
+}
+
+// PauseAccount cancels unfilled entries and latches new ones. It never touches
+// live protection: a pause must not leave a position unguarded.
+func (r *Runtime) PauseAccount(ctx context.Context, user, accountKey, reason string) error {
+	if _, err := r.binding(ctx, accountKey); err != nil {
+		return err
+	}
+	if reason == "" {
+		reason = "operator pause"
+	}
+	// The latch is checked before every entry leaves the process, so a pause
+	// stops unfilled entries without touching the live stop or target.
+	if err := r.risks.Pause(ctx, user, accountKey, reason); err != nil {
+		return err
+	}
+	r.freeze(accountKey, "operator pause: "+reason, freezeSafety)
+	return nil
+}
+
+// FlattenAccount exits through the controller's own reduction state machine, so
+// a flatten never becomes a second, unreviewed order path.
+func (r *Runtime) FlattenAccount(ctx context.Context, user, accountKey, reason string) error {
+	if _, err := r.binding(ctx, accountKey); err != nil {
+		return err
+	}
+	views, err := r.controller.ListContext(ctx, user)
+	if err != nil {
+		return fmt.Errorf("automation: could not list runs: %w", err)
+	}
+	if reason == "" {
+		reason = "operator flatten"
+	}
+	var last error
+	flattened := false
+	for _, v := range views {
+		if v.AccountKey != accountKey {
+			continue
+		}
+		if v.State == "completed" || v.State == "cancelled" || v.State == "expired" || v.State == "approved" {
+			continue
+		}
+		flattened = true
+		if _, err := r.controller.Flatten(ctx, user, v.ID, reason); err != nil {
+			last = fmt.Errorf("automation: could not flatten run %s: %w", v.ID, err)
+		}
+	}
+	if !flattened {
+		return errors.New("automation: no live run holds a position on this account")
+	}
+	return last
+}
+
+// Status is the operator view of one account. Healthy HTTP does not mean
+// entries are allowed: State and Reason carry that answer.
+type Status struct {
+	AccountKey      string                `json:"account_key"`
+	State           string                `json:"state"`
+	ProtectionState string                `json:"protection_state"`
+	PolicyVersion   string                `json:"policy_version"`
+	Reason          string                `json:"reason"`
+	Environment     execution.Environment `json:"environment"`
+	LastREST        time.Time             `json:"last_rest"`
+	LastWS          time.Time             `json:"last_ws"`
+	LedgerComplete  bool                  `json:"ledger_complete"`
+	ReservedRisk    execution.Decimal     `json:"reserved_risk"`
+}
+
+func (r *Runtime) AccountStatus(ctx context.Context, user, accountKey string) (Status, error) {
+	binding, err := r.binding(ctx, accountKey)
+	if err != nil {
+		return Status{}, err
+	}
+	if binding.UserID != user {
+		return Status{}, errors.New("automation: the account does not belong to this user")
+	}
+	out := Status{AccountKey: accountKey, State: "unknown", ProtectionState: "unknown", Environment: binding.Environment}
+	if policy, err := r.risks.Policy(ctx, user, accountKey); err == nil {
+		out.PolicyVersion = policy.Version
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return Status{}, err
+	}
+	if reason, frozen := r.frozenReason(accountKey); frozen {
+		out.State = "frozen"
+		out.Reason = reason
+	} else {
+		out.State = "running"
+	}
+	decision, err := r.risks.Evaluate(ctx, user, accountKey, r.clock())
+	if err != nil {
+		out.Reason = err.Error()
+	} else if decision.Action != risk.ActionAllow {
+		out.State = "paused"
+		out.Reason = decision.Reason
+	}
+	r.mu.Lock()
+	if state, ok := r.accounts[accountKey]; ok {
+		out.LastREST = state.lastReconcile
+	}
+	r.mu.Unlock()
+	out.LastWS = r.lastWS(accountKey)
+	if equity, err := r.risks.EquityState(ctx, accountKey, r.clock().Format("2006-01-02")); err == nil {
+		out.LedgerComplete = equity.Complete
+	}
+	out.ProtectionState = "unknown"
+	views, err := r.controller.ListContext(ctx, user)
+	if err != nil {
+		return out, nil
+	}
+	for _, v := range views {
+		if v.AccountKey != accountKey {
+			continue
+		}
+		if v.ProtectionState != "" {
+			out.ProtectionState = v.ProtectionState
+		}
+		if rec, err := r.risks.Reservation(ctx, v.ID); err == nil && rec.State != risk.StateReleased {
+			out.ReservedRisk = rec.Risk
+		}
+	}
+	return out, nil
+}
+
+func (r *Runtime) lastWS(accountKey string) time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lastEvent[accountKey]
+}
+
+func (r *Runtime) noteEvent(accountKey string, at time.Time) {
+	r.mu.Lock()
+	r.lastEvent[accountKey] = at
+	r.mu.Unlock()
 }

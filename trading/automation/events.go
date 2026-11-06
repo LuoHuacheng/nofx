@@ -79,6 +79,7 @@ func (r *Runtime) Ingest(ctx context.Context, user, accountKey string, events []
 		return errors.New("automation: ingest requires a user and an account")
 	}
 	r.bufferEvents(accountKey, events)
+	r.noteEvent(accountKey, r.clock())
 	lock := r.lock(accountKey)
 	lock.Lock()
 	defer lock.Unlock()

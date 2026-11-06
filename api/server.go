@@ -21,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"nofx/trading/automation"
+	"nofx/trading/risk"
 )
 
 // Server HTTP API server
@@ -31,6 +32,7 @@ type Server struct {
 	planning                  *planningServices
 	planningError             error
 	managedRuntime            *automation.Runtime
+	risks                     *risk.Store
 	managedTraderFactory      managedTraderFactory
 	router                    *gin.Engine
 	traderManager             *manager.TraderManager
@@ -217,6 +219,7 @@ func (s *Server) setupRoutes() {
 		protected := api.Group("/", s.authMiddleware())
 		s.registerPlanning(api, protected)
 		s.registerManagedAccounts(protected)
+		s.registerAutomation(protected)
 		// UI-only secret export: do not register in the AI route/tool catalog.
 		protected.POST("/wallet/export", s.handleWalletExport)
 		{
