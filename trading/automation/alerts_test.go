@@ -10,11 +10,49 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"nofx/trader/execution"
 )
 
 // TestAlertOutboxFailure proves a failing webhook only postpones the alert: the
 // fault is persisted first, protection keeps running, and a later attempt
 // delivers it. The message never carries a credential.
+// TestFreezeQueuesAnAlert proves a freeze is auditable: the operator sees it in
+// the outbox even when no webhook is configured and nothing is delivered.
+func TestFreezeQueuesAnAlert(t *testing.T) {
+	rig := rig(t, nil)
+	rt := rig.runtime(t, nil)
+	// An external position the runtime does not own is a safety stop.
+	rig.venue.snapshot.Positions = []execution.ManagedPosition{{Symbol: "BTCUSDT", Side: "long", Quantity: "0.5"}}
+	rig.venue.snapshot.Equity = "10000"
+	// Recover reports the stop it froze; the freeze itself is the assertion.
+	if err := rt.Recover(context.Background(), "alice", "account"); err == nil {
+		t.Fatal("an external position was not reported")
+	}
+	var queued []Alert
+	if err := rig.db.Where("account_key = ?", "account").Find(&queued).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("a safety freeze queued %d alerts", len(queued))
+	}
+	if queued[0].Code != "execution_safety_freeze" || queued[0].Severity != AlertSeverityCritical {
+		t.Fatalf("the freeze alert is mislabelled: %+v", queued[0])
+	}
+	if !strings.Contains(queued[0].Message, "external position") {
+		t.Fatalf("the alert does not say what stopped the account: %q", queued[0].Message)
+	}
+	// A repeated freeze with the same reason must not spam the outbox.
+	if err := rt.Recover(context.Background(), "alice", "account"); err == nil {
+		t.Fatal("an external position was not reported twice")
+	}
+	var again int64
+	rig.db.Model(&Alert{}).Count(&again)
+	if again != 1 {
+		t.Fatalf("a repeated freeze queued %d alerts", again)
+	}
+}
+
 func TestAlertOutboxFailure(t *testing.T) {
 	rig := rig(t, nil)
 	rt := rig.runtime(t, nil)

@@ -145,6 +145,11 @@ func (r *Runtime) supervise(ctx context.Context) {
 				logger.Warnf("automation: %s supervision failed: %v", account.key, err)
 			}
 		}
+		// Delivery is a separate concern from supervision: a failing webhook must
+		// never delay protection, so it runs after the tick and only logs.
+		if err := r.DeliverAlerts(ctx); err != nil {
+			logger.Warnf("automation: alert delivery failed: %v", err)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -283,6 +288,28 @@ func (r *Runtime) freeze(accountKey, reason string, kind int) {
 		return
 	}
 	logger.Warnf("automation: %s frozen for new entries: %s", accountKey, reason)
+	// A freeze is only auditable if it outlives the process: the outbox row is
+	// written best-effort, and a failure here must not weaken the freeze itself.
+	if err := r.QueueAlert(context.Background(), Alert{
+		AccountKey: accountKey,
+		Code:       alertCodeFreeze(kind),
+		Severity:   AlertSeverityCritical,
+		Message:    reason,
+	}); err != nil {
+		logger.Warnf("automation: %s freeze was not queued for delivery: %v", accountKey, err)
+	}
+}
+
+// alertCodeFreeze names the freeze in operator terms so a pager message says
+// what stopped the account without reading the runtime's internals.
+func alertCodeFreeze(kind int) string {
+	switch kind {
+	case freezeSafety:
+		return "execution_safety_freeze"
+	case freezeRisk:
+		return "risk_freeze"
+	}
+	return "signal_freeze"
 }
 
 // thaw clears only freezes of the given kind.
