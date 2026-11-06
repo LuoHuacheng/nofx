@@ -61,6 +61,9 @@ func (s *Store) Observe(ctx context.Context, a execution.ManagedAccount, events 
 			return fmt.Errorf("risk: record equity observation: %w", err)
 		}
 		if len(normalized) > 0 {
+			// A re-observed event id keeps the first amount, so a venue correction
+			// to an already-recorded event is not applied; record a correction as
+			// a new event with a distinct id.
 			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&normalized).Error; err != nil {
 				return fmt.Errorf("risk: record ledger events: %w", err)
 			}
@@ -134,7 +137,7 @@ func (s *Store) recompute(tx *gorm.DB, accountKey string, env execution.Environm
 	for _, e := range events {
 		if e.Currency != ledgerCurrency {
 			// Unverifiable currency: retained for audit, never converted, and it
-			// keeps the day incomplete until a verified page replaces it.
+			// marks exactly its own UTC day incomplete.
 			marks = append(marks, e.OccurredAt.Format(ledgerDayLayout))
 			continue
 		}
@@ -150,9 +153,11 @@ func (s *Store) recompute(tx *gorm.DB, accountKey string, env execution.Environm
 		}
 	}
 	sort.Strings(marks)
+	// A gap marks exactly its own UTC day, never a later one. A verified page for
+	// the same day must re-observe that day to clear the mark.
 	incomplete := func(day string) bool {
 		for _, m := range marks {
-			if m <= day {
+			if m == day {
 				return true
 			}
 		}

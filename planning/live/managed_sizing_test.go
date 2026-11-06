@@ -81,13 +81,30 @@ func TestManagedSizingUsesStopRisk(t *testing.T) {
 	if p.SizingLimit != "risk" {
 		t.Fatalf("sizing limit=%q, want risk", p.SizingLimit)
 	}
-	if err := VerifyManagedBudget(p); err != nil {
+	policy := managedPolicy()
+	if err := VerifyManagedBudget(p, policy); err != nil {
 		t.Fatal(err)
 	}
 	oversized := p
 	oversized.Risk = "0.6"
-	if err := VerifyManagedBudget(oversized); err == nil {
+	if err := VerifyManagedBudget(oversized, policy); err == nil {
 		t.Fatal("oversized plan passed the managed budget check")
+	}
+	inflated := p
+	inflated.Constraints.MaxRisk = "1"
+	inflated.Constraints.MaxNotional = "1000"
+	if err := VerifyManagedBudget(inflated, policy); err == nil {
+		t.Fatal("inflated constraints passed the managed budget check")
+	}
+	other := p
+	other.Snapshot.Symbol = "ETHUSDT"
+	if err := VerifyManagedBudget(other, policy); err == nil {
+		t.Fatal("symbol outside the policy whitelist passed the managed budget check")
+	}
+	malformed := p
+	malformed.Quantity = "1.0.2"
+	if err := VerifyManagedBudget(malformed, policy); err == nil {
+		t.Fatal("malformed quantity passed the managed budget check")
 	}
 }
 

@@ -65,11 +65,28 @@ func ManagedAccountLimits(policy risk.Policy, a execution.ManagedAccount, now ti
 	return c, nil
 }
 
-// VerifyManagedBudget re-checks the compiled plan against the policy budget so
-// rounding or an edited plan cannot exceed the per-trade risk.
-func VerifyManagedBudget(p core.Plan) error {
+// VerifyManagedBudget re-checks the compiled plan against the budget the policy
+// implies, so rounding, an edited plan or an inflated constraint cannot exceed
+// the per-trade risk.
+func VerifyManagedBudget(p core.Plan, policy risk.Policy) error {
 	if p.Constraints.SizingPolicy != "" {
 		return errors.New("managed plan must not use account-margin sizing")
+	}
+	if len(policy.Symbols) > 0 {
+		allowed := false
+		for _, s := range policy.Symbols {
+			if s == p.Snapshot.Symbol {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return errors.New("managed plan symbol is outside the policy whitelist")
+		}
+	}
+	equity, err := execution.Number(string(p.Constraints.Equity))
+	if err != nil || equity.Sign() <= 0 {
+		return errors.New("managed plan has no equity to verify the budget against")
 	}
 	riskAmount, err := execution.Number(string(p.Risk))
 	if err != nil || riskAmount.Sign() <= 0 {
@@ -79,6 +96,10 @@ func VerifyManagedBudget(p core.Plan) error {
 	if err != nil || limit.Sign() <= 0 {
 		return errors.New("managed plan has no risk budget")
 	}
+	policyRisk := mulRat(equity, big.NewRat(int64(policy.PerTradeRiskBPS), 10000))
+	if limit.Cmp(policyRisk) > 0 {
+		return errors.New("managed plan risk budget exceeds the policy per-trade risk")
+	}
 	if riskAmount.Cmp(limit) > 0 {
 		return errors.New("managed plan risk exceeds the per-trade budget")
 	}
@@ -86,23 +107,27 @@ func VerifyManagedBudget(p core.Plan) error {
 	if p.Idea.Side == "short" {
 		quote = p.Snapshot.Bid
 	}
-	notional := mulRat(mustRat(p.Quantity), mustRat(quote))
+	quantity, err := execution.Number(string(p.Quantity))
+	if err != nil || quantity.Sign() <= 0 {
+		return errors.New("managed plan has no valid quantity")
+	}
+	price, err := execution.Number(string(quote))
+	if err != nil || price.Sign() <= 0 {
+		return errors.New("managed plan has no valid quote price")
+	}
+	notional := mulRat(quantity, price)
 	maxNotional, err := execution.Number(string(p.Constraints.MaxNotional))
 	if err != nil || maxNotional.Sign() <= 0 {
 		return errors.New("managed plan has no notional budget")
+	}
+	policyNotional := mulRat(equity, big.NewRat(int64(policy.MaxLeverage), 1))
+	if maxNotional.Cmp(policyNotional) > 0 {
+		return errors.New("managed plan notional budget exceeds the policy leverage")
 	}
 	if notional.Cmp(maxNotional) > 0 {
 		return errors.New("managed plan notional exceeds the policy budget")
 	}
 	return nil
-}
-
-func mustRat(d core.Decimal) *big.Rat {
-	r, err := execution.Number(string(d))
-	if err != nil {
-		return new(big.Rat)
-	}
-	return r
 }
 
 func mulRat(a *big.Rat, b *big.Rat) *big.Rat { return new(big.Rat).Mul(a, b) }

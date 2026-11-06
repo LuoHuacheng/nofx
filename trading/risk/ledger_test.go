@@ -300,6 +300,26 @@ func TestRiskLedgerIncompleteHistory(t *testing.T) {
 	}
 }
 
+func TestRiskLedgerGapIsDayLocal(t *testing.T) {
+	store, _, _ := ledgerStore(t)
+	const key = "okx:gap-local"
+	live := ledgerAccount(key, execution.EnvironmentLive, "100")
+	observe(t, store, live, nil, time.Date(2026, 11, 5, 0, 0, 30, 0, time.UTC))
+	if s := ledgerState(t, store, key, "2026-11-05"); !s.Complete {
+		t.Fatalf("day 1 without a gap should be complete: %+v", s)
+	}
+
+	// The gap belongs to day 1 only; day 2 observed at its own boundary is complete.
+	gap := execution.AccountEvent{ID: "gap-day1", Kind: KindFundingGap, OccurredAt: time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)}
+	observe(t, store, live, []execution.AccountEvent{gap}, time.Date(2026, 11, 6, 0, 0, 30, 0, time.UTC))
+	if s := ledgerState(t, store, key, "2026-11-05"); s.Complete {
+		t.Fatalf("day 1 with a funding gap became complete: %+v", s)
+	}
+	if s := ledgerState(t, store, key, "2026-11-06"); !s.Complete || s.DayStart != "100" {
+		t.Fatalf("day 2 inherited the day 1 gap: %+v", s)
+	}
+}
+
 func TestRiskLedgerReopenKeepsBalances(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "risk.db")
 	ctx := context.Background()
