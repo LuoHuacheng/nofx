@@ -73,6 +73,9 @@ func RequireLegacyAllowed(ctx context.Context, db *gorm.DB, user, exchangeID str
 // ruling: only venues that implement AccountIdentity are covered; Binance
 // cannot prove a UID, so its binding alone carries the dedicated-account
 // assumption.
+// The binding lookup deliberately ignores user_id and environment: the same
+// physical UID under any other configuration is a conservative refusal, because
+// one venue account cannot be traded by two NOFX configurations.
 func RequireLegacyIdentity(ctx context.Context, db *gorm.DB, exchangeID, venue string, identity AccountIdentity) error {
 	if identity == nil || exchangeID == "" || venue == "" {
 		return nil

@@ -170,6 +170,14 @@ func (s *Server) handleManagedAccountBinding(c *gin.Context) {
 		return
 	}
 	if b.Enabled {
+		// ruling: same account lock as AutoTrader.Run, so a start cannot pass its
+		// own check between this assertion and the binding write.
+		unlock, e := s.lockPlanningAccount(user, ex.ID)
+		if e != nil {
+			planningError(c, e)
+			return
+		}
+		defer unlock()
 		if e := s.assertLegacyStoppedForManagedBinding(user, ex.ID); e != nil {
 			planningError(c, e)
 			return

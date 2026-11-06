@@ -943,6 +943,11 @@ func (s *Server) handleStopTrader(c *gin.Context) {
 	// Check if trader is running
 	status := trader.GetStatus()
 	if isRunning, ok := status["is_running"].(bool); ok && !isRunning {
+		// A refused start leaves the store flag set; clear it so the account can
+		// be stopped (and later bound) instead of being stuck for good.
+		if err := s.store.Trader().UpdateStatus(userID, traderID, false); err != nil {
+			logger.Infof("⚠️  Failed to clear trader status: %v", err)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Trader is already stopped"})
 		return
 	}

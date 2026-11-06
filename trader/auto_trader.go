@@ -215,12 +215,26 @@ type AutoTrader struct {
 	aiWalletCheckedAt     time.Time // When the balance was last observed
 }
 
+// legacyIdentityClient returns a credential-only identity reader for venues that
+// can prove the physical account without trading it. Venues without one (Binance)
+// rely on the binding's dedicated-account confirmation instead.
+func legacyIdentityClient(config AutoTraderConfig) execution.AccountIdentity {
+	if config.Exchange != "okx" {
+		return nil
+	}
+	return okx.NewIdentityClient(config.OKXAPIKey, config.OKXSecretKey, config.OKXPassphrase)
+}
+
 // NewAutoTrader creates an automatic trader
 // st parameter is used to store decision records to database
 func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*AutoTrader, error) {
 	// Check before constructing exchange clients; legacy constructors may change
 	// account settings even before their Run loop starts.
-	if st != nil && config.ExchangeID != "" {
+	if st != nil {
+		// A configuration without an exchange row cannot be proven unmanaged.
+		if config.ExchangeID == "" {
+			return nil, fmt.Errorf("cannot verify managed account ownership: the trader has no exchange configuration")
+		}
 		ex, err := st.Exchange().GetByID(userID, config.ExchangeID)
 		if err != nil {
 			return nil, fmt.Errorf("cannot verify planning account ownership: %w", err)
@@ -306,6 +320,17 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		config.Exchange = "binance"
 	}
 
+	// ruling: the venue identity is read with a credential-only client before the
+	// constructor runs, because the legacy OKX constructor rewrites the account
+	// position mode; a refusal must not mutate the managed account first.
+	if st != nil {
+		if identity := legacyIdentityClient(config); identity != nil {
+			if err := execution.RequireLegacyIdentity(context.Background(), st.GormDB(), config.ExchangeID, config.Exchange, identity); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Create corresponding trader based on configuration
 	var trader Trader
 	var err error
@@ -375,7 +400,9 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 
 	// ruling: the physical-account comparison also runs at construction, so a
 	// second configuration of a managed account can never reach its Run loop.
-	if st != nil && config.ExchangeID != "" {
+	// Belt and braces: re-check with the constructed trader's own reader, so a
+	// venue that only exposes identities after construction is still covered.
+	if st != nil {
 		if identity, ok := trader.(execution.AccountIdentity); ok {
 			if err := execution.RequireLegacyIdentity(context.Background(), st.GormDB(), config.ExchangeID, config.Exchange, identity); err != nil {
 				return nil, err
@@ -505,7 +532,11 @@ func (at *AutoTrader) reloadStrategyConfigIfChanged() error {
 func (at *AutoTrader) Run() error {
 	// All launch paths (API, restoration and manager) respect a planning lease.
 	var unlock func()
-	if at.store != nil && at.exchangeID != "" {
+	if at.store != nil {
+		// A configuration without an exchange row cannot be proven unmanaged.
+		if at.exchangeID == "" {
+			return fmt.Errorf("cannot verify managed account ownership: the trader has no exchange configuration")
+		}
 		ex, err := at.store.Exchange().GetByID(at.userID, at.exchangeID)
 		if err != nil {
 			return fmt.Errorf("cannot verify planning account ownership: %w", err)

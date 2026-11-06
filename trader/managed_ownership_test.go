@@ -1,6 +1,8 @@
 package trader
 
 import (
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"nofx/planning/live"
 	"nofx/store"
 	"nofx/trader/execution"
+	"nofx/trader/okx"
 )
 
 func managedOwnershipStore(t *testing.T) *store.Store {
@@ -87,5 +90,84 @@ func TestManagedOwnershipBlocksPendingRun(t *testing.T) {
 	}
 	if at.isRunning {
 		t.Fatal("legacy run started while a managed run was approved")
+	}
+}
+
+type recordingTransport struct{ calls []string }
+
+func (r *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.calls = append(r.calls, req.Method+" "+req.URL.Path)
+	const okxAccountConfig = `{"code":"0","msg":"","data":[{"uid":"uid-1","posMode":"net_mode"}]}`
+	return &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(okxAccountConfig)),
+		Request:    req,
+	}, nil
+}
+
+// TestManagedOwnershipIdentityPrecedesVenueWrite proves the OKX ownership check
+// reads the UID with a credential-only client: the legacy constructor rewrites
+// the position mode, which must not happen for a refused configuration.
+func TestManagedOwnershipIdentityPrecedesVenueWrite(t *testing.T) {
+	st := managedOwnershipStore(t)
+	ex := store.Exchange{ID: "second-okx", UserID: "alice", ExchangeType: "okx", APIKey: "second-key", SecretKey: "second-secret", Passphrase: "second-pass", Enabled: true}
+	if err := st.GormDB().Create(&ex).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := st.GormDB().Create(&execution.Binding{ID: "binding-bob", UserID: "bob", ExchangeID: "bobs-okx", Venue: "okx", Environment: execution.EnvironmentLive, VenueAccountID: "uid-1", Enabled: true}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	transport := &recordingTransport{}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+	defer func() { http.DefaultTransport = original }()
+
+	_, err := NewAutoTrader(AutoTraderConfig{
+		ExchangeID: "second-okx", Exchange: "okx",
+		OKXAPIKey: "second-key", OKXSecretKey: "second-secret", OKXPassphrase: "second-pass",
+		InitialBalance: 100,
+	}, st, "alice")
+	if err == nil || !strings.Contains(err.Error(), "managed under another") {
+		t.Fatalf("duplicate physical account accepted: %v", err)
+	}
+	if len(transport.calls) != 1 || transport.calls[0] != "GET /api/v5/account/config" {
+		t.Fatalf("pre-switch ownership check touched the venue: %v", transport.calls)
+	}
+	for _, call := range transport.calls {
+		if strings.HasPrefix(call, "POST") {
+			t.Fatalf("legacy constructor wrote to the managed account before the refusal: %v", transport.calls)
+		}
+	}
+
+	// The fixture does observe the legacy constructor's write, so the assertion
+	// above would catch a regression.
+	transport.calls = nil
+	okx.NewOKXTrader("second-key", "second-secret", "second-pass")
+	wrote := false
+	for _, call := range transport.calls {
+		if call == "POST /api/v5/account/set-position-mode" {
+			wrote = true
+		}
+	}
+	if !wrote {
+		t.Fatalf("fixture did not observe the legacy position-mode write: %v", transport.calls)
+	}
+}
+
+// TestManagedOwnershipRequiresExchangeConfig pins the fail-closed behaviour for
+// configurations that cannot be tied to an exchange row.
+func TestManagedOwnershipRequiresExchangeConfig(t *testing.T) {
+	st := managedOwnershipStore(t)
+	if _, err := NewAutoTrader(AutoTraderConfig{Exchange: "okx", InitialBalance: 100}, st, "alice"); err == nil || !strings.Contains(err.Error(), "no exchange configuration") {
+		t.Fatalf("constructor accepted a configuration without an exchange: %v", err)
+	}
+	at := &AutoTrader{store: st, userID: "alice", exchange: "okx"}
+	if err := at.Run(); err == nil || !strings.Contains(err.Error(), "no exchange configuration") {
+		t.Fatalf("run accepted a configuration without an exchange: %v", err)
+	}
+	if at.isRunning {
+		t.Fatal("run started without an exchange configuration")
 	}
 }

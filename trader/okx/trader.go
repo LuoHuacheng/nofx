@@ -355,6 +355,13 @@ func NewAccountTrader(apiKey, secretKey, passphrase string) *OKXTrader {
 	return trader
 }
 
+// NewIdentityClient builds a credential-only identity reader. The legacy
+// constructor rewrites the account position mode, so an ownership check that
+// runs before the constructor is allowed must not use it.
+func NewIdentityClient(apiKey, secretKey, passphrase string) execution.AccountIdentity {
+	return NewAccountTrader(apiKey, secretKey, passphrase)
+}
+
 // NewManagedAccountTrader builds an account reader pinned to one environment.
 // It never changes position mode, leverage or orders.
 func NewManagedAccountTrader(ctx context.Context, apiKey, secretKey, passphrase string, env execution.Environment) (*OKXTrader, error) {
