@@ -273,11 +273,11 @@ export function MetricTooltip({
     >
       <div
         style={{
-          background: '#F7F4EC',
-          border: '1px solid rgba(26,24,19,0.14)',
+          background: '#ffffff',
+          border: '1px solid rgba(25,36,52,0.14)',
           borderRadius: '12px',
           padding: '16px',
-          boxShadow: '0 25px 50px -12px rgba(26, 24, 19, 0.18)',
+          boxShadow: '0 25px 50px -12px rgba(25,36,52, 0.18)',
         }}
       >
         {/* Header */}
@@ -288,7 +288,7 @@ export function MetricTooltip({
             gap: '8px',
             marginBottom: '12px',
             paddingBottom: '8px',
-            borderBottom: '1px solid rgba(26,24,19,0.14)',
+            borderBottom: '1px solid rgba(25,36,52,0.14)',
           }}
         >
           <div
@@ -296,11 +296,11 @@ export function MetricTooltip({
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              background: '#E0483B',
+              background: '#295be8',
             }}
           />
           <span
-            style={{ fontWeight: 'bold', fontSize: '14px', color: '#1A1813' }}
+            style={{ fontWeight: 'bold', fontSize: '14px', color: '#192434' }}
           >
             {name}
           </span>
@@ -309,14 +309,14 @@ export function MetricTooltip({
         {/* Formula */}
         <div
           style={{
-            background: '#E8E2D5',
+            background: '#edf1f7',
             borderRadius: '8px',
             padding: '12px',
             marginBottom: '12px',
           }}
         >
           <div
-            style={{ fontSize: '12px', color: '#8A8478', marginBottom: '8px' }}
+            style={{ fontSize: '12px', color: '#707e92', marginBottom: '8px' }}
           >
             {formulaLabel}
           </div>
@@ -326,7 +326,7 @@ export function MetricTooltip({
               justifyContent: 'center',
               alignItems: 'center',
               padding: '8px 4px',
-              color: '#1A1813',
+              color: '#192434',
               overflowX: 'auto',
               overflowY: 'hidden',
               maxWidth: '100%',
@@ -342,7 +342,7 @@ export function MetricTooltip({
           style={{
             fontSize: '12px',
             lineHeight: '1.5',
-            color: '#8A8478',
+            color: '#707e92',
             margin: 0,
           }}
         >
@@ -366,8 +366,8 @@ export function MetricTooltip({
           }
           setShow(!show)
         }}
-        className={`p-0.5 rounded-full transition-colors hover:bg-[rgba(26,24,19,0.06)] ${className}`}
-        style={{ color: '#8A8478' }}
+        className={`p-0.5 rounded-full transition-colors hover:bg-[rgba(25,36,52,0.06)] ${className}`}
+        style={{ color: '#707e92' }}
         aria-label={`Info about ${name}`}
       >
         <HelpCircle size={size} />

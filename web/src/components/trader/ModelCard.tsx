@@ -22,19 +22,19 @@ export function ModelCard({
       onClick={onClick}
       className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all hover:scale-105"
       style={{
-        background: selected ? 'rgba(224, 72, 59, 0.12)' : '#F7F4EC',
+        background: selected ? 'rgba(41,91,232, 0.12)' : '#ffffff',
         border: selected
-          ? '2px solid #E0483B'
-          : '2px solid rgba(26,24,19,0.14)',
+          ? '2px solid #295be8'
+          : '2px solid rgba(25,36,52,0.14)',
       }}
     >
       <div className="relative">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)]">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)]">
           {getModelIcon(model.provider || model.id, {
             width: 32,
             height: 32,
           }) || (
-            <span className="text-lg font-bold" style={{ color: '#E0483B' }}>
+            <span className="text-lg font-bold" style={{ color: '#295be8' }}>
               {model.name[0]}
             </span>
           )}
@@ -50,18 +50,18 @@ export function ModelCard({
         {configured && !selected && (
           <div
             className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center"
-            style={{ background: '#E0483B' }}
+            style={{ background: '#295be8' }}
           >
             <Check className="w-2.5 h-2.5 text-white" />
           </div>
         )}
       </div>
-      <span className="text-sm font-semibold" style={{ color: '#1A1813' }}>
+      <span className="text-sm font-semibold" style={{ color: '#192434' }}>
         {getShortName(model.name)}
       </span>
       <span
         className="text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wide"
-        style={{ background: 'rgba(224, 72, 59, 0.18)', color: '#E0483B' }}
+        style={{ background: 'rgba(41,91,232, 0.18)', color: '#295be8' }}
       >
         {model.provider}
       </span>

@@ -1,9 +1,123 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap')
+layer(base);
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap')
+layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-nofx-gold: #295be8;
+  --color-nofx-gold-dim: rgba(41, 91, 232, 0.1);
+  --color-nofx-gold-glow: rgba(41, 91, 232, 0.3);
+  --color-nofx-gold-highlight: #204bc4;
+
+  --color-nofx-bg: #f6f8fc;
+  --color-nofx-bg-deeper: #edf1f7;
+  --color-nofx-bg-lighter: #ffffff;
+
+  --color-nofx-accent: #295be8;
+
+  --color-nofx-text: #192434;
+  --color-nofx-text-main: #192434;
+  --color-nofx-text-muted: #707e92;
+
+  --color-nofx-success: #2e8b57;
+  --color-nofx-danger: #d6433a;
+
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: IBM Plex Mono, Menlo, Monaco, Courier New, monospace;
+
+  --background-image-gradient-radial: radial-gradient(
+    circle at center,
+    var(--tw-gradient-stops)
+  );
+  --background-image-gradient-conic: conic-gradient(
+    from 180deg at 50% 50%,
+    var(--tw-gradient-stops)
+  );
+  --background-image-scanlines: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H4V2H0V0Z' fill='rgba(0,0,0,0.4)'/%3E%3C/svg%3E");
+  --background-image-grid-pattern:
+    linear-gradient(to right, #1f2937 1px, transparent 1px),
+    linear-gradient(to bottom, #1f2937 1px, transparent 1px);
+
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-scan: scan 8s linear infinite;
+  --animate-scan-fast: scan 2s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-glitch: glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both
+    infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+
+  --shadow-neon:
+    0 0 5px var(--color-nofx-gold), 0 0 20px var(--color-nofx-gold-dim);
+  --shadow-neon-blue:
+    0 0 5px var(--color-nofx-accent), 0 0 20px rgba(0, 240, 255, 0.2);
+
+  @keyframes scan {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 0 100%;
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  @keyframes glitch {
+    0% {
+      transform: translate(0);
+    }
+    20% {
+      transform: translate(-2px, 2px);
+    }
+    40% {
+      transform: translate(-2px, -2px);
+    }
+    60% {
+      transform: translate(2px, 2px);
+    }
+    80% {
+      transform: translate(2px, -2px);
+    }
+    100% {
+      transform: translate(0);
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 /* 强制显示滚动条以确保所有页面布局一致 */
 html {
@@ -11,34 +125,34 @@ html {
 }
 
 :root {
-  /* NOFX cream-paper + vermilion terminal design system */
-  --nofx-gold: #e0483b;
-  --nofx-bg: #f1ece2;
-  --nofx-accent: #e0483b;
-  --nofx-glass: rgba(247, 244, 236, 0.85);
-  --nofx-border: rgba(26, 24, 19, 0.14);
+  /* NOFX Flow: cobalt identity, clear surfaces, semantic trading colors. */
+  --nofx-gold: #295be8;
+  --nofx-bg: #f6f8fc;
+  --nofx-accent: #295be8;
+  --nofx-glass: rgba(255, 255, 255, 0.85);
+  --nofx-border: rgba(25, 36, 52, 0.14);
 
   /* Soft accents (no neon on paper) */
   --glow-primary: none;
   --glow-accent: none;
   --glow-text: none;
 
-  --background: #f1ece2;
-  --header-bg: rgba(247, 244, 236, 0.85);
+  --background: #f6f8fc;
+  --header-bg: rgba(255, 255, 255, 0.85);
 
-  --glass-bg: rgba(247, 244, 236, 0.7);
-  --glass-border: rgba(26, 24, 19, 0.12);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(25, 36, 52, 0.12);
 
-  --panel-bg: #f7f4ec;
-  --panel-bg-hover: #f2eee4;
-  --panel-border: rgba(26, 24, 19, 0.14);
-  --panel-border-hover: rgba(224, 72, 59, 0.5);
+  --panel-bg: #ffffff;
+  --panel-bg-hover: #f0f4fb;
+  --panel-border: rgba(25, 36, 52, 0.14);
+  --panel-border-hover: rgba(41, 91, 232, 0.5);
 
-  --foreground: #1a1813;
-  --text-primary: #1a1813;
-  --text-secondary: #6b6557;
-  --text-tertiary: #8a8478;
-  --text-disabled: #b4b2a9;
+  --foreground: #192434;
+  --text-primary: #192434;
+  --text-secondary: #637087;
+  --text-tertiary: #707e92;
+  --text-disabled: #a3adbd;
 
   /* Trading Colors (forest green / crimson on paper) */
   --binance-green: #2e8b57;
@@ -47,16 +161,15 @@ html {
   --binance-red: #d6433a;
   --binance-red-bg: rgba(214, 67, 58, 0.12);
   --binance-red-border: rgba(214, 67, 58, 0.35);
-  --binance-yellow: #e0483b;
+  --binance-yellow: #295be8;
 
   /* Shadows (subtle on paper) */
-  --shadow-sm: 0 1px 2px rgba(26, 24, 19, 0.08);
-  --shadow-md: 0 2px 8px rgba(26, 24, 19, 0.1);
-  --shadow-lg: 0 6px 24px rgba(26, 24, 19, 0.12);
+  --shadow-sm: 0 1px 2px rgba(25, 36, 52, 0.08);
+  --shadow-md: 0 2px 8px rgba(25, 36, 52, 0.1);
+  --shadow-lg: 0 6px 24px rgba(25, 36, 52, 0.12);
   --shadow-glow: none;
 
-  font-family:
-    'IBM Plex Mono', ui-monospace, Menlo, Monaco, 'Courier New', monospace;
+  font-family: var(--font-sans);
   line-height: 1.6;
   font-weight: 400;
   color-scheme: light;
@@ -139,8 +252,8 @@ body {
 
 /* Selection — vermilion tint on paper */
 ::selection {
-  background: rgba(224, 72, 59, 0.25);
-  color: #1a1813;
+  background: rgba(41, 91, 232, 0.25);
+  color: #192434;
 }
 
 #root {
@@ -289,21 +402,21 @@ body {
  * use the literal cream palette here to stay readable everywhere.
  */
 .nofx-toast {
-  background: #f1ece2 !important;
-  border: 1px solid #d8d2c4 !important;
-  color: #1a1813 !important;
-  box-shadow: 0 8px 28px rgba(26, 24, 19, 0.18) !important;
+  background: #f6f8fc !important;
+  border: 1px solid #e1e7f0 !important;
+  color: #192434 !important;
+  box-shadow: 0 8px 28px rgba(25, 36, 52, 0.18) !important;
   border-radius: 4px !important;
   font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
 }
 
 .nofx-toast .sonner-title {
-  color: #1a1813 !important;
+  color: #192434 !important;
   font-weight: 700;
 }
 
 .nofx-toast .sonner-description {
-  color: #3a372e !important;
+  color: #39475b !important;
 }
 
 /* Per-type accent: cream background, colored left rail + title. */
@@ -317,8 +430,8 @@ body {
 }
 
 .nofx-toast[data-type='error'] {
-  border-color: #e0483b !important;
-  border-left: 3px solid #e0483b !important;
+  border-color: #295be8 !important;
+  border-left: 3px solid #295be8 !important;
 }
 
 .nofx-toast[data-type='error'] .sonner-title {
@@ -337,13 +450,13 @@ body {
 }
 
 .nofx-toast .sonner-close-button {
-  background: #f1ece2 !important;
-  border-color: #d8d2c4 !important;
-  color: #3a372e !important;
+  background: #f6f8fc !important;
+  border-color: #e1e7f0 !important;
+  color: #39475b !important;
 }
 
 .nofx-toast .sonner-close-button:hover {
-  color: #1a1813 !important;
+  color: #192434 !important;
 }
 
 /* Monospace numbers — use for prices, balances, timestamps, code */

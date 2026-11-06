@@ -33,6 +33,11 @@ test_*
 docs/
 
 # Runtime data
+data/
+artifacts/
+.env
+.env.*
+!.env.example
 decision_logs/
 *.log
 

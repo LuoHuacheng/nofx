@@ -26,6 +26,7 @@ import { DataPage } from '../pages/DataPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { StrategyStudioPage } from '../pages/StrategyStudioPage'
 import BacktestPage from '../pages/BacktestPage'
+import { TradingPlanningPage } from '../pages/TradingPlanningPage'
 import { TerminalDashboard } from '../components/terminal/TerminalDashboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -46,6 +47,13 @@ import {
   ROUTES,
   type Page,
 } from './paths'
+
+function FrontierLoginRedirect() {
+  useEffect(() => {
+    sessionStorage.setItem('returnUrl', ROUTES.planning)
+  }, [])
+  return <Navigate to={ROUTES.login} replace />
+}
 
 function getTraderSlug(trader: TraderInfo) {
   const idPrefix = trader.trader_id.slice(0, 4)
@@ -72,15 +80,15 @@ function LoadingScreen() {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
-      style={{ background: '#F1ECE2' }}
+      style={{ background: '#f6f8fc' }}
     >
       <div className="text-center">
         <img
-          src="/icons/nofx.svg"
+          src="/icons/nofx-flow.svg"
           alt="NoFx Logo"
           className="w-16 h-16 mx-auto mb-4 animate-pulse"
         />
-        <p style={{ color: '#1A1813' }}>{t('loading', language)}</p>
+        <p style={{ color: '#192434' }}>{t('loading', language)}</p>
       </div>
     </div>
   )
@@ -159,8 +167,8 @@ function AppChrome({
 
   return (
     <div
-      className="min-h-screen"
-      style={{ background: '#F1ECE2', color: '#1A1813' }}
+      className="nofx-shell min-h-screen"
+      style={{ background: '#f6f8fc', color: '#192434' }}
     >
       <HeaderBar
         isLoggedIn={!!user}
@@ -174,7 +182,7 @@ function AppChrome({
       />
 
       {wrapInMain ? (
-        <main className="min-h-screen pt-16">{content}</main>
+        <main className="min-h-screen pt-[72px]">{content}</main>
       ) : (
         content
       )}
@@ -388,6 +396,10 @@ function DashboardRoute() {
 export function AppRoutes() {
   const { user, token, isLoading } = useAuth()
   const { config: systemConfig, loading: configLoading } = useSystemConfig()
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [pathname])
   const isAuthenticated = !!user && !!token
 
   if (isLoading || configLoading) {
@@ -402,6 +414,27 @@ export function AppRoutes() {
     <>
       <LegacyHashRedirect />
       <Routes>
+        <Route
+          path="/planning"
+          element={<Navigate to={ROUTES.planning} replace />}
+        />
+        <Route
+          path={ROUTES.planning}
+          element={
+            isAuthenticated ? (
+              <AppChrome
+                currentPage="planning"
+                showFooter={false}
+                wrapInMain={false}
+              >
+                <TradingPlanningPage />
+              </AppChrome>
+            ) : (
+              <FrontierLoginRedirect />
+            )
+          }
+        />
+
         <Route path={ROUTES.home} element={<LandingPage />} />
         <Route path={ROUTES.login} element={<LoginPage />} />
         <Route path={ROUTES.register} element={<RegisterPage />} />

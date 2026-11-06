@@ -1,14 +1,18 @@
-<p align="center"><strong>При поддержке <a href="https://vergex.trade">vergex.trade</a></strong></p>
-
 <p align="center">
-  <img src="../../assets/nofx-banner.svg" alt="NOFX — AI trading terminal" width="100%"/>
+  <img src="../../assets/nofx-banner.svg" alt="nofx — Интеллект в действии. Открытая торговая система на вашем компьютере." width="100%"/>
 </p>
 
 <p align="center">
-  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Stars"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/releases"><img src="https://img.shields.io/github/v/release/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Release"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-E0483B?style=flat-square&labelColor=1A1813" alt="License"></a>
-  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-E0483B?style=flat-square&labelColor=1A1813&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="#frontier">Frontier</a> ·
+  <a href="#run-locally">Начать</a> ·
+  <a href="#documentation">Документация</a> ·
+  <a href="#community">Сообщество</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat&labelColor=192434&color=295BE8" alt="GitHub stars"></a>
+  <a href="../../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-295BE8?style=flat&labelColor=192434" alt="License: AGPL-3.0"></a>
+  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-295BE8?style=flat&labelColor=192434&logo=telegram&logoColor=white" alt="Telegram community"></a>
 </p>
 
 <p align="center">
@@ -21,214 +25,226 @@
   <a href="../vi/README.md">Tiếng Việt</a>
 </p>
 
-<br/>
+NOFX — торговая система с открытым исходным кодом, которую вы запускаете на своём компьютере. В **Frontier** можно обсудить сделку с ИИ, сравнить варианты входа на графике и самостоятельно одобрить ордер. **Autopilot** предназначен для непрерывной работы стратегии. Оба режима используют настроенные вами модели и биржевые аккаунты.
 
-NOFX — торговый терминал с открытым исходным кодом, где стратегией выступает языковая модель. Каждый трейдер работает в непрерывном цикле — читает структуру рынка, принимает решение, исполняет его и записывает ход рассуждений, — а рантайм на Go прижимает каждый ордер к жёстким риск-лимитам, которые модель не может обойти.
+Разрабатывается совместно с [Vergex](https://vergex.trade). Доступ к ИИ и данным — через [Claw402](https://claw402.ai).
 
-Трейдеры собираются свободно: любая модель, любая из девяти бирж, любая стратегия. Запускайте несколько параллельно и сравнивайте их в публичной таблице лидеров по реализованной доходности. Всё работает на вашей собственной машине; биржевые ключи шифруются при хранении и никогда её не покидают.
+<a id="run-locally"></a>
+
+## Локальный запуск
+
+**Установка одной командой — Linux / macOS**
+
+Установите и запустите Docker с Compose, затем выполните:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
 ```
 
-Терминал откроется по адресу `http://127.0.0.1:3000`.
+Откройте **http://127.0.0.1:3000** в браузере на компьютере.
 
-**Первый запуск**
+Установщик создаст недостающие ключи окружения и запустит NOFX из опубликованных Docker-образов. Устанавливать Go или Node.js не требуется. Перейдите к [первой настройке](#your-first-session) или посмотрите [сборку из исходников и другие варианты](#source-builds-and-other-options).
 
-1. Зарегистрируйтесь — первый аккаунт становится владельцем экземпляра.
-2. Пройдите пошаговый запуск: положите **$1+ USDC** (сеть Base) в кошелёк для оплаты AI, который он создаст для вас, затем подключите Hyperliquid и внесите **$12+ USDC** для торговли.
-3. Запустите **Autopilot**. AI сканирует рынок каждые несколько минут и торгует самостоятельно; каждое решение появляется на дашборде в момент принятия. Остановить можно в любой момент одним кликом.
+## Frontier
 
-<br/>
+График, диалог и план сделки, который можно проверить до отправки ордера.
 
-## Регистрация на биржах
+1. **Выберите рынок.** Просматривайте инструменты с наибольшим объёмом, ищите по биржевым тикерам или используйте список Binance AI500. Инструменты, привязанные к акциям, доступны на поддерживающих их площадках.
+2. **Сравните варианты входа.** Запросите рыночный, лимитный, ступенчатый план с распределением объёма или TWAP. Цены входа, стоп-лосс, цели, плечо, стоимость позиции и расчётная маржа показаны вместе.
+3. **Проверьте и подтвердите сделку.** Выберите план, чтобы сфокусировать на нём график. Проверьте текущий аккаунт и параметры ордера, затем явно одобрите исполнение.
+4. **Управляйте позицией.** Под графиком доступны текущие позиции и биржевые ордера, а также ручное открытие и закрытие позиций.
 
-NOFX бесплатен и открыт. Открытие счёта по партнёрским ссылкам ниже даёт сниженные торговые комиссии и поддерживает дальнейшую разработку.
+Frontier поддерживает **бессрочные USDT-контракты Binance, Hyperliquid, OKX и Bitget**. Публичные рыночные данные можно просматривать до подключения торгового аккаунта; для торговли нужен аккаунт соответствующей биржи. Создание плана не отправляет ордер.
 
-| Биржа                                                                                                                      | Статус | Регистрация со скидкой на комиссии                                                          |
-| :---------------------------------------------------------------------------------------------------------------------------- | :----: | :---------------------------------------------------------------------------------- |
-| <img src="../../../web/public/exchange-icons/binance.jpg" width="20" height="20" style="vertical-align: middle;"/> **Binance**       |   ✅   | [Зарегистрироваться](https://www.binance.com/join?ref=NOFXENG)                                |
-| <img src="../../../web/public/exchange-icons/bybit.png" width="20" height="20" style="vertical-align: middle;"/> **Bybit**           |   ✅   | [Зарегистрироваться](https://partner.bybit.com/b/83856)                                       |
-| <img src="../../../web/public/exchange-icons/okx.svg" width="20" height="20" style="vertical-align: middle;"/> **OKX**               |   ✅   | [Зарегистрироваться](https://www.okx.com/join/1865360)                                        |
-| <img src="../../../web/public/exchange-icons/hyperliquid.png" width="20" height="20" style="vertical-align: middle;"/> **Hyperliquid** |   ✅   | [Зарегистрироваться](https://app.hyperliquid.xyz/join/AITRADING)                              |
-| <img src="../../../web/public/exchange-icons/bitget.svg" width="20" height="20" style="vertical-align: middle;"/> **Bitget**         |   ✅   | [Зарегистрироваться](https://www.bitget.com/referral/register?from=referral&clacCode=c8a43172) |
-| <img src="../../../web/public/exchange-icons/kucoin.svg" width="20" height="20" style="vertical-align: middle;"/> **KuCoin**         |   ✅   | [Зарегистрироваться](https://www.kucoin.com/r/broker/CXEV7XKK)                                |
-| <img src="../../../web/public/exchange-icons/gate.svg" width="20" height="20" style="vertical-align: middle;"/> **Gate**             |   ✅   | [Зарегистрироваться](https://www.gatenode.xyz/share/VQBGUAxY)                                 |
-| <img src="../../../web/public/exchange-icons/aster.svg" width="20" height="20" style="vertical-align: middle;"/> **Aster**           |   ✅   | [Зарегистрироваться](https://www.asterdex.com/en/referral/fdfc0e)                             |
-| <img src="../../../web/public/exchange-icons/lighter.png" width="20" height="20" style="vertical-align: middle;"/> **Lighter**       |   ✅   | [Зарегистрироваться](https://app.lighter.xyz/?referral=68151432)                              |
-
-<br/>
-
-## Демо
-
-https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
-
-<br/>
-
-## Модель предполагает. Рантайм располагает.
-
-Решения основаны на стеке данных [Claw402.ai](https://claw402.ai) · Vergex: живом борде направлений по всему рынку, текущем направлении и его истории для каждого инструмента, тепловых картах себестоимости и ликвидаций и чистом потоке средств. NOFX следует направлению борда; остальные данные служат контекстом исполнения.
-
-Каждый ордер проходит через лимиты, зашитые в код и недоступные модели:
-
-|                          |                                                                                    |
-| :----------------------- | :--------------------------------------------------------------------------------- |
-| Лимиты позиций          | Максимум одновременных позиций, номинал ограничен долей от капитала, одна позиция на инструмент |
-| Ограничение плеча          | Жёсткие пределы применяются при расчёте размера ордера, независимо от того, что запросила модель     |
-| Защита на стороне биржи | Стоп-лосс и тейк-профит выставляются на бирже сразу после каждого входа     |
-| Автозакрытие по просадке      | Прибыльные позиции, отдавшие слишком много от своего пика, закрываются            |
-| Троттлинг сделок         | Минимальное время удержания, кулдауны повторного входа по инструменту, лимиты входов на цикл и на час |
-| Безопасный режим                | Повторяющиеся сбои модели блокируют новые входы, пока модель не восстановится                 |
-| Предстартовая проверка         | Доступ к модели, средства в кошельке, стратегия и балансы бирж проверяются до того, как трейдер сможет стартовать |
-
-Каждое решение сохраняется вместе с полным ходом рассуждений модели. Ни одной позиции без документального следа.
-
-<br/>
-
-## Терминал
-
-| | |
+| Вход | Как работает |
 | :--- | :--- |
-| **Autopilot** | Пошаговый запуск: пополнить, подключить, внести депозит, стартовать — с серверной предстартовой проверкой на каждом шаге |
-| **Strategy Studio** | Пресеты стилей, наборы монет, индикаторы, плечо, порог уверенности для входа, собственные промпты |
-| **Competition** | Публичная таблица лидеров по реализованной доходности, каждая запись привязана к своей модели |
-| **Dashboard** | Живые позиции, ордера, статистика и обоснование каждого решения |
+| **Рыночный** | Вход по доступной рыночной цене после одобрения; показанная цена — оценка. |
+| **Лимитный** | Ордер на вход по выбранной цене. |
+| **Ступенчатый** | Объём позиции распределяется между ценовыми уровнями в заданных пропорциях. |
+| **TWAP** | Ограниченное число ордеров отправляется по времени в пределах одобренных цен. |
+
+Лимитные ордера и запланированные части TWAP могут остаться неисполненными. [Подробности исполнения и восстановления](../../features/trade-planning.md).
+
+## Autopilot
+
+Для непрерывной работы стратегии настройте трейдера, выбрав модель, биржевой аккаунт и стратегию. Autopilot анализирует рынок, принимает решения и отправляет ордера через биржевой модуль NOFX. Dashboard показывает позиции, результаты и историю решений.
+
+**Frontier требует одобрения каждой сделки. Autopilot может размещать ордера во время работы.** Запуск и остановка Autopilot выполняются отдельно.
+
+| Раздел | Назначение |
+| :--- | :--- |
+| **Config** | Подключение моделей, пополнение AI-кошелька и управление торговыми аккаунтами. |
+| **Frontier** | Изучение рынков, сравнение планов входа и размещение проверенных ордеров. |
+| **Dashboard** | Работающие трейдеры, позиции и история решений. |
+| **Strategy** | Выбор рынков, индикаторов, размера позиции и торговых инструкций. |
+| **Leaderboard** | Сравнение опубликованных результатов трейдеров. |
+
+<a id="your-first-session"></a>
+
+## Первая настройка
+
+1. **Создайте локальную учётную запись.** Войдите в запущенный экземпляр NOFX.
+2. **Настройте ИИ в Config.** Выберите модель. Для Claw402 создайте или импортируйте кошелёк для оплаты ИИ, сохраните его приватный ключ и пополните адрес **USDC в сети Base**. Этот баланс оплачивает запросы к моделям и платным данным.
+3. **Добавьте торговый аккаунт.** Подключите нужную биржу и проверьте капитал и доступный баланс аккаунта. Торговые средства отделены от кошелька для оплаты ИИ.
+4. **Откройте Frontier.** Выберите биржу, аккаунт и инструмент. Создайте планы, сравните их на графике и, когда будете готовы, проверьте ордер.
+
+Для непрерывной торговли отдельно настройте и запустите Autopilot.
+
+### Обновление установки, созданной установщиком
+
+Остановите активных трейдеров Autopilot и проверьте выполняющиеся сделки Frontier. Затем в каталоге установки (по умолчанию `~/nofx`) выполните:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+При обновлении сохраните `.env` и каталог `data/`: в них находятся настройки, материалы для шифрования и сохранённое состояние приложения.
+
+После перезапуска проверьте позиции и ордера на бирже и разберите все исполнения, требующие внимания, прежде чем открывать следующую сделку. Остановка процесса не закрывает позиции.
+
+<a id="source-builds-and-other-options"></a>
+
+## Сборка из исходников и другие варианты
 
 <details>
-<summary>Скриншоты</summary>
+<summary>Для разработчиков: сборка и обновление из исходников</summary>
 
-<br/>
+Этот вариант подходит для разработки NOFX или проверки изменений до обновления опубликованных образов. Установите Git и Docker с Compose, затем запустите Docker:
 
-|                        Обзор                         |                          График рынка                           |
-| :-----------------------------------------------------: | :-------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-page.png" width="400"/> | <img src="../../../screenshots/dashboard-market-chart.png" width="400"/> |
+```bash
+git clone --recurse-submodules https://github.com/NoFxAiOS/nofx.git
+cd nofx
+./start.sh start --build
+```
 
-|                          Статистика торговли                           |                          История позиций                           |
-| :--------------------------------------------------------------: | :-----------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-trading-stats.png" width="400"/> | <img src="../../../screenshots/dashboard-position-history.png" width="400"/> |
+Скрипт запуска при необходимости создаёт `.env` и недостающие ключи шифрования. Если репозиторий клонирован без подмодулей, перед сборкой выполните `git submodule update --init web/vendor/charting`. На ресурсы графиков TradingView распространяется соответствующая лицензия; см. [примечания об интеграции графиков](../../features/trade-planning.md#harness-chart-and-plugins).
 
-|                     Редактор стратегий                      |                      Настройка индикаторов                       |
-| :------------------------------------------------------: | :----------------------------------------------------------: |
-| <img src="../../../screenshots/strategy-studio.png" width="400"/> | <img src="../../../screenshots/strategy-indicators.png" width="400"/> |
+Чтобы обновить установку из исходников, остановите активных трейдеров Autopilot, проверьте выполняющиеся сделки Frontier и выполните:
 
-|                     Соревнование                           |                    Конфигурация                              |
-| :-------------------------------------------------------: | :-----------------------------------------------------------: |
-| <img src="../../../screenshots/competition-page.png" width="400"/> | <img src="../../../screenshots/config-ai-exchanges.png" width="400"/>  |
+```bash
+git pull --ff-only
+git submodule update --init web/vendor/charting
+./start.sh start --build
+```
 
 </details>
 
-<br/>
+<details>
+<summary>Windows, Railway и удалённое развёртывание</summary>
 
-## Модели
+**Windows**
 
-Восемь провайдеров с вашими собственными ключами — DeepSeek, OpenAI, Claude, Qwen, Gemini, Grok, Kimi, MiniMax — включая пользовательские эндпоинты и имена моделей.
-
-Или вовсе без ключей: [Claw402](https://claw402.ai) тарифицирует использование моделей за каждый вызов в USDC по протоколу x402. Кошелёк в сети Base заменяет все API-ключи.
-
-| Провайдер | Доступ |
-| :------- | :----- |
-| **Claw402** | [AI-модели с оплатой по мере использования и официальной скидкой](https://claw402.ai) |
-
-## Рынки
-
-Криптовалютные бессрочные контракты на всех девяти биржах. На Hyperliquid тот же рантайм торгует также токенизированными акциями США, сырьевыми товарами, индексами, валютными парами и pre-IPO перпетуалами — TSLA, NVDA, GOLD, SPX, EUR, OPENAI — наряду с криптовалютой.
-
-<br/>
-
-## Архитектура
-
-```
-    ┌─────────────────────────────────────────────────┐
-    │                 Trading Terminal                 │
-    │        React · TypeScript · TradingView          │
-    │   Dashboard · Strategy Studio · Competition      │
-    ├─────────────────────────────────────────────────┤
-    │                  API Server (Go)                  │
-    │      JWT auth · encrypted credential store        │
-    ├──────────────┬──────────────┬───────────────────┤
-    │   Strategy    │  Autopilot   │   Trader Runtime  │
-    │    Engine     │  Preflight   │    Risk Engine    │
-    ├──────────────┴──────────────┴───────────────────┤
-    │                 AI Model Layer                    │
-    │  DeepSeek · OpenAI · Claude · Qwen · Gemini      │
-    │  Grok · Kimi · MiniMax · Claw402 (x402 USDC)     │
-    ├─────────────────────────────────────────────────┤
-    │              Exchange Connectivity                │
-    │ Binance · Bybit · OKX · Hyperliquid · Bitget     │
-    │ KuCoin · Gate · Aster · Lighter                  │
-    └─────────────────────────────────────────────────┘
-```
-
-<br/>
-
-## Установка
-
-**Linux / macOS**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-```
+Используйте Docker Desktop и среду Bash, например WSL2, затем выполните команду установки выше.
 
 **Railway**
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
+[![Развернуть на Railway](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
 
-**Docker**
+**Удалённое развёртывание**
 
-```bash
-curl -O https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**Windows** — установите [Docker Desktop](https://www.docker.com/products/docker-desktop/), затем:
-
-```powershell
-curl -o docker-compose.prod.yml https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**Из исходников** — Go 1.21+, Node.js 18+:
-
-```bash
-git clone https://github.com/NoFxAiOS/nofx.git && cd nofx
-go build -o nofx && ./nofx            # backend
-cd web && npm install && npm run dev  # frontend, in a second terminal
-```
-
-**Обновление** — повторно запустите скрипт установки; он обновит всё на месте.
-
-<details>
-<summary>Развёртывание на сервере</summary>
-
-<br/>
-
-**HTTP**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-# http://YOUR_IP:3000
-```
-
-**HTTPS через Cloudflare**
-
-1. Добавьте домен в [Cloudflare](https://dash.cloudflare.com) (бесплатный план)
-2. A-запись → IP сервера, с проксированием
-3. SSL/TLS → Flexible
-4. `TRANSPORT_ENCRYPTION=true` в `.env`
+Установщик использует производственную конфигурацию Compose, которая по умолчанию публикует порты на всех сетевых интерфейсах хоста. Конфигурация Compose для исходников по умолчанию привязывает веб-интерфейс и API к `127.0.0.1`. Перед открытием удалённого доступа настройте адреса привязки и HTTPS-прокси с аутентификацией.
 
 </details>
 
-<br/>
+<details>
+<summary>Разработка без Docker</summary>
+
+Используйте версию Go из [go.mod](../../../go.mod), Node.js 24, как в Docker-сборке веб-интерфейса, и TA-Lib. Перед запуском веб-интерфейса инициализируйте подмодуль графиков. Настройте окружение по [.env.example](../../../.env.example).
+
+```bash
+# Серверная часть
+go build -o nofx .
+./nofx
+
+# Веб-интерфейс, в другом терминале
+cd web
+npm ci
+npm run dev
+```
+
+</details>
+
+## Модели и данные
+
+Frontier и Autopilot используют модели, настроенные в NOFX. [Claw402](https://claw402.ai) предоставляет доступ к нескольким моделям с оплатой по использованию в USDC в сети Base. Выберите модель в Config и переключайте её в рабочем пространстве.
+
+Цены и свечи поступают с выбранной биржи. AI500 и поддерживаемая аналитика держателей используют платные маршруты Claw402. Наличие данных зависит от рынка и поставщика: данные держателей Hyperliquid не заменяют данные Binance, OKX или Bitget. Лента активности показывает загрузку данных и ход планирования.
+
+Плата за ИИ, платные данные и торговые средства на бирже учитываются отдельно. Запросы к моделям могут оплачиваться, даже если сделка не была совершена.
+
+## Биржи
+
+В Frontier сейчас доступны Binance, Hyperliquid, OKX и Bitget. Общая среда исполнения NOFX также включает Bybit, Gate, KuCoin, Aster и Lighter. Доступные продукты, типы ордеров и права аккаунта зависят от биржи.
+
+Ниже приведены партнёрские ссылки для регистрации, поддерживающие разработку. Условия скидок на комиссии определяет каждая биржа.
+
+| Биржа | Поддержка | Партнёрская ссылка |
+| :--- | :---: | :--- |
+| <img src="../../../web/public/exchange-icons/binance.jpg" width="20" height="20" style="vertical-align: middle;"/> **Binance**       |   ✅   | [Регистрация](https://www.binance.com/join?ref=NOFXENG)                                |
+| <img src="../../../web/public/exchange-icons/bybit.png" width="20" height="20" style="vertical-align: middle;"/> **Bybit**           |   ✅   | [Регистрация](https://partner.bybit.com/b/83856)                                       |
+| <img src="../../../web/public/exchange-icons/okx.svg" width="20" height="20" style="vertical-align: middle;"/> **OKX**               |   ✅   | [Регистрация](https://www.okx.com/join/1865360)                                        |
+| <img src="../../../web/public/exchange-icons/hyperliquid.png" width="20" height="20" style="vertical-align: middle;"/> **Hyperliquid** |   ✅   | [Регистрация](https://app.hyperliquid.xyz/join/AITRADING)                              |
+| <img src="../../../web/public/exchange-icons/bitget.svg" width="20" height="20" style="vertical-align: middle;"/> **Bitget**         |   ✅   | [Регистрация](https://www.bitget.com/referral/register?from=referral&clacCode=c8a43172) |
+| <img src="../../../web/public/exchange-icons/kucoin.svg" width="20" height="20" style="vertical-align: middle;"/> **KuCoin**         |   ✅   | [Регистрация](https://www.kucoin.com/r/broker/CXEV7XKK)                                |
+| <img src="../../../web/public/exchange-icons/gate.svg" width="20" height="20" style="vertical-align: middle;"/> **Gate**             |   ✅   | [Регистрация](https://www.gatenode.xyz/share/VQBGUAxY)                                 |
+| <img src="../../../web/public/exchange-icons/aster.svg" width="20" height="20" style="vertical-align: middle;"/> **Aster**           |   ✅   | [Регистрация](https://www.asterdex.com/en/referral/fdfc0e)                             |
+| <img src="../../../web/public/exchange-icons/lighter.png" width="20" height="20" style="vertical-align: middle;"/> **Lighter**       |   ✅   | [Регистрация](https://app.lighter.xyz/?referral=68151432)                              |
+
+## Как исполняются ордера
+
+Планы и решения стратегий используют существующие биржевые адаптеры NOFX. Приватные ключи кошельков и биржевые учётные данные не передаются модели в промпте.
+
+- **Проверка перед одобрением.** Frontier показывает аккаунт, размер позиции, параметры входа и выхода. Autopilot следует настроенной стратегии и ограничениям среды исполнения.
+- **Размер с учётом аккаунта.** Frontier использует выбранное плечо и текущую доступную маржу, резервируя затраты на исполнение. Ограничения количества, шага цены и биржи продолжают действовать.
+- **Защитные ордера на бирже.** По мере подтверждения исполнений система выставляет поддерживаемые стоп-лоссы и тейк-профиты. Вход и защита не являются одной атомарной операцией; при сбое защиты проверьте состояние на бирже.
+- **Сверка ордеров.** Неопределённые результаты отправки проверяются на бирже, а не приводят к слепой повторной отправке. Неразрешённые исполнения могут приостановить новые входы.
+- **Локальная конфигурация.** Биржевые учётные данные хранятся на сервере NOFX в зашифрованном виде. В вашей установке также находятся материалы для подписи: защищайте файлы и резервные копии.
+
+## Архитектура
+
+```text
+Браузер на компьютере
+  Frontier · Config · Dashboard · Strategy
+    → NOFX API
+      → Frontier: планирование, проверка и одобрение
+      → Autopilot: цикл стратегии
+    → Общее исполнение → Биржевые адаптеры → Ваши торговые аккаунты
+
+Модели и платные данные: клиенты провайдеров NOFX · Claw402
+Хранилище: локальные настройки, планы и записи исполнения
+```
+
+<details>
+<summary>Обзор прежнего интерфейса</summary>
+
+В видео показана более ранняя версия интерфейса. С тех пор навигация и оформление изменились.
+
+https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
+
+</details>
+
+## Материалы бренда
+
+- [Знак логотипа — SVG](../../../web/public/icons/nofx-flow.svg)
+- [Аватар GitHub — PNG, 512 × 512](../../../web/public/brand/nofx-avatar-512.png)
+- [Аватар GitHub — исходник SVG](../../../web/public/brand/nofx-avatar.svg)
+- [Баннер README — SVG](../../assets/nofx-banner.svg)
+
+<a id="documentation"></a>
 
 ## Документация
 
-|                                                         |                                       |
-| :------------------------------------------------------ | :------------------------------------ |
-| [Начало работы](../../getting-started/README.md)       | Гайды по развёртыванию и биржевым API    |
-| [Архитектура](../../architecture/README.md)             | Устройство системы и индекс модулей        |
-| [Модуль стратегий](../../architecture/STRATEGY_MODULE.md) | Выбор монет, AI-промпты, исполнение |
-| [FAQ](../../guides/faq.en.md)                            | Частые вопросы                      |
-| [Устранение неполадок](../../guides/TROUBLESHOOTING.md)       | Диагностика типичных проблем              |
+| Руководство | Содержание |
+| :--- | :--- |
+| [Frontier](../../features/trade-planning.md) | Планирование, реальное исполнение, данные и восстановление |
+| [Начало работы](../../getting-started/README.md) | Развёртывание и API бирж |
+| [Архитектура](../../architecture/README.md) | Устройство системы и перечень модулей |
+| [Модуль стратегий](../../architecture/STRATEGY_MODULE.md) | Выбор монет, промпты ИИ и исполнение |
+| [Частые вопросы](../../guides/faq.en.md) | Ответы на распространённые вопросы |
+| [Устранение неполадок](../../guides/TROUBLESHOOTING.md) | Диагностика типичных проблем |
+
+<a id="community"></a>
 
 ## Сообщество
 

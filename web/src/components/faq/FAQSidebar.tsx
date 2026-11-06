@@ -14,18 +14,18 @@ export function FAQSidebar({
   return (
     <nav
       className="sticky top-24 h-[calc(100vh-120px)] overflow-y-auto pr-2"
-      style={{ scrollbarWidth: 'thin', scrollbarColor: '#E8E2D5 transparent' }}
+      style={{ scrollbarWidth: 'thin', scrollbarColor: '#edf1f7 transparent' }}
     >
       <div className="space-y-5">
         {categories.map((category) => (
           <div key={category.id}>
             <div className="mb-2 flex items-center gap-2 px-2">
               <category.icon className="h-3.5 w-3.5 text-nofx-gold" />
-              <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-nofx-gold">
+              <h3 className="font-sans text-[11px] font-bold tracking-normal text-nofx-gold">
                 {category.title}
               </h3>
             </div>
-            <ul className="space-y-0.5 border-l border-[rgba(26,24,19,0.12)]">
+            <ul className="space-y-0.5 border-l border-[rgba(25,36,52,0.12)]">
               {category.items.map((item) => {
                 const isActive = activeItemId === item.id
                 return (

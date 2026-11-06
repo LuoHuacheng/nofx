@@ -1,14 +1,18 @@
-<p align="center"><strong>由 <a href="https://vergex.trade">vergex.trade</a> 支持</strong></p>
-
 <p align="center">
-  <img src="../../assets/nofx-banner.svg" alt="NOFX — AI trading terminal" width="100%"/>
+  <img src="../../assets/nofx-banner.svg" alt="nofx — 让智能落地交易。由你自己运行的开放交易系统。" width="100%"/>
 </p>
 
 <p align="center">
-  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Stars"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/releases"><img src="https://img.shields.io/github/v/release/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Release"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-E0483B?style=flat-square&labelColor=1A1813" alt="License"></a>
-  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-E0483B?style=flat-square&labelColor=1A1813&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="#frontier">Frontier</a> ·
+  <a href="#run-locally">开始使用</a> ·
+  <a href="#documentation">文档</a> ·
+  <a href="#community">社区</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat&labelColor=192434&color=295BE8" alt="GitHub stars"></a>
+  <a href="../../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-295BE8?style=flat&labelColor=192434" alt="License: AGPL-3.0"></a>
+  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-295BE8?style=flat&labelColor=192434&logo=telegram&logoColor=white" alt="Telegram community"></a>
 </p>
 
 <p align="center">
@@ -21,32 +25,162 @@
   <a href="../vi/README.md">Tiếng Việt</a>
 </p>
 
-<br/>
+NOFX 是在你自己的电脑上运行的开源交易系统。使用 **Frontier** 与 AI 推敲交易想法，在图表上比较入场方案，再由你批准下单。使用 **Autopilot** 持续运行策略。两者共用你配置的模型和交易所账户。
 
-NOFX 是一个开源交易终端，策略本身就是一个语言模型。每个交易员运行一个持续循环——读取市场结构、做出决策、执行、记录推理过程——同时由 Go 运行时把每一笔订单钳制在模型无法越过的硬性风控限制之内。
+与 [Vergex](https://vergex.trade) 共同构建，通过 [Claw402](https://claw402.ai) 接入 AI 和数据。
 
-交易员可以自由组合：任意模型、九家交易所任选、任意策略。多个交易员并行运行，在公开排行榜上按已实现收益一较高下。一切都在你自己的机器上运行；交易所凭证加密存储，绝不外传。
+<a id="run-locally"></a>
+
+## 本地运行
+
+**一行安装 — Linux / macOS**
+
+安装并启动带有 Compose 的 Docker，然后运行：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
 ```
 
-终端会在 `http://127.0.0.1:3000` 打开。
+在桌面浏览器中打开 **http://127.0.0.1:3000**。
 
-**首次运行**
+安装脚本会生成缺失的环境密钥，并使用已发布的 Docker 镜像启动 NOFX，无需安装 Go 或 Node.js。接下来按照[首次使用](#your-first-session)完成配置，或查看[源码构建及其他安装方式](#source-builds-and-other-options)。
 
-1. 注册——第一个账户即成为该实例的所有者。
-2. 按引导式启动流程操作：向系统为你创建的 AI 费用钱包存入 **$1+ USDC**（Base 网络），然后连接 Hyperliquid 并存入 **$12+ USDC** 作为交易资金。
-3. 启动 **Autopilot**。AI 每隔几分钟扫描一次市场并自主交易；每一个决策都会实时出现在仪表板上。随时可以一键停止。
+## Frontier
 
-<br/>
+一张图表、一段对话，以及下单前能看明白的交易方案。
 
-## 注册交易所
+1. **选择市场。** 浏览高成交量标的、搜索交易所原生代码，或使用币安 AI500 列表。交易所支持时，还可选择美股等股票挂钩标的。
+2. **比较入场方式。** 生成市价、限价、加权阶梯和 TWAP 方案，同时查看入场价、止损、目标、杠杆、仓位价值及预估保证金。
+3. **审核并下单。** 选择方案，让图表聚焦该方案。核对当前账户与订单详情，再明确批准执行。
+4. **管理持仓。** 在图表下方查看实时持仓和交易所订单，也可手动开仓或平仓。
 
-NOFX 免费且开源。通过下方合作伙伴链接开户可享受更低的交易手续费，同时也为项目的持续开发提供支持。
+Frontier 支持 **Binance USDT 永续、Hyperliquid、OKX 和 Bitget**。连接交易账户前即可浏览公开行情；实际交易需要对应交易所的账户。生成方案不会提交订单。
 
-| 交易所                                                                                                                      | 状态 | 享手续费折扣注册                                                          |
-| :---------------------------------------------------------------------------------------------------------------------------- | :----: | :---------------------------------------------------------------------------------- |
+| 入场方式 | 执行方式 |
+| :--- | :--- |
+| **市价** | 批准后按可成交的市价入场；界面显示的入场价为估算值。 |
+| **限价** | 在指定价格提交入场订单。 |
+| **阶梯** | 按权重将仓位分配到多个价格档位。 |
+| **TWAP** | 在批准的价格范围内，按时间依次释放有限数量的子单。 |
+
+限价单和定时子单可能无法成交。参见[执行细节与恢复流程](../../features/trade-planning.md)。
+
+## Autopilot
+
+如果需要持续运行策略，可以为交易实例配置模型、交易所账户和策略。Autopilot 读取行情、作出决策，再通过 NOFX 的交易所执行模块下单。Dashboard 展示持仓、表现和决策记录。
+
+**Frontier 的每笔交易都需要你批准。Autopilot 在运行期间可以自动下单。** 启动或停止 Autopilot 是独立操作。
+
+| 工作区 | 用途 |
+| :--- | :--- |
+| **Config** | 接入模型、为 AI 钱包充值、管理交易账户。 |
+| **Frontier** | 浏览市场、比较入场方案、审核并下单。 |
+| **Dashboard** | 查看运行中的交易实例、持仓和决策记录。 |
+| **Strategy** | 配置选币、指标、仓位规模和交易指令。 |
+| **Leaderboard** | 比较公开的交易表现。 |
+
+<a id="your-first-session"></a>
+
+## 首次使用
+
+1. **创建本地账户。** 登录刚启动的 NOFX 实例。
+2. **在 Config 中配置 AI。** 选择模型。使用 Claw402 时，创建或导入 AI 费用钱包，保存私钥，并向钱包地址转入 **Base 网络的 USDC**。该余额用于支付模型和付费数据请求。
+3. **添加交易账户。** 连接要使用的交易所，检查账户权益和可用余额。交易资金与 AI 费用钱包分开管理。
+4. **打开 Frontier。** 选择交易所、账户和标的，生成方案并在图表上比较，准备好后审核订单。
+
+如果需要持续自动交易，请另外配置并启动 Autopilot。
+
+### 更新通过一行命令安装的实例
+
+先停止运行中的 Autopilot，并检查正在执行的 Frontier 交易，再在安装目录（默认为 `~/nofx`）中运行：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+升级时保留 `.env` 和 `data/` 目录，其中包含配置、加密材料及已保存的应用状态。
+
+重启后，在交易所核对持仓和订单，处理所有标记为需要检查的执行记录，再进行下一笔交易。停止进程不会自动平仓。
+
+<a id="source-builds-and-other-options"></a>
+
+## 源码构建及其他安装方式
+
+<details>
+<summary>开发者：从源码构建和更新</summary>
+
+开发 NOFX，或需要在镜像发布前测试源码改动时，使用此方式。安装 Git 和带有 Compose 的 Docker，并启动 Docker：
+
+```bash
+git clone --recurse-submodules https://github.com/NoFxAiOS/nofx.git
+cd nofx
+./start.sh start --build
+```
+
+启动脚本会在需要时创建 `.env`，并生成缺失的加密密钥。如果克隆时没有拉取子模块，请先运行 `git submodule update --init web/vendor/charting` 再构建。TradingView 图表资源受其适用许可证约束，参见[图表集成说明](../../features/trade-planning.md#harness-chart-and-plugins)。
+
+更新源码安装的实例时，先停止运行中的 Autopilot，并检查正在执行的 Frontier 交易，然后运行：
+
+```bash
+git pull --ff-only
+git submodule update --init web/vendor/charting
+./start.sh start --build
+```
+
+</details>
+
+<details>
+<summary>Windows、Railway 和远程部署</summary>
+
+**Windows**
+
+使用 Docker Desktop 和 WSL2 等 Bash 环境，再运行上方的一行安装命令。
+
+**Railway**
+
+[![部署到 Railway](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
+
+**远程部署**
+
+安装脚本使用生产环境 Compose 配置，默认在主机的所有网络接口上开放端口。源码 Compose 配置默认将前端和 API 绑定到 `127.0.0.1`。对外开放远程实例前，请配置监听地址，以及带身份验证的 HTTPS 代理。
+
+</details>
+
+<details>
+<summary>不使用 Docker 的开发方式</summary>
+
+使用 [go.mod](../../../go.mod) 指定的 Go 版本、与前端 Docker 构建一致的 Node.js 24，以及 TA-Lib。启动前端前先初始化图表子模块，并根据 [.env.example](../../../.env.example) 配置环境。
+
+```bash
+# 后端
+go build -o nofx .
+./nofx
+
+# 前端，在另一个终端中运行
+cd web
+npm ci
+npm run dev
+```
+
+</details>
+
+## 模型与数据
+
+Frontier 和 Autopilot 共用在 NOFX 中配置的模型。[Claw402](https://claw402.ai) 提供多种模型，使用 Base 网络的 USDC 按用量结算。你可以在 Config 中选择模型，再在工作区切换。
+
+行情和 K 线来自所选交易所。AI500 及受支持的持仓地址分析通过 Claw402 付费接口获取。数据是否可用取决于市场和服务商：Hyperliquid 的持仓地址数据不能代替 Binance、OKX 或 Bitget 的数据。活动流会展示数据读取和规划进度。
+
+AI 费用、付费数据费用与交易所资金彼此独立。即使没有下单，模型请求也可能产生费用。
+
+## 交易所
+
+Frontier 当前提供 Binance、Hyperliquid、OKX 和 Bitget 接入。NOFX 的其他交易执行模块还包括 Bybit、Gate、KuCoin、Aster 和 Lighter。可用产品、订单类型和账户权限取决于交易所。
+
+以下为支持项目开发的合作注册链接，手续费优惠由各交易所制定。
+
+| 交易所 | 状态 | 合作注册链接 |
+| :--- | :---: | :--- |
 | <img src="../../../web/public/exchange-icons/binance.jpg" width="20" height="20" style="vertical-align: middle;"/> **Binance**       |   ✅   | [注册](https://www.binance.com/join?ref=NOFXENG)                                |
 | <img src="../../../web/public/exchange-icons/bybit.png" width="20" height="20" style="vertical-align: middle;"/> **Bybit**           |   ✅   | [注册](https://partner.bybit.com/b/83856)                                       |
 | <img src="../../../web/public/exchange-icons/okx.svg" width="20" height="20" style="vertical-align: middle;"/> **OKX**               |   ✅   | [注册](https://www.okx.com/join/1865360)                                        |
@@ -57,178 +191,60 @@ NOFX 免费且开源。通过下方合作伙伴链接开户可享受更低的交
 | <img src="../../../web/public/exchange-icons/aster.svg" width="20" height="20" style="vertical-align: middle;"/> **Aster**           |   ✅   | [注册](https://www.asterdex.com/en/referral/fdfc0e)                             |
 | <img src="../../../web/public/exchange-icons/lighter.png" width="20" height="20" style="vertical-align: middle;"/> **Lighter**       |   ✅   | [注册](https://app.lighter.xyz/?referral=68151432)                              |
 
-<br/>
+## 订单如何执行
 
-## 演示
+交易方案和策略决策使用 NOFX 现有的交易所适配器。模型提示词不会包含钱包私钥或交易所凭证。
 
-https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
-
-<br/>
-
-## 模型提议，运行时裁决
-
-决策来自 [Claw402.ai](https://claw402.ai) · Vergex 数据栈：覆盖全市场的实时方向看板、逐标的当前方向与方向历史、成本与清算热力图，以及实时资金净流。NOFX 严格跟随看板方向，其余数据仅作为执行上下文。
-
-每一笔订单都要经过代码层面强制执行的限制，模型无从干预：
-
-|                          |                                                                                    |
-| :----------------------- | :--------------------------------------------------------------------------------- |
-| 持仓限制          | 最大并发持仓数、名义价值按权益比例封顶、每个币种仅允许一个持仓 |
-| 杠杆钳制          | 在订单定量时施加硬上限，与模型请求的杠杆无关     |
-| 交易所端保护 | 每次开仓后立即在交易所挂出止损和止盈单     |
-| 回撤自动平仓      | 盈利持仓从峰值回吐过多时会被自动平掉            |
-| 交易节流         | 最短持仓时间、单币种再入场冷却、单周期与单小时开仓次数限制 |
-| 安全模式                | 模型连续失败时阻止新开仓，直至模型恢复正常                 |
-| 启动预检         | 交易员启动前须通过模型访问、钱包资金、策略和交易所余额的校验 |
-
-每个决策都连同模型的完整推理一起存档。没有任何持仓是无据可查的。
-
-<br/>
-
-## 终端
-
-| | |
-| :--- | :--- |
-| **Autopilot** | 引导式启动：注资、连接、入金、启动——全程由服务端预检保驾护航 |
-| **Strategy Studio** | 风格预设、币种池、技术指标、杠杆、开仓置信度、自定义提示词 |
-| **竞赛** | 按已实现收益排名的公开排行榜，每个条目都标注所用模型 |
-| **仪表板** | 实时持仓、订单、统计数据，以及每个决策背后的推理 |
-
-<details>
-<summary>截图</summary>
-
-<br/>
-
-|                        概览                         |                          行情图表                           |
-| :-----------------------------------------------------: | :-------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-page.png" width="400"/> | <img src="../../../screenshots/dashboard-market-chart.png" width="400"/> |
-
-|                          交易统计                           |                          持仓历史                           |
-| :--------------------------------------------------------------: | :-----------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-trading-stats.png" width="400"/> | <img src="../../../screenshots/dashboard-position-history.png" width="400"/> |
-
-|                     策略编辑器                      |                      指标配置                       |
-| :------------------------------------------------------: | :----------------------------------------------------------: |
-| <img src="../../../screenshots/strategy-studio.png" width="400"/> | <img src="../../../screenshots/strategy-indicators.png" width="400"/> |
-
-|                     竞赛                           |                    配置                              |
-| :-------------------------------------------------------: | :-----------------------------------------------------------: |
-| <img src="../../../screenshots/competition-page.png" width="400"/> | <img src="../../../screenshots/config-ai-exchanges.png" width="400"/>  |
-
-</details>
-
-<br/>
-
-## 模型
-
-八家提供商，使用你自己的密钥——DeepSeek、OpenAI、Claude、Qwen、Gemini、Grok、Kimi、MiniMax——并支持自定义端点和模型名称。
-
-或者完全不需要密钥：[Claw402](https://claw402.ai) 通过 x402 协议以 USDC 按次计量模型用量。一个 Base 链上的钱包即可替代所有 API 密钥。
-
-| 提供商 | 接入方式 |
-| :------- | :----- |
-| **Claw402** | [按量付费的 AI 模型，享官方折扣](https://claw402.ai) |
-
-## 市场
-
-九家交易所全部支持加密货币永续合约。在 Hyperliquid 上，同一套运行时还可以交易代币化美股、大宗商品、指数、外汇和 pre-IPO 永续合约——TSLA、NVDA、GOLD、SPX、EUR、OPENAI——与加密资产并行。
-
-<br/>
+- **下单前可审核。** Frontier 在批准前展示账户、仓位规模及入场和退出详情。Autopilot 遵循所配置的策略及运行限制。
+- **按账户资金计算仓位。** Frontier 使用所选杠杆和当前可用保证金，并预留执行成本。数量精度、价格步长及交易所限制仍然适用。
+- **交易所侧止盈止损。** 执行模块观察到成交后，会提交受支持的止损和止盈订单。入场和保护单并非原子操作；保护单失败时，请到交易所检查。
+- **核对订单状态。** 提交结果不确定时，先向交易所核实，不盲目重复下单。未解决的执行状态可能暂停后续入场。
+- **本地配置。** NOFX 服务端加密保存交易所凭证。你的部署也持有签名材料，请保护好相关文件和备份。
 
 ## 架构
 
+```text
+桌面浏览器
+  Frontier · Config · Dashboard · Strategy
+    → NOFX API
+      → Frontier：规划、审核与批准
+      → Autopilot：策略循环
+    → 共用执行模块 → 交易所适配器 → 你的交易账户
+
+模型与付费数据：NOFX 服务商客户端 · Claw402
+存储：本地配置、方案和执行记录
 ```
-    ┌─────────────────────────────────────────────────┐
-    │                 Trading Terminal                 │
-    │        React · TypeScript · TradingView          │
-    │   Dashboard · Strategy Studio · Competition      │
-    ├─────────────────────────────────────────────────┤
-    │                  API Server (Go)                  │
-    │      JWT auth · encrypted credential store        │
-    ├──────────────┬──────────────┬───────────────────┤
-    │   Strategy    │  Autopilot   │   Trader Runtime  │
-    │    Engine     │  Preflight   │    Risk Engine    │
-    ├──────────────┴──────────────┴───────────────────┤
-    │                 AI Model Layer                    │
-    │  DeepSeek · OpenAI · Claude · Qwen · Gemini      │
-    │  Grok · Kimi · MiniMax · Claw402 (x402 USDC)     │
-    ├─────────────────────────────────────────────────┤
-    │              Exchange Connectivity                │
-    │ Binance · Bybit · OKX · Hyperliquid · Bitget     │
-    │ KuCoin · Gate · Aster · Lighter                  │
-    └─────────────────────────────────────────────────┘
-```
-
-<br/>
-
-## 安装
-
-**Linux / macOS**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-```
-
-**Railway**
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
-
-**Docker**
-
-```bash
-curl -O https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**Windows** —— 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)，然后：
-
-```powershell
-curl -o docker-compose.prod.yml https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**从源码构建** —— 需要 Go 1.21+、Node.js 18+：
-
-```bash
-git clone https://github.com/NoFxAiOS/nofx.git && cd nofx
-go build -o nofx && ./nofx            # backend
-cd web && npm install && npm run dev  # frontend, in a second terminal
-```
-
-**更新** —— 重新运行安装脚本，即可原地升级。
 
 <details>
-<summary>服务器部署</summary>
+<summary>旧版界面演示</summary>
 
-<br/>
+此视频展示的是较早版本的界面，导航和视觉设计现已更新。
 
-**HTTP**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-# http://YOUR_IP:3000
-```
-
-**通过 Cloudflare 启用 HTTPS**
-
-1. 将域名添加到 [Cloudflare](https://dash.cloudflare.com)（免费套餐即可）
-2. A 记录 → 服务器 IP，开启代理
-3. SSL/TLS → Flexible
-4. 在 `.env` 中设置 `TRANSPORT_ENCRYPTION=true`
+https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
 
 </details>
 
-<br/>
+## 品牌素材
+
+- [标志 — SVG](../../../web/public/icons/nofx-flow.svg)
+- [GitHub 头像 — PNG，512 × 512](../../../web/public/brand/nofx-avatar-512.png)
+- [GitHub 头像 — SVG 源文件](../../../web/public/brand/nofx-avatar.svg)
+- [README 横幅 — SVG](../../assets/nofx-banner.svg)
+
+<a id="documentation"></a>
 
 ## 文档
 
-|                                                         |                                       |
-| :------------------------------------------------------ | :------------------------------------ |
-| [快速开始](../../getting-started/README.zh-CN.md)       | 部署与交易所 API 指南    |
-| [架构](../../architecture/README.md)             | 系统设计与模块索引        |
-| [策略模块](../../architecture/STRATEGY_MODULE.md) | 币种选择、AI 提示词、执行 |
-| [常见问题](../../guides/faq.zh-CN.md)                            | 常见疑问解答                      |
-| [故障排查](../../guides/TROUBLESHOOTING.zh-CN.md)       | 常见问题诊断              |
+| 指南 | 内容 |
+| :--- | :--- |
+| [Frontier](../../features/trade-planning.md) | 规划、实盘执行、数据和恢复流程 |
+| [快速开始](../../getting-started/README.zh-CN.md) | 部署与交易所 API 指南 |
+| [架构](../../architecture/README.md) | 系统设计与模块索引 |
+| [策略模块](../../architecture/STRATEGY_MODULE.md) | 选币、AI 提示词与执行 |
+| [常见问题](../../guides/faq.zh-CN.md) | 常见疑问解答 |
+| [故障排查](../../guides/TROUBLESHOOTING.zh-CN.md) | 常见问题诊断 |
+
+<a id="community"></a>
 
 ## 社区
 

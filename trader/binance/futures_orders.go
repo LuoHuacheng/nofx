@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"nofx/logger"
+	"nofx/trader/execution"
 	"nofx/trader/types"
 	"strconv"
 
@@ -416,66 +417,42 @@ func (t *FuturesTrader) CancelAllOrders(symbol string) error {
 // PlaceLimitOrder places a limit order for grid trading
 // This implements the GridTrader interface for FuturesTrader
 func (t *FuturesTrader) PlaceLimitOrder(req *types.LimitOrderRequest) (*types.LimitOrderResult, error) {
-	// Format quantity to correct precision
-	quantityStr, err := t.FormatQuantity(req.Symbol, req.Quantity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format quantity: %w", err)
+	if req == nil || (req.Side != "BUY" && req.Side != "SELL") {
+		return nil, fmt.Errorf("invalid limit order request")
 	}
-
-	// Format price to correct precision
-	priceStr, err := t.FormatPrice(req.Symbol, req.Price)
+	// Preserve the caller ID. Exact execution refuses silent order changes.
+	id, err := execution.CanonicalClientID(req.ClientID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format price: %w", err)
+		return nil, err
 	}
-
-	// Set leverage if specified
 	if req.Leverage > 0 {
 		if err := t.SetLeverage(req.Symbol, req.Leverage); err != nil {
-			logger.Warnf("Failed to set leverage: %v", err)
+			return nil, fmt.Errorf("order blocked: %w", err)
 		}
 	}
-
-	// Determine side and position side
-	var side futures.SideType
-	var positionSide futures.PositionSideType
-
-	if req.Side == "BUY" {
-		side = futures.SideTypeBuy
-	} else {
-		side = futures.SideTypeSell
+	side := "long"
+	if req.Side == "SELL" {
+		side = "short"
 	}
-	positionSide = t.positionSide(req.Side == "BUY")
-
-	// Build order service with broker ID
-	orderService := t.client.NewCreateOrderService().
-		Symbol(req.Symbol).
-		Side(side).
-		PositionSide(positionSide).
-		Type(futures.OrderTypeLimit).
-		TimeInForce(futures.TimeInForceTypeGTC).
-		Quantity(quantityStr).
-		Price(priceStr).
-		NewClientOrderID(getBrOrderID())
-
-	// Execute order
-	order, err := orderService.Do(context.Background())
+	quantity, err := t.FormatQuantity(req.Symbol, req.Quantity)
 	if err != nil {
-		return nil, fmt.Errorf("failed to place limit order: %w", err)
+		return nil, err
 	}
-
-	logger.Infof("✓ [Grid] Placed limit order: %s %s %s @ %s, qty=%s, orderID=%d",
-		req.Symbol, req.Side, positionSide, priceStr, quantityStr, order.OrderID)
-
-	return &types.LimitOrderResult{
-		OrderID:      fmt.Sprintf("%d", order.OrderID),
-		ClientID:     order.ClientOrderID,
-		Symbol:       order.Symbol,
-		Side:         string(order.Side),
-		PositionSide: string(order.PositionSide),
-		Price:        req.Price,
-		Quantity:     req.Quantity,
-		Status:       string(order.Status),
-	}, nil
+	price, err := t.FormatPrice(req.Symbol, req.Price)
+	if err != nil {
+		return nil, err
+	}
+	nativeID, err := t.RouteClientID(id)
+	if err != nil {
+		return nil, err
+	}
+	result, err := t.SubmitOrder(context.Background(), execution.Order{ClientID: id, VenueClientID: nativeID, Symbol: req.Symbol, Side: side, Role: "entry", Price: execution.Decimal(price), Quantity: execution.Decimal(quantity), ReduceOnly: req.ReduceOnly, PostOnly: req.PostOnly})
+	if err != nil {
+		return nil, err
+	}
+	actualPrice, _ := strconv.ParseFloat(string(result.Price), 64)
+	actualQty, _ := strconv.ParseFloat(string(result.Quantity), 64)
+	return &types.LimitOrderResult{OrderID: result.OrderID, ClientID: result.ClientID, Symbol: req.Symbol, Side: req.Side, PositionSide: req.PositionSide, Price: actualPrice, Quantity: actualQty, Status: result.Status}, nil
 }
 
 // CancelOrder cancels a specific order by ID
@@ -627,7 +604,10 @@ func (t *FuturesTrader) GetOpenOrders(symbol string) ([]types.OpenOrder, error) 
 		Symbol(symbol).
 		Do(context.Background())
 
-	if err == nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify Binance protective orders: %w", err)
+	}
+	{
 		for _, algoOrder := range algoOrders {
 			triggerPrice, _ := strconv.ParseFloat(algoOrder.TriggerPrice, 64)
 			quantity, _ := strconv.ParseFloat(algoOrder.Quantity, 64)

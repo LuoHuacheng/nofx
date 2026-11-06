@@ -175,11 +175,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: go.mod
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -222,6 +224,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch private chart library
+        uses: ./.github/actions/charting
+        with:
+          ssh-key: ${{ secrets.CHARTING_LIBRARY_SSH_KEY }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -271,6 +279,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Run Trivy vulnerability scanner
         # SECURITY: pinned to a full 40-char commit SHA (v0.36.0) — a mutable

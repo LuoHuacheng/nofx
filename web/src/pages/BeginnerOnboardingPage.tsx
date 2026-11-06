@@ -4,6 +4,7 @@ import { ArrowRight, Copy, RefreshCw, Shield, Wallet, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 import { api } from '../lib/api'
+import { AIWalletBackup } from '../components/common/AIWalletBackup'
 import type { BeginnerOnboardingResponse } from '../types'
 import {
   setBeginnerWalletAddress,
@@ -27,9 +28,22 @@ export function BeginnerOnboardingPage() {
 
     setError('')
     try {
-      const result = await api.prepareBeginnerOnboarding()
-      setData(result)
-      setBeginnerWalletAddress(result.address)
+      if (showLoading) {
+        const result = await api.prepareBeginnerOnboarding()
+        setData(result)
+        setBeginnerWalletAddress(result.address)
+      } else {
+        const wallet = await api.getCurrentBeginnerWallet()
+        setData((prev) =>
+          prev && wallet.found && prev.address === wallet.address
+            ? {
+                ...prev,
+                balance_usdc: wallet.balance_usdc ?? '',
+                balance_status: wallet.balance_status ?? 'unknown',
+              }
+            : prev
+        )
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Failed to prepare beginner wallet'
@@ -53,26 +67,32 @@ export function BeginnerOnboardingPage() {
 
   // Poll the balance while the user is depositing so the page updates on its
   // own. Uses the lightweight current-wallet endpoint (server caches 30s), not
-  // the heavier prepare call that re-writes .env.
+  // the owner-scoped prepare call.
   const walletAddress = data?.address
   useEffect(() => {
     if (!walletAddress) return
     let cancelled = false
-    const timer = setInterval(() => {
+    const refreshBalance = () => {
       void api
         .getCurrentBeginnerWallet()
         .then((wallet) => {
-          if (cancelled || !wallet.found || !wallet.balance_usdc) return
+          if (cancelled || !wallet.found) return
           setData((prev) =>
             prev && prev.address === wallet.address
-              ? { ...prev, balance_usdc: wallet.balance_usdc! }
+              ? {
+                  ...prev,
+                  balance_usdc: wallet.balance_usdc ?? '',
+                  balance_status: wallet.balance_status ?? 'unknown',
+                }
               : prev
           )
         })
         .catch(() => {
           // transient — the manual refresh button still works
         })
-    }, 15000)
+    }
+    refreshBalance()
+    const timer = setInterval(refreshBalance, 15000)
     return () => {
       cancelled = true
       clearInterval(timer)
@@ -81,7 +101,7 @@ export function BeginnerOnboardingPage() {
 
   const noticeText = useMemo(
     () =>
-      'This wallet only pays for model calls. It does not fund your exchange automatically. The private key cannot be recovered, and you should only deposit Base USDC.',
+      'This wallet only pays for model calls. It does not fund your exchange automatically. Back up your private key below, and only deposit USDC on Base.',
     []
   )
 
@@ -102,13 +122,13 @@ export function BeginnerOnboardingPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-[80]">
+    <div className="fixed inset-0 z-80">
       <div className="absolute inset-0 bg-black/58 backdrop-blur-[2px]" />
       <div className="relative flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
         <button
           type="button"
           onClick={handleContinue}
-          className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(26,24,19,0.14)] bg-nofx-text/5 text-nofx-text-muted transition hover:border-[rgba(26,24,19,0.24)] hover:bg-nofx-text/10 hover:text-nofx-text"
+          className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(25,36,52,0.14)] bg-nofx-text/5 text-nofx-text-muted transition hover:border-[rgba(25,36,52,0.24)] hover:bg-nofx-text/10 hover:text-nofx-text"
           aria-label="Skip"
         >
           <X className="h-5 w-5" />
@@ -136,7 +156,7 @@ export function BeginnerOnboardingPage() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-[32px] border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter shadow-lg backdrop-blur-2xl">
+          <div className="overflow-hidden rounded-[32px] border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter shadow-lg backdrop-blur-2xl">
             {loading ? (
               <div className="flex min-h-[390px] items-center justify-center px-6 text-sm text-nofx-text-muted">
                 Preparing your Base wallet...
@@ -145,7 +165,7 @@ export function BeginnerOnboardingPage() {
               <div className="grid lg:grid-cols-[0.82fr_1.18fr]">
                 <section className="flex flex-col justify-center px-8 py-7 sm:px-9 lg:min-h-[430px]">
                   <div className="mx-auto w-full max-w-[248px] text-center">
-                    <div className="mx-auto inline-flex rounded-[28px] border border-[rgba(26,24,19,0.14)] bg-white p-4 shadow-sm">
+                    <div className="mx-auto inline-flex rounded-[28px] border border-[rgba(25,36,52,0.14)] bg-white p-4 shadow-xs">
                       <QRCodeSVG value={data.address} size={164} level="M" />
                     </div>
 
@@ -157,7 +177,9 @@ export function BeginnerOnboardingPage() {
                       <div className="text-left">
                         <div className="flex items-baseline gap-3 font-mono font-bold tracking-tight text-nofx-success">
                           <span className="text-[22px]">
-                            {data.balance_usdc}
+                            {data.balance_status === 'ok'
+                              ? data.balance_usdc
+                              : 'Checking…'}
                           </span>
                           <span className="text-[20px]">USDC</span>
                         </div>
@@ -193,7 +215,7 @@ export function BeginnerOnboardingPage() {
                   </div>
                 </section>
 
-                <section className="border-t border-[rgba(26,24,19,0.14)] px-8 py-7 lg:border-l lg:border-t-0 lg:px-9">
+                <section className="border-t border-[rgba(25,36,52,0.14)] px-8 py-7 lg:border-l lg:border-t-0 lg:px-9">
                   <div className="space-y-5">
                     <div>
                       <div className="mb-3 flex items-center gap-2 text-sm font-medium text-nofx-gold">
@@ -201,13 +223,13 @@ export function BeginnerOnboardingPage() {
                         <span>Wallet address</span>
                       </div>
                       <div className="flex items-stretch gap-3">
-                        <div className="min-w-0 flex-1 rounded-2xl border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-5 py-3 font-mono text-[14px] text-nofx-text">
+                        <div className="min-w-0 flex-1 rounded-2xl border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-5 py-3 font-mono text-[14px] text-nofx-text">
                           <div className="break-all">{data.address}</div>
                         </div>
                         <button
                           type="button"
                           onClick={() => copyText(data.address, 'Address')}
-                          className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[rgba(26,24,19,0.14)] bg-nofx-text/5 text-nofx-text transition hover:border-[rgba(26,24,19,0.24)] hover:bg-nofx-text/10 hover:text-nofx-text"
+                          className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[rgba(25,36,52,0.14)] bg-nofx-text/5 text-nofx-text transition hover:border-[rgba(25,36,52,0.24)] hover:bg-nofx-text/10 hover:text-nofx-text"
                           aria-label="Copy address"
                         >
                           <Copy className="h-5 w-5" />
@@ -215,42 +237,15 @@ export function BeginnerOnboardingPage() {
                       </div>
                     </div>
 
-                    <div className="pt-1">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-nofx-gold">
-                        <Shield className="h-4 w-4" />
-                        <span>Private key, back it up now</span>
-                      </div>
-                      <div className="flex items-stretch gap-3">
-                        <div className="min-w-0 flex-1 rounded-[24px] border border-nofx-gold/20 bg-nofx-gold/10 px-5 py-3 font-mono text-[13px] leading-6 text-nofx-text">
-                          <div className="overflow-x-auto whitespace-nowrap">
-                            {data.private_key}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 flex-col justify-end">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              copyText(data.private_key, 'Private key')
-                            }
-                            className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-nofx-gold/20 bg-nofx-gold/10 text-nofx-gold transition hover:bg-nofx-gold/15"
-                            aria-label="Copy private key"
-                          >
-                            <Copy className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <AIWalletBackup
+                      modelID={data.configured_model_id}
+                      address={data.address}
+                    />
 
-                    <div className="rounded-[24px] border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-5 py-3.5 text-[11px] leading-6 text-nofx-text-muted">
+                    <div className="rounded-[24px] border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-5 py-3.5 text-[11px] leading-6 text-nofx-text-muted">
                       <span className="mr-2 text-nofx-text-muted">•</span>
                       {noticeText}
                     </div>
-
-                    {data.env_warning ? (
-                      <div className="rounded-2xl border border-nofx-gold/20 bg-nofx-gold/10 px-4 py-3 text-sm text-nofx-gold">
-                        {data.env_warning}
-                      </div>
-                    ) : null}
 
                     {error ? (
                       <div className="rounded-2xl border border-nofx-danger/20 bg-nofx-danger/10 px-4 py-3 text-sm text-nofx-danger">
@@ -266,12 +261,6 @@ export function BeginnerOnboardingPage() {
                       <span>Continue setup</span>
                       <ArrowRight className="h-5 w-5" />
                     </button>
-
-                    {data.env_saved ? (
-                      <div className="pt-1 text-xs text-nofx-text-muted">
-                        {`Wallet details were also saved to ${data.env_path || '.env'}`}
-                      </div>
-                    ) : null}
                   </div>
                 </section>
               </div>

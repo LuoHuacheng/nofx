@@ -1,12 +1,9 @@
+import FlowLanding from '../components/landing/FlowLanding'
 import { useState } from 'react'
 import HeaderBar from '../components/common/HeaderBar'
 import LoginModal from '../components/landing/LoginModal'
 import { LoginRequiredOverlay } from '../components/auth/LoginRequiredOverlay'
 import FooterSection from '../components/landing/FooterSection'
-import TerminalHero from '../components/landing/core/TerminalHero'
-import LiveFeed from '../components/landing/core/LiveFeed'
-import AgentGrid from '../components/landing/core/AgentGrid'
-import DeploymentHub from '../components/landing/core/DeploymentHub'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -36,13 +33,7 @@ export function LandingPage() {
         onLoginRequired={handleLoginRequired}
       />
       <div className="min-h-screen bg-nofx-bg text-nofx-text font-sans selection:bg-nofx-gold selection:text-nofx-bg">
-        <TerminalHero />
-
-        <LiveFeed />
-
-        <AgentGrid />
-
-        <DeploymentHub />
+        <FlowLanding />
 
         <FooterSection language={language} />
 

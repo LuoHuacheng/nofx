@@ -3,6 +3,7 @@ import useSWR from 'swr'
 import { api } from '../../lib/api'
 import type { VergexHeatmapBin } from '../../lib/api/data'
 import { demoSeedPrice, demoTick } from '../../lib/demo/demoUniverse'
+import { formatRequestError } from '../../lib/requestErrors'
 
 const lmRnd = (a: number, b: number) => a + Math.random() * (b - a)
 
@@ -57,9 +58,8 @@ export function LiquidationMap({
   height = 460,
   demo = false,
 }: LiquidationMapProps) {
-  // Synthetic markets live under marketType "hip3_perp"; crypto majors under
-  // "perp". We try the caller's guess first and fall back to the other so the
-  // heatmap resolves for ANY symbol that has one.
+  // Use the selected market's metadata. Speculative alternate-market requests
+  // can spend the wallet twice and return an unrelated instrument.
   const fetcher = (mt: string) =>
     api.getVergexCostLiquidationHeatmap({
       marketType: mt,
@@ -70,21 +70,14 @@ export function LiquidationMap({
   const opts = {
     refreshInterval: 300000,
     revalidateOnFocus: false,
-    keepPreviousData: true,
+    revalidateOnReconnect: false,
+    shouldRetryOnError: false,
+    keepPreviousData: false,
   }
 
   const primary = useSWR(
     symbol && !demo ? ['heatmap', marketType, symbol] : null,
     () => fetcher(marketType),
-    opts
-  )
-  const primaryHasBins = !!primary.data?.data?.bins?.length
-  const altMt = marketType === 'perp' ? 'hip3_perp' : 'perp'
-  const needAlt =
-    !demo && !primaryHasBins && !primary.isLoading && primary.data !== undefined
-  const alt = useSWR(
-    needAlt && symbol ? ['heatmap', altMt, symbol] : null,
-    () => fetcher(altMt),
     opts
   )
 
@@ -163,15 +156,9 @@ export function LiquidationMap({
     }
   }, [demoBase, demoFrame])
 
-  const data = demo ? demoData : primaryHasBins ? primary.data : alt.data
-  const isLoading = demo
-    ? false
-    : primary.isLoading || (needAlt && alt.isLoading)
-  const error = demo
-    ? undefined
-    : primaryHasBins
-      ? undefined
-      : alt.error || primary.error
+  const data = demo ? demoData : primary.data
+  const isLoading = !demo && primary.isLoading
+  const error = demo ? undefined : primary.error
 
   const [hover, setHover] = useState<number | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -281,7 +268,13 @@ export function LiquidationMap({
             color: view.rows.length ? 'var(--tm-up)' : 'var(--tm-muted)',
           }}
         >
-          {view.rows.length ? '● live' : isLoading ? '○ sync' : '○ —'}
+          {error
+            ? '○ unavailable'
+            : view.rows.length
+              ? '● live'
+              : isLoading
+                ? '○ sync'
+                : '○ —'}
         </span>
       </div>
 
@@ -333,14 +326,16 @@ export function LiquidationMap({
         )}
       </div>
 
-      {error && !view.rows.length ? (
-        <div className="tm-sc" style={{ padding: '16px 0' }}>
-          No cost/liq heatmap for {view.dispSymbol} (crypto / main-dex markets
-          have none).
+      {error ? (
+        <div role="alert" className="tm-error" style={{ padding: '16px 0' }}>
+          Heatmap unavailable for {view.dispSymbol}. {formatRequestError(error)}{' '}
+          No automatic paid retry.
         </div>
       ) : !view.rows.length ? (
         <div className="tm-sc" style={{ padding: '16px 0' }}>
-          Loading cost/liquidation map…
+          {isLoading
+            ? 'Loading cost/liquidation map…'
+            : 'No heatmap data in the selected range.'}
         </div>
       ) : (
         <div>
@@ -364,7 +359,7 @@ export function LiquidationMap({
                     alignItems: 'center',
                     height: rowH,
                     background:
-                      hover === i ? 'rgba(26,24,19,0.05)' : 'transparent',
+                      hover === i ? 'rgba(25,36,52,0.05)' : 'transparent',
                     borderTop: isMark ? '1px solid var(--tm-red)' : 'none',
                   }}
                 >

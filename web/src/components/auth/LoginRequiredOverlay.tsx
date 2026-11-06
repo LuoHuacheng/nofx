@@ -46,7 +46,7 @@ export function LoginRequiredOverlay({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              className="relative max-w-md w-full overflow-hidden bg-nofx-bg-lighter border border-nofx-gold/30 shadow-lg rounded-sm group font-mono"
+              className="relative max-w-md w-full overflow-hidden bg-nofx-bg-lighter border border-nofx-gold/30 shadow-lg rounded-xs group font-mono"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Terminal Window Header */}
@@ -68,7 +68,7 @@ export function LoginRequiredOverlay({
               {/* Main Content */}
               <div className="p-8 relative">
                 {/* Background Grid */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:14px_14px] pointer-events-none"></div>
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-size-[14px_14px] pointer-events-none"></div>
 
                 <div className="relative z-10">
                   {/* Flashing Access Denied */}

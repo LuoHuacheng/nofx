@@ -9,6 +9,9 @@ import {
 describe('router paths helpers', () => {
   it('maps pathname to current navigation page', () => {
     expect(getCurrentPageForPath(ROUTES.home)).toBeUndefined()
+    expect(ROUTES.planning).toBe('/frontier')
+    expect(getCurrentPageForPath('/frontier')).toBe('planning')
+    expect(getCurrentPageForPath('/planning')).toBe('planning')
     expect(getCurrentPageForPath(ROUTES.welcome)).toBe('traders')
     expect(getCurrentPageForPath(ROUTES.dashboard)).toBe('trader')
     expect(getCurrentPageForPath(ROUTES.strategyMarket)).toBe('strategy-market')

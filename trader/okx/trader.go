@@ -2,6 +2,7 @@ package okx
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -37,9 +38,10 @@ const (
 
 // OKXTrader OKX futures trader
 type OKXTrader struct {
-	apiKey     string
-	secretKey  string
-	passphrase string
+	accountOnly bool
+	apiKey      string
+	secretKey   string
+	passphrase  string
 
 	// Margin mode setting used for new orders and leverage changes.
 	isCrossMargin bool
@@ -205,6 +207,10 @@ func (t *OKXTrader) sign(timestamp, method, requestPath, body string) string {
 
 // doRequest executes HTTP request
 func (t *OKXTrader) doRequest(method, path string, body interface{}) ([]byte, error) {
+	return t.doRequestContext(context.Background(), method, path, body)
+}
+
+func (t *OKXTrader) doRequestContext(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	var bodyBytes []byte
 	var err error
 
@@ -218,7 +224,7 @@ func (t *OKXTrader) doRequest(method, path string, body interface{}) ([]byte, er
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	signature := t.sign(timestamp, method, path, string(bodyBytes))
 
-	req, err := http.NewRequest(method, okxBaseURL+path, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, method, okxBaseURL+path, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -231,13 +237,16 @@ func (t *OKXTrader) doRequest(method, path string, body interface{}) ([]byte, er
 	// Set request header
 	req.Header.Set("x-simulated-trading", "0")
 
-	resp, err := t.httpClient.Do(req)
+	// Signed credentials must never be forwarded to a redirect destination.
+	client := *t.httpClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -245,6 +254,9 @@ func (t *OKXTrader) doRequest(method, path string, body interface{}) ([]byte, er
 	var okxResp OKXResponse
 	if err := json.Unmarshal(respBody, &okxResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("OKX HTTP %d (code %s): %s", resp.StatusCode, okxResp.Code, okxResp.Msg)
 	}
 
 	// code=1 indicates partial success, need to check specific results in data
@@ -259,6 +271,9 @@ func (t *OKXTrader) doRequest(method, path string, body interface{}) ([]byte, er
 // convertSymbol converts generic symbol to OKX format
 // e.g. BTCUSDT -> BTC-USDT-SWAP
 func (t *OKXTrader) convertSymbol(symbol string) string {
+	if strings.HasSuffix(symbol, "-USDT-SWAP") {
+		return symbol
+	}
 	// Remove USDT suffix and build OKX format
 	base := strings.TrimSuffix(symbol, "USDT")
 	return fmt.Sprintf("%s-USDT-SWAP", base)
@@ -306,4 +321,25 @@ func (t *OKXTrader) formatSize(sz float64, inst *OKXInstrument) string {
 
 	format := fmt.Sprintf("%%.%df", precision)
 	return fmt.Sprintf(format, sz)
+}
+
+// NewAccountTrader initializes a read-only account client without changing exchange settings.
+func NewAccountTrader(apiKey, secretKey, passphrase string) *OKXTrader {
+	httpClient := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: http.DefaultTransport,
+	}
+
+	trader := &OKXTrader{
+		apiKey:           apiKey,
+		secretKey:        secretKey,
+		passphrase:       passphrase,
+		isCrossMargin:    true,
+		httpClient:       httpClient,
+		cacheDuration:    15 * time.Second,
+		instrumentsCache: make(map[string]*OKXInstrument),
+	}
+
+	trader.accountOnly = true
+	return trader
 }

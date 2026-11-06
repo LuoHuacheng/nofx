@@ -1,30 +1,23 @@
-/*
- * NOFX orchestration terminal theme — cream paper + vermilion accent.
- * Scoped under .nofx-terminal so it can be built and previewed without
- * disturbing the global Neo-Gold theme. The global flip (task #6) promotes
- * these tokens to :root once the look is approved.
- */
-@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap');
-
+/* NOFX dashboard tokens: cool surfaces, cobalt actions, semantic trading colors. */
 .nofx-terminal {
   /* surfaces */
-  --tm-paper: #f1ece2;
-  --tm-panel: #f7f4ec;
-  --tm-ink: #1a1813;
-  --tm-ink-2: #3a372e;
-  --tm-muted: #8a8478;
-  --tm-hair: #d8d2c4;
-  --tm-rule: #1a1813;
-  --tm-head: #16140f;
+  --tm-paper: #f6f8fc;
+  --tm-panel: #ffffff;
+  --tm-ink: #192434;
+  --tm-ink-2: #39475b;
+  --tm-muted: #707e92;
+  --tm-hair: #e1e7f0;
+  --tm-rule: #192434;
+  --tm-head: #172338;
 
   /* brand + semantic */
-  --tm-red: #e0483b;
-  --tm-red-soft: #f6d9d2;
+  --tm-red: #295be8;
+  --tm-red-soft: #e9efff;
   --tm-up: #2e8b57;
   --tm-dn: #d6433a;
 
   --tm-mono: 'IBM Plex Mono', 'Courier New', monospace;
-  --tm-px: 'Silkscreen', 'IBM Plex Mono', monospace;
+  --tm-px: var(--font-sans);
 
   background: var(--tm-paper);
   color: var(--tm-ink);
@@ -49,6 +42,19 @@
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--tm-muted);
+}
+
+/* Operational errors are readable prose, not uppercase market labels. */
+.tm-error {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tm-dn);
 }
 
 .tm-mono {

@@ -25,7 +25,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#F1ECE2' }}>
+    <div className="min-h-screen" style={{ background: '#f6f8fc' }}>
       <Header simple />
 
       <div
@@ -36,8 +36,8 @@ export function ResetPasswordPage() {
           {/* Back to Login */}
           <button
             onClick={() => navigate('/login')}
-            className="flex items-center gap-2 mb-6 text-sm hover:text-[#E0483B] transition-colors"
-            style={{ color: '#8A8478' }}
+            className="flex items-center gap-2 mb-6 text-sm hover:text-[#295be8] transition-colors"
+            style={{ color: '#707e92' }}
           >
             <ArrowLeft className="w-4 h-4" />
             {t('backToLogin', language)}
@@ -47,11 +47,11 @@ export function ResetPasswordPage() {
           <div className="text-center mb-8">
             <div
               className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full"
-              style={{ background: 'rgba(224, 72, 59, 0.1)' }}
+              style={{ background: 'rgba(41,91,232, 0.1)' }}
             >
-              <KeyRound className="w-8 h-8" style={{ color: '#E0483B' }} />
+              <KeyRound className="w-8 h-8" style={{ color: '#295be8' }} />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: '#1A1813' }}>
+            <h1 className="text-2xl font-bold" style={{ color: '#192434' }}>
               {t('resetPasswordTitle', language)}
             </h1>
           </div>
@@ -60,32 +60,32 @@ export function ResetPasswordPage() {
           <div
             className="rounded-lg p-6"
             style={{
-              background: '#F7F4EC',
-              border: '1px solid rgba(26,24,19,0.14)',
+              background: '#ffffff',
+              border: '1px solid rgba(25,36,52,0.14)',
             }}
           >
             <p
               className="text-sm leading-relaxed mb-4"
-              style={{ color: '#1A1813' }}
+              style={{ color: '#192434' }}
             >
               {t('resetPasswordCliIntro', language)}
             </p>
 
             <div
-              className="flex items-center justify-between gap-3 rounded px-3 py-3 font-mono text-xs"
+              className="flex items-center justify-between gap-3 rounded-sm px-3 py-3 font-mono text-xs"
               style={{
-                background: '#E8E2D5',
-                border: '1px solid rgba(26,24,19,0.14)',
+                background: '#edf1f7',
+                border: '1px solid rgba(25,36,52,0.14)',
               }}
             >
-              <code className="break-all" style={{ color: '#E0483B' }}>
+              <code className="break-all" style={{ color: '#295be8' }}>
                 {RESET_PASSWORD_COMMAND}
               </code>
               <button
                 type="button"
                 onClick={handleCopy}
                 className="shrink-0 btn-icon"
-                style={{ color: '#8A8478' }}
+                style={{ color: '#707e92' }}
                 aria-label={t('copy', language)}
               >
                 {copied ? (
@@ -98,7 +98,7 @@ export function ResetPasswordPage() {
 
             <p
               className="text-xs leading-relaxed mt-4"
-              style={{ color: '#8A8478' }}
+              style={{ color: '#707e92' }}
             >
               {t('resetPasswordCliSecurityNote', language)}
             </p>

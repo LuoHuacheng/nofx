@@ -11,13 +11,6 @@ export interface AIModel {
   balanceUsdc?: string
 }
 
-export interface TelegramConfig {
-  token_masked: string // Masked token like "123456:ABC***XYZ"
-  is_bound: boolean // Whether a user has sent /start
-  bound_chat_id?: number // The bound chat ID (if any)
-  model_id?: string // AI model selected for Telegram replies
-}
-
 export interface Exchange {
   id: string // UUID (empty for supported exchange templates)
   exchange_type: string // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
@@ -153,23 +146,22 @@ export interface UpdateExchangeConfigRequest {
 
 export interface BeginnerOnboardingResponse {
   address: string
-  private_key: string
   chain: string
   asset: string
   provider: string
   default_model: string
   configured_model_id: string
   balance_usdc: string
+  balance_status: 'ok' | 'unknown'
   env_saved: boolean
-  env_path?: string
   reused_existing: boolean
-  env_warning?: string
 }
 
 export interface CurrentBeginnerWalletResponse {
   found: boolean
   address?: string
   balance_usdc?: string
+  balance_status?: 'ok' | 'unknown'
   source?: string
   claw402_status?: string
 }

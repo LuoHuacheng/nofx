@@ -667,6 +667,9 @@ func (t *OKXTrader) GetOrderStatus(symbol string, orderID string) (map[string]in
 
 // GetOpenOrders gets all open/pending orders for a symbol
 func (t *OKXTrader) GetOpenOrders(symbol string) ([]types.OpenOrder, error) {
+	if t.accountOnly {
+		return t.frontierOrders(symbol)
+	}
 	instId := t.convertSymbol(symbol)
 	var result []types.OpenOrder
 

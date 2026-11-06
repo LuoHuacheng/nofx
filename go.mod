@@ -1,6 +1,6 @@
 module nofx
 
-go 1.25.11
+go 1.26.10
 
 require (
 	github.com/adshao/go-binance/v2 v2.8.9
@@ -11,7 +11,6 @@ require (
 	github.com/ethereum/go-ethereum v1.17.3
 	github.com/gateio/gateapi-go/v6 v6.104.3
 	github.com/gin-gonic/gin v1.11.0
-	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
@@ -20,9 +19,11 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sonirico/go-hyperliquid v0.36.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.52.0
-	golang.org/x/net v0.55.0
-	golang.org/x/term v0.43.0
+	go.starlark.net v0.0.0-20231101134539-556fd59b42f6
+	golang.org/x/crypto v0.58.0
+	golang.org/x/net v0.62.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/term v0.47.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -94,9 +95,8 @@ require (
 	go.elastic.co/fastjson v1.5.1 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.1 // indirect

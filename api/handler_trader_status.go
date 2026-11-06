@@ -178,13 +178,13 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 			string(exchangeCfg.SecretKey),
 		)
 	case "okx":
-		tempTrader = okx.NewOKXTrader(
+		tempTrader = okx.NewAccountTrader(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
 			string(exchangeCfg.Passphrase),
 		)
 	case "bitget":
-		tempTrader = bitget.NewBitgetTrader(
+		tempTrader = bitget.NewAccountTrader(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
 			string(exchangeCfg.Passphrase),

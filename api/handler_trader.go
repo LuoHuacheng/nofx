@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"nofx/planning/live"
 	"strings"
 	"time"
 
@@ -746,6 +747,10 @@ func (s *Server) handleDeleteTrader(c *gin.Context) {
 	// Delete from database
 	err := s.store.Trader().Delete(userID, traderID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			SafeNotFound(c, "Trader")
+			return
+		}
 		SafeInternalError(c, "Failed to delete trader", err)
 		return
 	}
@@ -776,6 +781,24 @@ func (s *Server) handleStartTrader(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Trader does not exist or no access permission"})
 		return
+	}
+	if fullCfg != nil && fullCfg.Exchange != nil {
+		unlock, e := s.lockPlanningAccount(userID, fullCfg.Exchange.ID)
+		if e != nil {
+			SafeBadRequest(c, e.Error())
+			return
+		}
+		defer unlock()
+		var lease live.Lease
+		leaseError := s.store.GormDB().Where("account_key = ?", accountKey(fullCfg.Exchange)).First(&lease).Error
+		if leaseError != nil && !errors.Is(leaseError, gorm.ErrRecordNotFound) {
+			SafeBadRequest(c, "无法核对交易计划账户锁定状态")
+			return
+		}
+		if leaseError == nil {
+			SafeBadRequest(c, "该账户有已批准或尚未结束的交易计划，先取消或完成计划再启动自动交易")
+			return
+		}
 	}
 	traderName := traderID
 	if fullCfg != nil && fullCfg.Trader != nil && fullCfg.Trader.Name != "" {

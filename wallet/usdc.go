@@ -71,6 +71,13 @@ func queryUSDCBalanceRPC(address string) (float64, error) {
 		return 0, fmt.Errorf("read rpc response: %w", err)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("rpc HTTP %d", resp.StatusCode)
+	}
+	return decodeUSDCBalance(respBody)
+}
+
+func decodeUSDCBalance(respBody []byte) (float64, error) {
 	var rpcResp struct {
 		Result string          `json:"result"`
 		Error  json.RawMessage `json:"error"`
@@ -82,10 +89,10 @@ func queryUSDCBalanceRPC(address string) (float64, error) {
 		return 0, fmt.Errorf("rpc error: %s", string(rpcResp.Error))
 	}
 
-	hexStr := strings.TrimPrefix(rpcResp.Result, "0x")
-	if hexStr == "" {
-		return 0, nil
+	if !strings.HasPrefix(rpcResp.Result, "0x") || len(rpcResp.Result) <= 2 {
+		return 0, fmt.Errorf("missing RPC balance result")
 	}
+	hexStr := strings.TrimPrefix(rpcResp.Result, "0x")
 	balance, ok := new(big.Int).SetString(hexStr, 16)
 	if !ok {
 		return 0, fmt.Errorf("invalid hex balance: %q", rpcResp.Result)

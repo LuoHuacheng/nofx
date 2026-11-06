@@ -7,6 +7,7 @@ import (
 
 	"nofx/logger"
 	"nofx/market"
+	"nofx/trader/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -158,15 +159,9 @@ func (s *Server) handleAccount(c *gin.Context) {
 
 // handlePositions Position list
 func (s *Server) handlePositions(c *gin.Context) {
-	_, traderID, err := s.getTraderFromQuery(c)
+	trader, err := s.accountReadClient(c.GetString("user_id"), c.Query("trader_id"), c.Query("exchange_id"))
 	if err != nil {
-		SafeBadRequest(c, "Invalid trader ID")
-		return
-	}
-
-	trader, err := s.traderManager.GetTrader(traderID)
-	if err != nil {
-		SafeNotFound(c, "Trader")
+		SafeBadRequest(c, err.Error())
 		return
 	}
 
@@ -176,6 +171,9 @@ func (s *Server) handlePositions(c *gin.Context) {
 		return
 	}
 
+	if positions == nil {
+		positions = make([]map[string]interface{}, 0)
+	}
 	c.JSON(http.StatusOK, positions)
 }
 
@@ -392,15 +390,9 @@ func (s *Server) handleOrderFills(c *gin.Context) {
 
 // handleOpenOrders Get open orders (pending SL/TP) from exchange
 func (s *Server) handleOpenOrders(c *gin.Context) {
-	_, traderID, err := s.getTraderFromQuery(c)
+	trader, err := s.accountReadClient(c.GetString("user_id"), c.Query("trader_id"), c.Query("exchange_id"))
 	if err != nil {
-		SafeBadRequest(c, "Invalid trader ID")
-		return
-	}
-
-	trader, err := s.traderManager.GetTrader(traderID)
-	if err != nil {
-		SafeNotFound(c, "Trader")
+		SafeBadRequest(c, err.Error())
 		return
 	}
 
@@ -421,5 +413,8 @@ func (s *Server) handleOpenOrders(c *gin.Context) {
 		return
 	}
 
+	if openOrders == nil {
+		openOrders = make([]types.OpenOrder, 0)
+	}
 	c.JSON(http.StatusOK, openOrders)
 }

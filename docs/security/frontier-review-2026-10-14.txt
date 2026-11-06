@@ -1,0 +1,79 @@
+Frontier local security review — 2026-10-14 (Asia/Tokyo)
+Historical snapshot. See frontier-review-2026-10-15.txt for follow-up fixes.
+
+Scope and limits
+- Local open-nofx source, relevant tests, current database, recent 30 Git
+  commits, current backend logs, and running frontend static assets.
+- No live order was submitted/cancelled/closed. No paid API request was made.
+- Claw402's remote gateway, origin services, and exchange settlement systems
+  were not penetration-tested. This is not a claim of complete security.
+
+Credential checks
+- Eight non-placeholder sensitive .env values checked; no exact matches in
+  tracked files, recent history, current logs, or local frontend build.
+- Both nonempty stored account/model credentials use ENC:v1 storage. They
+  were decrypted only in process memory to compare against current source,
+  recent history, current logs, and the running frontend assets: no matches.
+- .env mode: 0600. .env, data/data.db and web/dist are Git-ignored. No .env or
+  data/data.db commits were found on local refs.
+- A legacy built-in nofxos credential was found in two tracked source files.
+  It has been removed from current source. Historical copies still exist;
+  the issuer must revoke/rotate it if it remains valid. It was not tested.
+
+Payment boundary
+- Frontier AI500/cost/win-rate data is routed through the authenticated
+  Claw402 provider. Profit leaderboard fails closed when no paid catalog
+  endpoint exists. Public-origin fallback is not used by that plugin.
+- A latent legacy NewClient/DefaultClient path could access the nofxos
+  origin without Claw402. Current source now refuses direct origin access,
+  even with an explicit legacy URL/key. Regression test verifies zero origin
+  requests. These source fixes are not yet loaded in the running service.
+- NOFX deliberately also supports owner-configured direct AI providers.
+  Those requests use the owner's provider key and do not pay Claw402.
+  Therefore this application does not currently enforce Claw402-only AI
+  monetization. Requiring that is a product-policy change, not a UI toggle.
+- Public exchange candles/funding/OI and local manual plan compilation are
+  intentionally free paths, separate from paid models/data.
+- Running private state/AI500/plugin-data/positions routes returned HTTP 401
+  without authentication. Ownership, payment-failure/no-repeat, and plan
+  approval/restart/no-replay tests passed.
+
+Additional source hardening
+- Binance protective-order lookup errors are no longer reported as a
+  verified empty order list.
+- Testnet-marked accounts are rejected before a mainnet execution client is
+  created. Binance account inspection also refuses a testnet/mainnet fallback.
+- Hyperliquid execution honors the stored unified-account mode and invalidates
+  its client cache when that mode changes.
+
+Unresolved findings
+- govulncheck ./...: 18 reachable advisory results involving the current Go
+  toolchain/standard library and golang.org/x dependencies. This is reachability
+  analysis, not evidence of successful exploitation. Dependency/toolchain
+  updates and a repeat scan remain required; no clean security bill is issued.
+- npm audit --omit=dev: 4 affected production packages, 3 high and 1 low;
+  axios, react-router, react-router-dom and katex. No automatic major-version
+  dependency upgrade was performed during this review.
+- Docker currently publishes 3000 and 8080 on 0.0.0.0, so this is not restricted
+  to host loopback. This does not prove public Internet reachability. Local-only
+  binding or a properly authenticated TLS deployment should be chosen explicitly.
+
+Binance verification
+- Supported path: Binance mainnet USDT futures, using existing NOFX accounts,
+  exchange SDK and Broker-tagged client order IDs. Finite limit, ladder and
+  TWAP entry plans share the approval/locked-plan/order-state controls.
+- Tests cover exact order/stop requests, leverage selection/failure, Broker ID
+  preservation, unknown receipts, cancellation and failed protection reads.
+- Current local configuration contains one enabled Hyperliquid account and no
+  Binance account. Real Binance account reads, live fills, stops and actual
+  Broker rebates have NOT been verified. Connecting a key alone is insufficient
+  evidence: permissions, margin, venue rules, account mode and fees must pass.
+- No multi-asset-margin or testnet execution support is claimed. Hyperdata
+  holder/cost plugins are Hyperliquid-specific; they do not become Binance data.
+
+Validation
+- go test: api, planning/..., trader/binance, trader/hyperliquid, crypto/security.
+- go test -race: api, provider/nofxos, provider/vergex, mcp/payment, kernel,
+  planning/... and trader/binance, including new bypass/read-failure regressions.
+- go build ./... passed.
+- Fixes are local source changes; no PR/push or running-service restart performed.

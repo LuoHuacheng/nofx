@@ -24,9 +24,13 @@ vi.mock('../../lib/api', () => ({
   },
 }))
 
-vi.mock('../../lib/hyperliquidWallet', () => ({
+vi.mock('../../lib/hyperliquidWallet', async (importOriginal) => ({
+  ensureWalletSigningAccount: (
+    await importOriginal<typeof import('../../lib/hyperliquidWallet')>()
+  ).ensureWalletSigningAccount,
   formatUSDC: (value?: number) =>
     typeof value === 'number' ? value.toFixed(2) : '--',
+  rememberWalletProvider: vi.fn(),
   getPreferredWalletProvider: () => mocks.getProvider(),
   getWalletProviders: () => mocks.getProviders(),
   subscribeWalletProviders: (
@@ -167,8 +171,14 @@ describe('Hyperliquid guided connection', () => {
     }
     mocks.getProvider.mockReturnValue(provider)
 
+    const onSaved = vi.fn()
     render(
-      <HyperliquidWalletConnect language="en" isLoggedIn variant="inline" />
+      <HyperliquidWalletConnect
+        language="en"
+        isLoggedIn
+        variant="inline"
+        onSaved={onSaved}
+      />
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Browser wallet' }))
@@ -195,8 +205,41 @@ describe('Hyperliquid guided connection', () => {
     await waitFor(() =>
       expect(screen.getByText('Hyperliquid is ready')).toBeTruthy()
     )
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith('hyperliquid-1'))
     expect(mocks.createExchangeEncrypted).toHaveBeenCalledOnce()
     expect(screen.queryByRole('button', { name: 'Save connection' })).toBeNull()
+  })
+
+  it('verifies the selected account instead of another cached wallet', async () => {
+    const cached = JSON.stringify({
+      mainWallet: '0xother',
+      savedExchangeId: 'other',
+    })
+    localStorage.setItem('nofx.hyperliquid.connection.v6', cached)
+    mocks.getExchangeConfigs.mockResolvedValue([
+      {
+        id: 'selected',
+        exchange_type: 'hyperliquid',
+        enabled: true,
+        hyperliquidWalletAddr: '0xselected',
+        hyperliquidAgentAddress: '0xagent',
+        hyperliquidBuilderApproved: true,
+      },
+    ])
+    render(
+      <HyperliquidWalletConnect
+        language="en"
+        isLoggedIn
+        variant="inline"
+        account={{ id: 'selected', walletAddress: '0xselected' }}
+      />
+    )
+    await screen.findByText('Hyperliquid is ready')
+    expect(mocks.getHyperliquidAgent).toHaveBeenCalledWith('0xselected')
+    expect(mocks.getHyperliquidAgent).not.toHaveBeenCalledWith('0xother')
+    expect(localStorage.getItem('nofx.hyperliquid.connection.v6')).toBe(cached)
+    expect(mocks.createExchangeEncrypted).not.toHaveBeenCalled()
+    expect(mocks.submitHyperliquidApproval).not.toHaveBeenCalled()
   })
 
   it('clears wallet-bound authorization when the browser wallet account changes', async () => {

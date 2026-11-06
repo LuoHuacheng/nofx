@@ -5,7 +5,7 @@
 # Versions extracted as ARGs for consistency
 # ═══════════════════════════════════════════════════════════════
 
-ARG NODE_VERSION=20-alpine
+ARG NODE_VERSION=24-alpine
 ARG NGINX_VERSION=alpine
 
 # ──────────────────────────────────────────────────────────────

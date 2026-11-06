@@ -16,8 +16,10 @@ import type {
 import { OrchestrationTopology } from './OrchestrationTopology'
 import { OrderBook } from './OrderBook'
 import { LiquidationMap } from './LiquidationMap'
+import { WinrateMatrix } from './WinrateMatrix'
 import { KlineChart } from './KlineChart'
 import { ExecutionLog } from './ExecutionLog'
+import { formatRequestError } from '../../lib/requestErrors'
 import { SignalMatrix } from './SignalMatrix'
 import { RiskRadar } from './RiskRadar'
 import { EdgeProfile } from './EdgeProfile'
@@ -331,7 +333,28 @@ export function TerminalDashboard({
       .filter(Boolean)
     return heldBases[0] || heatmapSymbol || 'SP500'
   }, [positions, candidateCoins, heatmapSymbol])
-  const activeSym = (selectedSym || defaultSym).toUpperCase()
+  const activeSym = baseLabel(selectedSym || defaultSym)
+  const activeSignal = signalRank?.items?.find(
+    (item) => baseLabel(item.symbol) === activeSym
+  )
+  const sourceSymbol =
+    activeSignal?.symbol ||
+    [...(positions ?? []).map((p) => p.symbol), ...candidateCoins].find(
+      (s) => baseLabel(s) === activeSym
+    ) ||
+    selectedSym ||
+    defaultSym
+  const activeMarketType =
+    activeSignal?.market_type === 'core_perp' ||
+    activeSignal?.market_type === 'hip3_perp'
+      ? activeSignal.market_type
+      : /^xyz:/i.test(sourceSymbol)
+        ? 'hip3_perp'
+        : /USDT$/i.test(sourceSymbol) || CRYPTO_MAJORS.has(activeSym)
+          ? 'core_perp'
+          : 'hip3_perp'
+  const activeRequestSymbol =
+    activeMarketType === 'hip3_perp' ? `xyz:${activeSym}` : activeSym
 
   const pnl = account?.total_pnl ?? 0
   const pnlPct = account?.total_pnl_pct ?? 0
@@ -418,7 +441,10 @@ export function TerminalDashboard({
   }, [])
 
   return (
-    <div className="nofx-terminal" style={{ minHeight: '100vh', padding: 0 }}>
+    <div
+      className="nofx-terminal nofx-dashboard"
+      style={{ minHeight: '100vh', padding: 0 }}
+    >
       {/* discreet, unlabelled showcase toggle (Shift+D also works) */}
       <button
         type="button"
@@ -435,7 +461,7 @@ export function TerminalDashboard({
           borderRadius: '50%',
           border: 'none',
           cursor: 'pointer',
-          background: on ? 'var(--tm-up)' : 'rgba(26,24,19,0.2)',
+          background: on ? 'var(--tm-up)' : 'rgba(25,36,52,0.2)',
           opacity: on ? 0.55 : 0.18,
         }}
       />
@@ -452,7 +478,7 @@ export function TerminalDashboard({
               gap: 12,
               marginLeft: 16,
               paddingLeft: 16,
-              borderLeft: '1px solid rgba(26,24,19,0.15)',
+              borderLeft: '1px solid rgba(25,36,52,0.15)',
               fontSize: 11,
             }}
           >
@@ -485,9 +511,19 @@ export function TerminalDashboard({
               </select>
             )}
             <span
-              style={{ color: running ? 'var(--tm-up)' : 'var(--tm-muted)' }}
+              style={{
+                color: status?.trading_blocked
+                  ? 'var(--tm-dn)'
+                  : running
+                    ? 'var(--tm-up)'
+                    : 'var(--tm-muted)',
+              }}
             >
-              {running ? '● running' : '○ stopped'}
+              {status?.trading_blocked
+                ? '● trading blocked'
+                : running
+                  ? '● running'
+                  : '○ stopped'}
             </span>
             <span className="tm-sc" style={{ color: 'var(--tm-muted)' }}>
               cycle
@@ -504,10 +540,40 @@ export function TerminalDashboard({
           </span>,
           navSlot
         )}
+      <div className="nofx-dashboard-heading">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Performance, positions and your AI’s latest decisions.</p>
+        </div>
+        <span>Live account overview</span>
+      </div>
       <div
-        className="tm-box"
+        className="tm-box nofx-dashboard-body"
         style={{ maxWidth: 1280, margin: '0 auto', border: 'none' }}
       >
+        {!on && status?.trading_blocked && (
+          <div
+            role="alert"
+            className="tm-mono"
+            style={{
+              margin: '8px 14px 0',
+              padding: '12px',
+              fontSize: 12,
+              border: '1px solid var(--tm-dn)',
+              color: 'var(--tm-dn)',
+              background: 'rgba(200,60,40,0.06)',
+            }}
+          >
+            <strong>Trading blocked / 交易已阻断</strong>
+            <div className="tm-error">
+              {formatRequestError(status.trading_error)}
+            </div>
+            <div>
+              自动开仓、平仓不可用；请用主钱包重新签名授权。修复前不会为此决策轮次调用付费
+              AI 或数据。
+            </div>
+          </div>
+        )}
         {/* runtime health banner — AI fee wallet dry / safe mode would otherwise
             only be visible in server logs while the bot silently idles */}
         {!on &&
@@ -550,7 +616,9 @@ export function TerminalDashboard({
         {!on &&
           status?.is_running &&
           (status.call_count ?? 0) <= 1 &&
-          !status.safe_mode && (
+          !status.safe_mode &&
+          !status.trading_blocked &&
+          status.trading_checked_at && (
             <div
               className="tm-mono"
               style={{
@@ -634,7 +702,10 @@ export function TerminalDashboard({
         {/* metric row — "Total P/L" is equity-based (includes unrealized);
             "Realized P/L" is closed-trades only and matches PF/win-rate/sharpe,
             so the two never read as contradicting each other */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div
+          className="nofx-dashboard-metrics"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)' }}
+        >
           {[
             {
               l: 'Equity',
@@ -781,12 +852,11 @@ export function TerminalDashboard({
               }}
             >
               {/* cost/liq heatmap works for both synthetic (hip3_perp) and crypto
-                (perp) markets — pass the likely marketType; the component falls
-                back to the other one if the guess is wrong */}
+                (perp) markets — the selected market decides which dex we hit */}
               <LiquidationMap
                 symbol={activeSym}
                 demo={on}
-                marketType={CRYPTO_MAJORS.has(activeSym) ? 'perp' : 'hip3_perp'}
+                marketType={activeMarketType}
                 height={ROW1_H - 130}
               />
             </div>
@@ -800,7 +870,7 @@ export function TerminalDashboard({
             }}
           >
             <OrderBook
-              symbol={activeSym}
+              symbol={activeRequestSymbol}
               demo={on}
               markPrice={
                 positions?.find((p) => baseLabel(p.symbol) === activeSym)
@@ -830,9 +900,21 @@ export function TerminalDashboard({
               <div className="tm-rule" style={{ margin: '10px 0 8px' }} />
             )}
             <div style={{ flex: 1, minHeight: 0 }}>
-              <KlineChart symbol={activeSym} fill demo={on} />
+              <KlineChart symbol={activeRequestSymbol} fill demo={on} />
             </div>
           </div>
+        </div>
+        <div className="tm-rule" />
+
+        {/* ── win-rate matrix (holder cost × win-rate grid, claw402 paid data).
+              Full-width panel under row 1; long/short grids side by side with
+              click-to-drill address lists. ── */}
+        <div style={sc}>
+          <WinrateMatrix
+            symbol={activeSym}
+            demo={on}
+            marketType={activeMarketType}
+          />
         </div>
         <div className="tm-rule" />
 

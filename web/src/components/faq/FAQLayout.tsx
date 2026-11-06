@@ -45,7 +45,7 @@ export function FAQLayout() {
   return (
     <DeepVoidBackground className="py-8 pt-24" disableAnimation>
       <div className="mx-auto w-full max-w-6xl px-4 md:px-8">
-        {/* page header — same strip language as the other terminal pages */}
+        {/* page header — shared workspace title and search */}
         <div className="mb-8 border-b border-nofx-gold/20 pb-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
@@ -53,10 +53,10 @@ export function FAQLayout() {
                 <HelpCircle className="h-6 w-6 md:h-7 md:w-7" />
               </div>
               <div>
-                <h1 className="font-mono text-2xl font-bold tracking-tight text-nofx-text md:text-3xl">
-                  FAQ
+                <h1 className="font-sans text-2xl font-bold tracking-tight text-nofx-text md:text-3xl">
+                  Help & guides
                 </h1>
-                <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-nofx-text-muted">
+                <p className="mt-1 font-sans text-xs tracking-normal text-nofx-text-muted">
                   {totalItems} answers · wallets · launch · trading ·
                   self-hosting
                 </p>
@@ -73,7 +73,7 @@ export function FAQLayout() {
 
         {/* content */}
         <div className="flex gap-8">
-          <aside className="hidden w-64 flex-shrink-0 lg:block">
+          <aside className="hidden w-64 shrink-0 lg:block">
             <FAQSidebar
               categories={filteredCategories}
               activeItemId={activeItemId}
@@ -89,12 +89,12 @@ export function FAQLayout() {
               />
             ) : (
               <div className="rounded-xl border border-nofx-gold/20 bg-nofx-bg-lighter py-16 text-center">
-                <p className="font-mono text-sm text-nofx-text-muted">
+                <p className="font-sans text-sm text-nofx-text-muted">
                   No matching questions for “{searchTerm}”.
                 </p>
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="mt-4 rounded-lg border border-nofx-gold/30 bg-nofx-gold/10 px-5 py-2 font-mono text-xs font-bold uppercase tracking-[0.12em] text-nofx-gold hover:bg-nofx-gold/20"
+                  className="mt-4 rounded-lg border border-nofx-gold/30 bg-nofx-gold/10 px-5 py-2 font-sans text-xs font-bold tracking-normal text-nofx-gold hover:bg-nofx-gold/20"
                 >
                   Clear search
                 </button>
@@ -105,7 +105,7 @@ export function FAQLayout() {
 
         {/* still stuck */}
         <div className="mt-12 rounded-xl border border-nofx-gold/20 bg-nofx-bg-lighter p-6 text-center md:p-8">
-          <h3 className="font-mono text-sm font-bold uppercase tracking-[0.16em] text-nofx-text">
+          <h3 className="font-sans text-sm font-bold tracking-normal text-nofx-text">
             Still have questions?
           </h3>
           <p className="mt-2 text-sm text-nofx-text-muted">
@@ -117,7 +117,7 @@ export function FAQLayout() {
               href="https://github.com/NoFxAiOS/nofx"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-5 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.12em] text-nofx-text hover:border-nofx-gold/40"
+              className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-5 py-2.5 font-sans text-xs font-bold tracking-normal text-nofx-text hover:border-nofx-gold/40"
             >
               GitHub
             </a>
@@ -125,7 +125,7 @@ export function FAQLayout() {
               href="https://t.me/nofx_dev_community"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg bg-nofx-gold px-5 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.12em] text-white hover:bg-nofx-accent"
+              className="rounded-lg bg-nofx-gold px-5 py-2.5 font-sans text-xs font-bold tracking-normal text-white hover:bg-nofx-accent"
             >
               Telegram community
             </a>

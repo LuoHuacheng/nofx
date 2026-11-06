@@ -1,14 +1,18 @@
-<p align="center"><strong><a href="https://vergex.trade">vergex.trade</a> の支援を受けています</strong></p>
-
 <p align="center">
-  <img src="../../assets/nofx-banner.svg" alt="NOFX — AI トレーディングターミナル" width="100%"/>
+  <img src="../../assets/nofx-banner.svg" alt="nofx — 取引を動かすインテリジェンス。自分で運用するオープンな取引システム。" width="100%"/>
 </p>
 
 <p align="center">
-  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Stars"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/releases"><img src="https://img.shields.io/github/v/release/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Release"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-E0483B?style=flat-square&labelColor=1A1813" alt="License"></a>
-  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-E0483B?style=flat-square&labelColor=1A1813&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="#frontier">Frontier</a> ·
+  <a href="#run-locally">はじめる</a> ·
+  <a href="#documentation">ドキュメント</a> ·
+  <a href="#community">コミュニティ</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat&labelColor=192434&color=295BE8" alt="GitHub stars"></a>
+  <a href="../../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-295BE8?style=flat&labelColor=192434" alt="License: AGPL-3.0"></a>
+  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-295BE8?style=flat&labelColor=192434&logo=telegram&logoColor=white" alt="Telegram community"></a>
 </p>
 
 <p align="center">
@@ -21,32 +25,162 @@
   <a href="../vi/README.md">Tiếng Việt</a>
 </p>
 
-<br/>
+NOFX は、自分のコンピューターで動かすオープンソースの取引システムです。**Frontier** では AI と取引のアイデアを検討し、チャート上でエントリー案を比較して、自分で注文を承認できます。**Autopilot** では戦略を継続的に実行できます。どちらも、設定済みのモデルと取引所口座を利用します。
 
-NOFX は、戦略そのものが言語モデルであるオープンソースのトレーディングターミナルです。各トレーダーは、市場構造を読み取り、判断し、執行し、その根拠を記録するという連続的なループを回し続けます。その間、Go ランタイムがすべての注文を、モデルには上書きできないハードなリスク制限内に抑え込みます。
+[Vergex](https://vergex.trade) とともに開発。AI とデータへのアクセスは [Claw402](https://claw402.ai) が提供します。
 
-トレーダーの構成は自由です。任意のモデル、9 つの取引所のいずれか、任意の戦略を組み合わせられます。複数のトレーダーを並行して走らせ、実現リターンに基づく公開リーダーボードで比較できます。すべては自分のマシン上で動作し、取引所の認証情報は保存時に暗号化され、外部に送信されることはありません。
+<a id="run-locally"></a>
+
+## ローカルで実行
+
+**1 行でインストール — Linux / macOS**
+
+Compose を含む Docker をインストールして起動し、次のコマンドを実行します。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
 ```
 
-ターミナルは `http://127.0.0.1:3000` で開きます。
+デスクトップのブラウザーで **http://127.0.0.1:3000** を開いてください。
 
-**初回起動**
+インストーラーは不足している環境設定用の鍵を生成し、公開済みの Docker イメージで NOFX を起動します。Go や Node.js のインストールは不要です。[初回の設定](#your-first-session)へ進むか、[ソースからのビルドとその他の方法](#source-builds-and-other-options)を確認してください。
 
-1. 登録します — 最初に作成したアカウントがこのインスタンスのオーナーになります。
-2. ガイド付きの起動手順に従います。自動作成される AI 手数料ウォレットに **$1+ USDC**（Base ネットワーク）を入金し、続いて Hyperliquid を接続して取引資金として **$12+ USDC** を入金します。
-3. **Autopilot** を開始します。AI は数分ごとに市場をスキャンして自律的に取引し、すべての判断はその場でダッシュボードに表示されます。ワンクリックでいつでも停止できます。
+## Frontier
 
-<br/>
+チャートと対話を通じて、発注前に内容を確認できる取引プランを作ります。
 
-## 取引所の登録
+1. **市場を選ぶ。** 出来高上位の銘柄を探す、取引所のシンボルで検索する、または Binance AI500 リストを利用できます。取引所が対応していれば、株式連動銘柄も表示されます。
+2. **エントリー方法を比較する。** 成行、指値、配分比率付きの段階注文、TWAP のプランを依頼できます。エントリー価格、損切り、目標、レバレッジ、ポジション金額、推定証拠金をまとめて確認できます。
+3. **確認して発注する。** プランを選ぶとチャートがそのプランにフォーカスします。現在の口座と注文内容を確認してから、実行を明示的に承認します。
+4. **ポジションを管理する。** チャートの下で実際のポジションと取引所の注文を確認し、手動の新規注文や決済も行えます。
 
-NOFX は無料のオープンソースソフトウェアです。以下のパートナーリンク経由で口座を開設すると、取引手数料の割引が受けられるうえ、継続的な開発の資金にもなります。
+Frontier は **Binance の USDT 無期限先物、Hyperliquid、OKX、Bitget** に対応しています。取引用口座を接続する前でも公開市場データを閲覧できますが、取引には対応する口座が必要です。プランの生成だけでは注文は送信されません。
 
-| 取引所                                                                                                                      | 状態 | 手数料割引付きで登録                                                          |
-| :---------------------------------------------------------------------------------------------------------------------------- | :----: | :---------------------------------------------------------------------------------- |
+| エントリー方法 | 動作 |
+| :--- | :--- |
+| **成行** | 承認後、約定可能な市場価格でエントリーします。表示価格は推定値です。 |
+| **指値** | 指定した価格でエントリー注文を出します。 |
+| **段階注文** | 複数の価格帯へ、指定の比率でポジションを分割します。 |
+| **TWAP** | 承認された価格範囲内で、決められた回数の注文を時間で分割して送信します。 |
+
+指値注文や時間分割注文は約定しない場合があります。[実行と復旧の詳細](../../features/trade-planning.md)を参照してください。
+
+## Autopilot
+
+戦略を継続的に動かすには、モデル、取引所口座、戦略を指定してトレーダーを設定します。Autopilot は市場を読み取り、判断を行い、NOFX の取引実行基盤を通じて注文します。Dashboard でポジション、運用成績、判断履歴を確認できます。
+
+**Frontier では取引ごとに承認が必要です。Autopilot は稼働中に自動で注文できます。** Autopilot の開始と停止は、それぞれ別の操作です。
+
+| ワークスペース | 用途 |
+| :--- | :--- |
+| **Config** | モデルの接続、AI ウォレットへの入金、取引口座の管理。 |
+| **Frontier** | 市場の探索、エントリー案の比較、内容を確認した注文の発注。 |
+| **Dashboard** | 稼働中のトレーダー、ポジション、判断履歴の確認。 |
+| **Strategy** | 銘柄選定、指標、ポジションサイズ、取引指示の設定。 |
+| **Leaderboard** | 公開されている運用成績の比較。 |
+
+<a id="your-first-session"></a>
+
+## 初回の設定
+
+1. **ローカルアカウントを作成する。** 起動した NOFX にサインインします。
+2. **Config で AI を設定する。** モデルを選びます。Claw402 を使う場合は、AI 利用料用のウォレットを作成またはインポートし、秘密鍵を保存して、**Base 上の USDC** をそのアドレスに送金します。この残高からモデルと有料データのリクエスト料金を支払います。
+3. **取引口座を追加する。** 利用する取引所を接続し、口座資産と利用可能残高を確認します。取引資金と AI 利用料用ウォレットは別々です。
+4. **Frontier を開く。** 取引所、口座、銘柄を選択します。プランを生成してチャート上で比較し、準備ができたら注文内容を確認します。
+
+継続的な自動取引を行う場合は、Autopilot を別途設定して起動してください。
+
+### インストーラーで導入した環境の更新
+
+稼働中の Autopilot を停止し、実行中の Frontier の取引状況を確認してから、インストール先のディレクトリ（既定では `~/nofx`）で実行します。
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+更新時も `.env` と `data/` ディレクトリを保持してください。設定、暗号化に必要な情報、保存済みのアプリケーション状態が含まれています。
+
+再起動後は取引所でポジションと注文を確認し、要確認となっている実行記録の照合を済ませてから次の取引を行ってください。プロセスを停止してもポジションは決済されません。
+
+<a id="source-builds-and-other-options"></a>
+
+## ソースからのビルドとその他の方法
+
+<details>
+<summary>開発者向け：ソースからビルド・更新する</summary>
+
+NOFX の開発や、公開イメージに反映される前の変更を試す場合に利用します。Git と Compose を含む Docker をインストールし、Docker を起動してください。
+
+```bash
+git clone --recurse-submodules https://github.com/NoFxAiOS/nofx.git
+cd nofx
+./start.sh start --build
+```
+
+起動スクリプトは必要に応じて `.env` を作成し、不足している暗号化用の鍵を生成します。サブモジュールなしでクローンした場合は、ビルド前に `git submodule update --init web/vendor/charting` を実行してください。TradingView のチャート素材には該当するライセンスが適用されます。[チャート統合の説明](../../features/trade-planning.md#harness-chart-and-plugins)を参照してください。
+
+ソースから導入した環境を更新する場合は、稼働中の Autopilot を停止し、実行中の Frontier の取引状況を確認してから実行します。
+
+```bash
+git pull --ff-only
+git submodule update --init web/vendor/charting
+./start.sh start --build
+```
+
+</details>
+
+<details>
+<summary>Windows、Railway、リモート環境へのデプロイ</summary>
+
+**Windows**
+
+Docker Desktop と WSL2 などの Bash 環境を用意し、上記の 1 行インストールコマンドを実行します。
+
+**Railway**
+
+[![Railway にデプロイ](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
+
+**リモート環境**
+
+インストーラーは本番用の Compose 設定を使用し、既定ではホストのすべてのネットワークインターフェースでポートを公開します。ソース側の Compose 設定は、フロントエンドと API を既定で `127.0.0.1` にバインドします。リモートのインスタンスを公開する前に、バインド先と認証付き HTTPS プロキシを設定してください。
+
+</details>
+
+<details>
+<summary>Docker を使わずに開発する</summary>
+
+[go.mod](../../../go.mod) に指定された Go、フロントエンドの Docker ビルドと同じ Node.js 24、および TA-Lib を使用します。フロントエンドの起動前にチャートのサブモジュールを初期化し、[.env.example](../../../.env.example) を参考に環境を設定してください。
+
+```bash
+# バックエンド
+go build -o nofx .
+./nofx
+
+# フロントエンド：別のターミナルで実行
+cd web
+npm ci
+npm run dev
+```
+
+</details>
+
+## モデルとデータ
+
+Frontier と Autopilot は NOFX に設定されたモデルを共用します。[Claw402](https://claw402.ai) は複数のモデルへのアクセスを提供し、Base 上の USDC で従量精算します。Config でモデルを選び、ワークスペース内で切り替えられます。
+
+価格とローソク足は選択した取引所から取得します。AI500 と対応する保有者分析には Claw402 の有料経路を使用します。利用できるデータは市場と提供元によって異なり、Hyperliquid の保有者データを Binance、OKX、Bitget のデータとして代用することはありません。アクティビティにはデータの取得状況とプラン作成の進捗が表示されます。
+
+AI 利用料、有料データの料金、取引所の取引資金は別々です。取引を行わなくても、モデルへのリクエストには料金が発生する場合があります。
+
+## 取引所
+
+Frontier で現在選べる取引所は Binance、Hyperliquid、OKX、Bitget です。NOFX の実行基盤には、Bybit、Gate、KuCoin、Aster、Lighter も含まれます。利用できる商品、注文種別、口座権限は取引所によって異なります。
+
+以下は開発を支援するパートナー登録リンクです。手数料の優遇条件は各取引所が定めます。
+
+| 取引所 | 対応状況 | パートナーリンク |
+| :--- | :---: | :--- |
 | <img src="../../../web/public/exchange-icons/binance.jpg" width="20" height="20" style="vertical-align: middle;"/> **Binance**       |   ✅   | [登録](https://www.binance.com/join?ref=NOFXENG)                                |
 | <img src="../../../web/public/exchange-icons/bybit.png" width="20" height="20" style="vertical-align: middle;"/> **Bybit**           |   ✅   | [登録](https://partner.bybit.com/b/83856)                                       |
 | <img src="../../../web/public/exchange-icons/okx.svg" width="20" height="20" style="vertical-align: middle;"/> **OKX**               |   ✅   | [登録](https://www.okx.com/join/1865360)                                        |
@@ -57,178 +191,60 @@ NOFX は無料のオープンソースソフトウェアです。以下のパー
 | <img src="../../../web/public/exchange-icons/aster.svg" width="20" height="20" style="vertical-align: middle;"/> **Aster**           |   ✅   | [登録](https://www.asterdex.com/en/referral/fdfc0e)                             |
 | <img src="../../../web/public/exchange-icons/lighter.png" width="20" height="20" style="vertical-align: middle;"/> **Lighter**       |   ✅   | [登録](https://app.lighter.xyz/?referral=68151432)                              |
 
-<br/>
+## 注文の実行について
 
-## デモ
+プランと戦略の判断は、既存の NOFX 取引所アダプターを通じて実行されます。モデルのプロンプトにウォレットの秘密鍵や取引所の認証情報は含まれません。
 
-https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
-
-<br/>
-
-## モデルは提案する。ランタイムが決める。
-
-判断は [Claw402.ai](https://claw402.ai)・Vergex のデータスタックに基づきます。全市場のライブ方向ボード、銘柄ごとの現在方向と方向履歴、コストベース・清算ヒートマップ、リアルタイムのネットフローを利用します。NOFX はボード方向に従い、その他のデータは執行コンテキストとして扱います。
-
-すべての注文は、モデルの手が届かない、コードで強制されるリスク制限を通過します。
-
-|                          |                                                                                    |
-| :----------------------- | :--------------------------------------------------------------------------------- |
-| ポジション制限          | 同時ポジション数の上限、想定元本は口座資産に対する比率で制限、1 シンボルにつき 1 ポジション |
-| レバレッジ制限          | モデルの要求とは無関係に、注文サイズの算出時にハードキャップを適用     |
-| 取引所側の保護 | すべてのエントリー直後に、ストップロスとテイクプロフィットを取引所側に設置     |
-| ドローダウン自動クローズ      | ピークから利益を大きく吐き出したポジションは自動的にクローズ            |
-| 取引スロットリング         | 最低保有時間、シンボルごとの再エントリークールダウン、サイクルごと・1 時間ごとのエントリー回数制限 |
-| セーフモード                | モデルの失敗が繰り返された場合、モデルが回復するまで新規エントリーをブロック                 |
-| 起動前チェック         | トレーダーの開始前に、モデルアクセス、ウォレット資金、戦略、取引所残高を検証 |
-
-各判断は、モデルの推論全文とともに保存されます。記録の残らないポジションは存在しません。
-
-<br/>
-
-## ターミナル
-
-| | |
-| :--- | :--- |
-| **Autopilot** | ガイド付きの起動フロー：資金投入、接続、入金、開始 — 全工程をサーバー側の事前チェックが支えます |
-| **Strategy Studio** | スタイルプリセット、コインユニバース、インジケーター、レバレッジ、エントリー確信度、カスタムプロンプト |
-| **Competition** | 実現リターンでランク付けされる公開リーダーボード。各エントリーには使用モデルが明記されます |
-| **Dashboard** | ライブのポジション、注文、統計、そしてすべての判断の背後にある推論 |
-
-<details>
-<summary>スクリーンショット</summary>
-
-<br/>
-
-|                        概要                         |                          マーケットチャート                           |
-| :-----------------------------------------------------: | :-------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-page.png" width="400"/> | <img src="../../../screenshots/dashboard-market-chart.png" width="400"/> |
-
-|                          取引統計                           |                          ポジション履歴                           |
-| :--------------------------------------------------------------: | :-----------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-trading-stats.png" width="400"/> | <img src="../../../screenshots/dashboard-position-history.png" width="400"/> |
-
-|                     戦略エディタ                      |                      インジケーター設定                       |
-| :------------------------------------------------------: | :----------------------------------------------------------: |
-| <img src="../../../screenshots/strategy-studio.png" width="400"/> | <img src="../../../screenshots/strategy-indicators.png" width="400"/> |
-
-|                     コンペティション                           |                    設定                              |
-| :-------------------------------------------------------: | :-----------------------------------------------------------: |
-| <img src="../../../screenshots/competition-page.png" width="400"/> | <img src="../../../screenshots/config-ai-exchanges.png" width="400"/>  |
-
-</details>
-
-<br/>
-
-## モデル
-
-自分の API キーで 8 つのプロバイダーを利用できます — DeepSeek、OpenAI、Claude、Qwen、Gemini、Grok、Kimi、MiniMax。カスタムエンドポイントとカスタムモデル名にも対応しています。
-
-あるいは、キーを一切使わない方法もあります。[Claw402](https://claw402.ai) は x402 プロトコル上で、モデルの利用量を呼び出しごとに USDC で課金します。Base 上のウォレットひとつが、すべての API キーの代わりになります。
-
-| プロバイダー | アクセス |
-| :------- | :----- |
-| **Claw402** | [公式割引付きの従量課金 AI モデル](https://claw402.ai) |
-
-## マーケット
-
-9 つの取引所すべてで暗号資産の無期限先物を取引できます。Hyperliquid では、同じランタイムが暗号資産に加えて、トークン化された米国株、コモディティ、株価指数、FX、プレ IPO 無期限先物 — TSLA、NVDA、GOLD、SPX、EUR、OPENAI — も取引します。
-
-<br/>
+- **承認前に確認できる注文。** Frontier は口座、注文サイズ、エントリーと決済の詳細を表示します。Autopilot は設定された戦略と実行時の制限に従います。
+- **口座に応じたサイズ計算。** Frontier は現在の利用可能証拠金と選択したレバレッジを使い、実行コストを確保します。数量精度、価格刻み、取引所の制限も適用されます。
+- **取引所側の損切り・利確。** 約定を確認すると、対応するストップロスとテイクプロフィットの注文を出します。新規注文と保護注文は一括で確定する処理ではありません。保護注文に失敗した場合は取引所で確認してください。
+- **注文状態の照合。** 送信結果が不明な場合は、無条件に再送せず取引所で照合します。未解決の実行があると、その後のエントリーが一時停止する場合があります。
+- **ローカルの設定。** 取引所の認証情報は NOFX サーバーで暗号化して保存します。署名に必要な情報もインストール先に保持するため、ファイルとバックアップを保護してください。
 
 ## アーキテクチャ
 
+```text
+デスクトップブラウザー
+  Frontier · Config · Dashboard · Strategy
+    → NOFX API
+      → Frontier：プラン作成、確認、承認
+      → Autopilot：戦略ループ
+    → 共通の実行基盤 → 取引所アダプター → 自分の取引口座
+
+モデルと有料データ：NOFX プロバイダークライアント · Claw402
+保存先：ローカルの設定、プラン、実行記録
 ```
-    ┌─────────────────────────────────────────────────┐
-    │                 Trading Terminal                 │
-    │        React · TypeScript · TradingView          │
-    │   Dashboard · Strategy Studio · Competition      │
-    ├─────────────────────────────────────────────────┤
-    │                  API Server (Go)                  │
-    │      JWT auth · encrypted credential store        │
-    ├──────────────┬──────────────┬───────────────────┤
-    │   Strategy    │  Autopilot   │   Trader Runtime  │
-    │    Engine     │  Preflight   │    Risk Engine    │
-    ├──────────────┴──────────────┴───────────────────┤
-    │                 AI Model Layer                    │
-    │  DeepSeek · OpenAI · Claude · Qwen · Gemini      │
-    │  Grok · Kimi · MiniMax · Claw402 (x402 USDC)     │
-    ├─────────────────────────────────────────────────┤
-    │              Exchange Connectivity                │
-    │ Binance · Bybit · OKX · Hyperliquid · Bitget     │
-    │ KuCoin · Gate · Aster · Lighter                  │
-    └─────────────────────────────────────────────────┘
-```
-
-<br/>
-
-## インストール
-
-**Linux / macOS**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-```
-
-**Railway**
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
-
-**Docker**
-
-```bash
-curl -O https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**Windows** — [Docker Desktop](https://www.docker.com/products/docker-desktop/) をインストールしてから、次を実行します。
-
-```powershell
-curl -o docker-compose.prod.yml https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**ソースからビルド** — Go 1.21+、Node.js 18+ が必要です。
-
-```bash
-git clone https://github.com/NoFxAiOS/nofx.git && cd nofx
-go build -o nofx && ./nofx            # backend
-cd web && npm install && npm run dev  # frontend, in a second terminal
-```
-
-**アップデート** — インストールスクリプトを再実行すると、その場でアップグレードされます。
 
 <details>
-<summary>サーバーへのデプロイ</summary>
+<summary>旧インターフェースのデモ</summary>
 
-<br/>
+この動画は以前のインターフェースを紹介しています。現在はナビゲーションとデザインが変更されています。
 
-**HTTP**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-# http://YOUR_IP:3000
-```
-
-**Cloudflare 経由の HTTPS**
-
-1. [Cloudflare](https://dash.cloudflare.com)（無料プラン）にドメインを追加
-2. A レコード → サーバー IP（Proxied を有効化）
-3. SSL/TLS → Flexible
-4. `.env` に `TRANSPORT_ENCRYPTION=true` を設定
+https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
 
 </details>
 
-<br/>
+## ブランド素材
+
+- [シンボル — SVG](../../../web/public/icons/nofx-flow.svg)
+- [GitHub アバター — PNG、512 × 512](../../../web/public/brand/nofx-avatar-512.png)
+- [GitHub アバター — SVG ソース](../../../web/public/brand/nofx-avatar.svg)
+- [README バナー — SVG](../../assets/nofx-banner.svg)
+
+<a id="documentation"></a>
 
 ## ドキュメント
 
-|                                                         |                                       |
-| :------------------------------------------------------ | :------------------------------------ |
-| [はじめに](../../getting-started/README.md)       | デプロイと取引所 API のガイド    |
-| [アーキテクチャ](../../architecture/README.md)             | システム設計とモジュール索引        |
-| [戦略モジュール](../../architecture/STRATEGY_MODULE.md) | 銘柄選択、AI プロンプト、執行 |
-| [FAQ](../../guides/faq.en.md)                            | よくある質問                      |
-| [トラブルシューティング](../../guides/TROUBLESHOOTING.md)       | よくある問題の診断              |
+| ガイド | 内容 |
+| :--- | :--- |
+| [Frontier](../../features/trade-planning.md) | プラン作成、実取引、データ、復旧 |
+| [はじめに](../../getting-started/README.md) | デプロイと取引所 API のガイド |
+| [アーキテクチャ](../../architecture/README.md) | システム設計とモジュール一覧 |
+| [戦略モジュール](../../architecture/STRATEGY_MODULE.md) | 銘柄選定、AI プロンプト、実行 |
+| [よくある質問](../../guides/faq.en.md) | 一般的な質問への回答 |
+| [トラブルシューティング](../../guides/TROUBLESHOOTING.md) | よくある問題の診断 |
+
+<a id="community"></a>
 
 ## コミュニティ
 

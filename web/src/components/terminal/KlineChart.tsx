@@ -39,7 +39,14 @@ interface KlineChartProps {
   demo?: boolean
 }
 
-export function KlineChart({
+export function KlineChart(props: KlineChartProps) {
+  // A new market must never inherit the previous market's history or live bar.
+  return (
+    <KlineChartSession key={`${props.symbol}:${!!props.demo}`} {...props} />
+  )
+}
+
+function KlineChartSession({
   symbol,
   height = 360,
   fill = false,
@@ -47,15 +54,48 @@ export function KlineChart({
 }: KlineChartProps) {
   const base = baseSymbol(symbol || '')
 
+  // resolve the Hyperliquid coin id (xyz: dex membership)
+  const [xyzSet, setXyzSet] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let alive = true
+    fetch(HL_INFO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'allMids', dex: 'xyz' }),
+    })
+      .then((r) => r.json())
+      .then((mids: Record<string, string>) => {
+        if (!alive) return
+        const set = new Set<string>()
+        for (const k of Object.keys(mids || {}))
+          set.add(k.replace(/^xyz:/, '').toUpperCase())
+        setXyzSet(set)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+  const coin = useMemo(() => {
+    if (!base) return ''
+    // an explicit xyz: prefix is authoritative; otherwise consult the xyz dex
+    if (/^xyz:/i.test(symbol) || xyzSet.has(base)) return `xyz:${base}`
+    return base
+  }, [base, symbol, xyzSet])
+
   // history seed (resynced occasionally; the WS carries the live bar)
-  const { data: seed, isLoading } = useSWR(
-    base && !demo ? ['kline', base, INTERVAL] : null,
-    () => api.getKlines(base, INTERVAL, 'hyperliquid', MAX_BARS, true),
+  const {
+    data: seed,
+    isLoading,
+    error,
+  } = useSWR(
+    coin && !demo ? ['kline', coin, INTERVAL] : null,
+    () => api.getKlines(coin, INTERVAL, 'hyperliquid', MAX_BARS, true),
     {
       refreshInterval: 60000,
       revalidateOnFocus: false,
       shouldRetryOnError: false,
-      keepPreviousData: true,
+      keepPreviousData: false,
     }
   )
 
@@ -130,33 +170,6 @@ export function KlineChart({
     return () => clearInterval(id)
   }, [demo, base])
 
-  // resolve the Hyperliquid coin id (xyz: dex membership)
-  const [xyzSet, setXyzSet] = useState<Set<string>>(new Set())
-  useEffect(() => {
-    let alive = true
-    fetch(HL_INFO, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'allMids', dex: 'xyz' }),
-    })
-      .then((r) => r.json())
-      .then((mids: Record<string, string>) => {
-        if (!alive) return
-        const set = new Set<string>()
-        for (const k of Object.keys(mids || {}))
-          set.add(k.replace(/^xyz:/, '').toUpperCase())
-        setXyzSet(set)
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [])
-  const coin = useMemo(
-    () => (base ? (xyzSet.has(base) ? `xyz:${base}` : base) : ''),
-    [base, xyzSet]
-  )
-
   // live bar from the candle WS
   const [liveBar, setLiveBar] = useState<Kline | null>(null)
   const [wsLive, setWsLive] = useState(false)
@@ -164,6 +177,8 @@ export function KlineChart({
   useEffect(() => {
     if (!coin || demo) return
     setLiveBar(null)
+    setWsLive(false)
+    pending.current = null
     let ws: WebSocket | null = null
     let raf: number | null = null
     let retry: ReturnType<typeof setTimeout> | null = null
@@ -179,10 +194,12 @@ export function KlineChart({
           })
         )
       ws.onmessage = (ev) => {
+        if (closed) return
         try {
           const msg = JSON.parse(ev.data)
           if (msg.channel !== 'candle' || !msg.data) return
           const d = msg.data
+          if (d.s !== coin || d.i !== INTERVAL) return
           pending.current = {
             openTime: d.t,
             closeTime: d.T,
@@ -230,11 +247,12 @@ export function KlineChart({
       }
       ws?.close()
     }
-  }, [coin])
+  }, [coin, demo])
 
   // merge the live bar into the seeded history
   const realCandles = useMemo(() => {
-    const hist = seed ?? []
+    if (error || !seed?.length) return []
+    const hist = seed
     if (!liveBar) return hist
     const arr = [...hist]
     const last = arr[arr.length - 1]
@@ -242,7 +260,7 @@ export function KlineChart({
       arr[arr.length - 1] = liveBar
     else if (!last || liveBar.openTime > last.openTime) arr.push(liveBar)
     return arr.slice(-MAX_BARS)
-  }, [seed, liveBar])
+  }, [seed, liveBar, error])
 
   const candles = demo ? demoCandles : realCandles
   const last = candles.length ? candles[candles.length - 1].close : 0
@@ -283,7 +301,13 @@ export function KlineChart({
             color: live ? 'var(--tm-up)' : 'var(--tm-muted)',
           }}
         >
-          {live ? '● live' : isLoading || candles.length ? '○ sync' : '○ —'}
+          {error && !demo
+            ? '○ unavailable'
+            : live
+              ? '● live'
+              : isLoading || candles.length
+                ? '○ sync'
+                : '○ —'}
         </span>
       </div>
       {last > 0 && (
@@ -322,7 +346,11 @@ export function KlineChart({
         )
       ) : (
         <div className="tm-sc" style={{ padding: '20px 0' }}>
-          Loading market…
+          {error
+            ? 'Candle history unavailable. No previous market data is displayed.'
+            : isLoading || demo
+              ? 'Loading market…'
+              : 'No candle history for this market.'}
         </div>
       )}
     </div>

@@ -41,17 +41,58 @@ export const DEFAULT_CLAW402_MODEL = 'gpt-5.6'
 
 // Models available through Claw402 (x402 USDC payment protocol)
 // Must stay in sync with the claw402 catalog (GET /api/v1/catalog)
-// Prices are USD per 1M tokens (input / output), settled pay-as-you-go via
-// the x402 upto scheme — each call is charged on actual token usage.
+// Indicative retail USD per 1M tokens, including gateway markup. DeepSeek
+// shows peak rates; GPT long-context multipliers and the per-request service
+// fee are separate. The live gateway quote/verified receipt is authoritative.
 export const CLAW402_MODELS: Claw402Model[] = [
+  {
+    id: 'gpt-6',
+    name: 'GPT-6 Astra',
+    provider: 'OpenAI',
+    desc: 'Most capable · 1.05M context',
+    brand: 'openai',
+    priceIn: 14.375,
+    priceOut: 57.5,
+    isNew: true,
+  },
+  {
+    id: 'gpt-6.1-sol',
+    name: 'GPT-6.1 Sol',
+    provider: 'OpenAI',
+    desc: 'Latest workhorse · 1.05M context',
+    brand: 'openai',
+    priceIn: 2.875,
+    priceOut: 11.5,
+    isNew: true,
+  },
+  {
+    id: 'gpt-6-sol',
+    name: 'GPT-6 Sol',
+    provider: 'OpenAI',
+    desc: 'Previous workhorse · 1.05M context',
+    brand: 'openai',
+    priceIn: 2.875,
+    priceOut: 11.5,
+    isNew: true,
+  },
+  {
+    id: 'gpt-6-luna',
+    name: 'GPT-6 Luna',
+    provider: 'OpenAI',
+    desc: 'Fast and cost-efficient · 1.05M context',
+    brand: 'openai',
+    priceIn: 0.14375,
+    priceOut: 0.575,
+    isNew: true,
+  },
   {
     id: 'gpt-5.6',
     name: 'GPT-5.6 Sol',
     provider: 'OpenAI',
-    desc: 'Flagship',
+    desc: 'Previous flagship',
     brand: 'openai',
-    priceIn: 5,
-    priceOut: 30,
+    priceIn: 5.75,
+    priceOut: 34.5,
   },
   {
     id: 'gpt-5.6-terra',
@@ -59,8 +100,8 @@ export const CLAW402_MODELS: Claw402Model[] = [
     provider: 'OpenAI',
     desc: 'Balanced',
     brand: 'openai',
-    priceIn: 2.5,
-    priceOut: 15,
+    priceIn: 2.875,
+    priceOut: 17.25,
   },
   {
     id: 'gpt-5.6-luna',
@@ -68,8 +109,8 @@ export const CLAW402_MODELS: Claw402Model[] = [
     provider: 'OpenAI',
     desc: 'Cost-efficient',
     brand: 'openai',
-    priceIn: 1,
-    priceOut: 6,
+    priceIn: 1.15,
+    priceOut: 6.9,
   },
   {
     id: 'claude-fable',
@@ -77,8 +118,8 @@ export const CLAW402_MODELS: Claw402Model[] = [
     provider: 'Anthropic',
     desc: 'Most capable',
     brand: 'claude',
-    priceIn: 10,
-    priceOut: 50,
+    priceIn: 14.375,
+    priceOut: 57.5,
   },
   {
     id: 'claude-opus',
@@ -86,17 +127,17 @@ export const CLAW402_MODELS: Claw402Model[] = [
     provider: 'Anthropic',
     desc: 'Coding & agents flagship',
     brand: 'claude',
-    priceIn: 5,
-    priceOut: 25,
+    priceIn: 7.1875,
+    priceOut: 28.75,
   },
   {
     id: 'deepseek-v4-flash',
-    name: 'DeepSeek-V4 Flash',
+    name: 'DeepSeek V4.1 Flash',
     provider: 'DeepSeek',
     desc: 'Fast general model',
     brand: 'deepseek',
-    priceIn: 0.14,
-    priceOut: 0.28,
+    priceIn: 0.345,
+    priceOut: 1.38,
   },
   {
     id: 'deepseek-v4-pro',
@@ -104,8 +145,8 @@ export const CLAW402_MODELS: Claw402Model[] = [
     provider: 'DeepSeek',
     desc: 'Advanced reasoning',
     brand: 'deepseek',
-    priceIn: 1.74,
-    priceOut: 3.48,
+    priceIn: 1.518,
+    priceOut: 4.554,
   },
   {
     id: 'glm-5',
@@ -113,8 +154,8 @@ export const CLAW402_MODELS: Claw402Model[] = [
     provider: 'Z.ai',
     desc: 'Deep reasoning flagship',
     brand: 'zhipu',
-    priceIn: 0.6,
-    priceOut: 2,
+    priceIn: 1.15,
+    priceOut: 3.68,
   },
 ]
 

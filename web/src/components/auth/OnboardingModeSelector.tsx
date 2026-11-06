@@ -47,7 +47,7 @@ export function OnboardingModeSelector({
               className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
                 selected
                   ? 'border-nofx-gold/60 bg-nofx-gold/10'
-                  : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter hover:border-nofx-gold/40'
+                  : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter hover:border-nofx-gold/40'
               }`}
             >
               <div className="flex items-center gap-2 text-sm font-semibold text-nofx-text">

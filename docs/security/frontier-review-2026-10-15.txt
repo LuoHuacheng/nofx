@@ -1,0 +1,91 @@
+Frontier security follow-up — 2026-10-15 (Asia/Tokyo)
+
+Scope
+- Follow-up to frontier-review-2026-10-14.txt, using the final local source.
+- This is a scoped review, not a guarantee that all bugs or vulnerabilities
+  are absent. Exchange settlement and third-party gateways were not audited.
+- No real entry, cancellation, close, payment or automatic-trader launch was
+  performed. Existing live backend containers were not restarted.
+
+Remediation
+- Legacy built-in provider credentials are removed from current source.
+  Legacy nofxos constructors fail closed without Claw402, including explicit
+  legacy URLs and keys. Regression tests confirm zero direct-origin requests.
+- Binance protection-order read errors fail closed. Testnet accounts cannot
+  silently obtain a mainnet planning/inspection client.
+- Hyperliquid uses the configured unified-account flag. Complete account reads
+  fail if the mainnet xyz market cannot be read, instead of returning a falsely
+  complete core-only portfolio. Regression fixtures cover success and outage.
+- xyz helpers respect the configured API origin. Testnet position reads skip
+  mainnet-only xyz markets instead of querying the mainnet endpoint.
+- Go 1.26.9 and updated golang.org/x modules remove previously reachable
+  advisories. Docker and CI use the same declared Go version.
+- Frontend production dependencies were updated. Tailwind 3's vulnerable build
+  dependency chain was removed through the official Tailwind 4 migration,
+  including class compatibility changes. Node 24 is used by Docker and CI.
+- Local Compose and Vite bind to 127.0.0.1 by default. Existing running Docker
+  containers still publish on 0.0.0.0 until explicitly recreated. Changing
+  source configuration does not retroactively change existing listeners.
+
+Billing boundary
+- AI500 and supported paid holder analytics use authenticated Claw402 routes;
+  no legacy origin fallback is permitted. Unknown paid outcomes never trigger
+  automatic repayment/retry. A missing paid leaderboard route is unavailable.
+- Owner-configured direct AI providers remain an intentional NOFX capability:
+  they bill the selected provider using that owner's key, not Claw402.
+- Public exchange candles, funding, open interest and local deterministic
+  calculations are intentionally free. Claw402-only AI monetization is not
+  claimed or silently imposed.
+
+Credential recheck
+- Eight configured sensitive .env values: zero exact matches in tracked source,
+  the latest 30 local Git commits or the generated production frontend assets.
+- .env remains mode 0600 and ignored, as do the database and generated assets.
+- The previous review checked both stored nonempty credentials: ENC:v1 at rest,
+  no matches in then-current source/history/logs/running frontend assets.
+- A previously built-in upstream credential still exists in historical Git
+  commits. Removal is not revocation. The issuer must revoke it if still valid;
+  its validity/revocation was not tested. History was not rewritten.
+
+Validation completed
+- go test ./...: passed.
+- go build ./... and go vet ./...: passed.
+- go mod verify: passed.
+- go test -race: api, planning/..., provider/nofxos, provider/vergex,
+  mcp/payment, kernel, manager, trader, trader/binance and trader/hyperliquid:
+  passed.
+- govulncheck v1.9.0 ./...: zero affected symbols and zero imported vulnerable
+  packages. One module-only advisory, GO-2026-5932, flags unmaintained OpenPGP
+  inside x/crypto; that package is not imported and has no fixed version.
+- Clean npm ci and production build: passed; all 25 frontend test files and
+  223 tests passed. npm audit including development dependencies: zero findings.
+- Backend and frontend Docker images built successfully using clean updated
+  toolchains. Compose configuration validation and git diff whitespace checks
+  passed. No newly built backend was deployed during validation.
+- Updated frontend static files were loaded in Chrome. Frontier's chart,
+  positions section and default 5x selector rendered; no browser console error
+  was observed. Trade approval/execution controls were not exercised.
+- CI now checks main/dev and includes reachable Go and npm dependency scans.
+  Local results do not claim that the hosted CI run has already passed.
+
+Binance verification limit
+- Mainnet USDT perpetual execution uses existing NOFX account credentials,
+  signing, order APIs and Broker-tagged IDs. Exact requests, leverage failures,
+  protection reads, unknown receipts and cancellation have fixture tests.
+- No Binance account is configured locally. Live Binance balance reads, fills,
+  stops, permissions and actual Broker rebates remain unverified. Connecting
+  an API key alone does not establish live readiness. No testnet or multi-asset
+  margin support is claimed. Real testing requires a separately approved order.
+
+Hosted CI follow-up
+- The first main run failed before testing because the chart repository is
+  private and the default Actions token cannot access another repository.
+- A new read-only deploy key scoped only to the chart repository was created
+  and stored as the NOFX Actions secret CHARTING_LIBRARY_SSH_KEY. It is not an
+  existing user key. Generated local key files were removed after provisioning.
+- Frontend/image workflows fetch only the pinned chart revision in a separate
+  checkout and disable persisted credentials. Go-only jobs need no chart access.
+- GitHub initially still listed historical dependency alerts after the push;
+  lockfile versions were checked against their required fixes (including axios
+  1.20.0, brace-expansion 1.1.21/2.1.7 and js-yaml 4.3.2). Hosted alert refresh
+  is separate from the completed clean npm audit.

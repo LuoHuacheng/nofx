@@ -10,7 +10,7 @@ import { t } from '../i18n/translations'
 // is still SAMEORIGIN, but modern browsers prioritize the CSP
 // `frame-ancestors` directive when both are present (per CSP Level 2).
 //
-// Mirrors the DataPage.tsx pattern (vergex.trade/trending).
+// Shared by Data and Strategy Market so embed permissions stay consistent.
 export function StrategyMarketPage() {
   const { language } = useLanguage()
 

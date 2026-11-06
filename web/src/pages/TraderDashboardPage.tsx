@@ -295,8 +295,8 @@ export function TraderDashboardPage({
           <div
             className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center nofx-glass"
             style={{
-              background: 'rgba(224, 72, 59, 0.1)',
-              borderColor: 'rgba(224, 72, 59, 0.3)',
+              background: 'rgba(41,91,232, 0.1)',
+              borderColor: 'rgba(41,91,232, 0.3)',
             }}
           >
             <svg
@@ -338,8 +338,8 @@ export function TraderDashboardPage({
           <div
             className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center nofx-glass"
             style={{
-              background: 'rgba(224, 72, 59, 0.1)',
-              borderColor: 'rgba(224, 72, 59, 0.3)',
+              background: 'rgba(41,91,232, 0.1)',
+              borderColor: 'rgba(41,91,232, 0.3)',
             }}
           >
             <svg
@@ -408,7 +408,7 @@ export function TraderDashboardPage({
         <div
           className="mb-6 rounded-lg p-6 animate-scale-in nofx-glass group"
           style={{
-            background: '#F7F4EC',
+            background: '#ffffff',
           }}
         >
           <div className="flex items-start justify-between mb-4">
@@ -438,7 +438,7 @@ export function TraderDashboardPage({
             <div className="flex items-center gap-4">
               {/* Trader Selector */}
               {traders && traders.length > 0 && (
-                <div className="flex items-center gap-2 nofx-glass px-1 py-1 rounded-lg border border-[rgba(26,24,19,0.14)]">
+                <div className="flex items-center gap-2 nofx-glass px-1 py-1 rounded-lg border border-[rgba(25,36,52,0.14)]">
                   <NofxSelect
                     value={selectedTraderId || ''}
                     onChange={(val) => onTraderSelect(val)}
@@ -559,7 +559,7 @@ export function TraderDashboardPage({
         </div>
 
         {/* Debug Info */}
-        <div className="mb-4 px-3 py-1.5 rounded bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] text-[10px] font-mono text-nofx-text-muted flex justify-between items-center opacity-60 hover:opacity-100 transition-opacity">
+        <div className="mb-4 px-3 py-1.5 rounded bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] text-[10px] font-mono text-nofx-text-muted flex justify-between items-center opacity-60 hover:opacity-100 transition-opacity">
           <span style={{ color: '#2E8B57' }}>SYSTEM_STATUS::ONLINE</span>
           {account ? (
             <div className="flex gap-4">
@@ -716,7 +716,7 @@ export function TraderDashboardPage({
                 <div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead className="text-left border-b border-[rgba(26,24,19,0.14)]">
+                      <thead className="text-left border-b border-[rgba(25,36,52,0.14)]">
                         <tr>
                           <th className="px-1 pb-3 font-semibold text-nofx-text-muted whitespace-nowrap text-left">
                             {t('symbol', language)}
@@ -775,7 +775,7 @@ export function TraderDashboardPage({
                         {paginatedPositions.map((pos, i) => (
                           <tr
                             key={i}
-                            className="border-b border-[rgba(26,24,19,0.14)] last:border-0 transition-all hover:bg-nofx-text/5 cursor-pointer group/row"
+                            className="border-b border-[rgba(25,36,52,0.14)] last:border-0 transition-all hover:bg-nofx-text/5 cursor-pointer group/row"
                             onClick={() => {
                               setSelectedChartSymbol(pos.symbol)
                               setChartUpdateKey(Date.now())
@@ -858,7 +858,7 @@ export function TraderDashboardPage({
                   </div>
                   {/* Pagination footer */}
                   {totalPositions > 10 && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-4 text-xs border-t border-[rgba(26,24,19,0.14)] text-nofx-text-muted">
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-4 text-xs border-t border-[rgba(25,36,52,0.14)] text-nofx-text-muted">
                       <span>
                         {t('traderDashboard.showingPositions', language, {
                           shown: paginatedPositions.length,
@@ -878,7 +878,7 @@ export function TraderDashboardPage({
                               { value: 50, label: '50' },
                               { value: 100, label: '100' },
                             ]}
-                            className="bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] rounded px-2 py-1 text-xs text-nofx-text-main transition-colors"
+                            className="bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] rounded px-2 py-1 text-xs text-nofx-text-main transition-colors"
                           />
                         </div>
                         {totalPositionPages > 1 && (
@@ -978,7 +978,7 @@ export function TraderDashboardPage({
             style={{ animationDelay: '0.2s' }}
           >
             {/* Header */}
-            <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[rgba(26,24,19,0.14)] shrink-0">
+            <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[rgba(25,36,52,0.14)] shrink-0">
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-[0_4px_14px_rgba(99,102,241,0.4)]"
                 style={{
@@ -1009,7 +1009,7 @@ export function TraderDashboardPage({
                   { value: 50, label: '50' },
                   { value: 100, label: '100' },
                 ]}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-all bg-nofx-bg-deeper text-nofx-text-main border border-[rgba(26,24,19,0.14)] hover:border-nofx-accent"
+                className="px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-all bg-nofx-bg-deeper text-nofx-text-main border border-[rgba(25,36,52,0.14)] hover:border-nofx-accent"
               />
             </div>
 
@@ -1090,7 +1090,7 @@ function StatCard({
   loading?: boolean
 }) {
   return (
-    <div className="group nofx-glass p-5 rounded-lg transition-all duration-300 hover:bg-nofx-text/5 hover:translate-y-[-2px] border border-[rgba(26,24,19,0.14)] hover:border-nofx-gold/20 relative overflow-hidden">
+    <div className="group nofx-glass p-5 rounded-lg transition-all duration-300 hover:bg-nofx-text/5 hover:translate-y-[-2px] border border-[rgba(25,36,52,0.14)] hover:border-nofx-gold/20 relative overflow-hidden">
       <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity text-4xl grayscale group-hover:grayscale-0">
         {icon}
       </div>

@@ -1,4 +1,5 @@
 export type Page =
+  | 'planning'
   | 'competition'
   | 'traders'
   | 'trader'
@@ -11,6 +12,7 @@ export type Page =
   | 'register'
 
 export const ROUTES = {
+  planning: '/frontier',
   home: '/',
   login: '/login',
   register: '/register',
@@ -29,6 +31,7 @@ export const ROUTES = {
 } as const
 
 export const PAGE_PATHS: Record<Page, string> = {
+  planning: ROUTES.planning,
   competition: ROUTES.competition,
   traders: ROUTES.traders,
   trader: ROUTES.dashboard,
@@ -54,6 +57,10 @@ export const LEGACY_HASH_ROUTES: Record<string, string> = {
 
 export function getCurrentPageForPath(pathname: string): Page | undefined {
   switch (pathname) {
+    case ROUTES.planning:
+    case '/planning':
+    case '/planning/':
+      return 'planning'
     case ROUTES.welcome:
     case ROUTES.traders:
       return 'traders'

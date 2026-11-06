@@ -10,22 +10,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"golang.org/x/crypto/sha3"
 
+	"nofx/internal/permit2"
 	"nofx/mcp"
 )
 
 const (
-	// X402MaxPaymentRetries is the number of retries for 5xx/expired-402 errors
-	// on the payment-signed request. Payment is re-signed on 402 (no double-charge).
+	// X402MaxPaymentRetries limits unsigned discovery attempts only.
+	// Signed requests are never automatically replayed or re-signed.
 	X402MaxPaymentRetries = 5
 
 	// X402RetryBaseWait is the base wait between payment retry attempts.
@@ -75,6 +76,9 @@ func doInitialX402Request(
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
 		req = req.WithContext(ctx)
+		if req.Header.Get("Payment-Signature") != "" || req.Header.Get("X-Payment") != "" {
+			return nil, fmt.Errorf("initial x402 discovery must not contain a payment authorization")
+		}
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -130,9 +134,10 @@ func isRetryableInitialX402Status(status int) bool {
 
 // X402v2PaymentRequired is the structure of the Payment-Required header (x402 v2).
 type X402v2PaymentRequired struct {
-	X402Version int                `json:"x402Version"`
-	Accepts     []X402AcceptOption `json:"accepts"`
-	Resource    *X402Resource      `json:"resource"`
+	X402Version int                        `json:"x402Version"`
+	Accepts     []X402AcceptOption         `json:"accepts"`
+	Resource    *X402Resource              `json:"resource"`
+	Extensions  map[string]json.RawMessage `json:"extensions,omitempty"`
 }
 
 // X402AcceptOption is a payment option from the x402 v2 header.
@@ -179,8 +184,8 @@ func MakeClaw402SignFunc(privateKey *ecdsa.PrivateKey) X402SignFunc {
 	}
 }
 
-// SignBasePaymentHeader decodes a base64 x402 header, parses it, and signs with
-// EIP-712 (USDC TransferWithAuthorization).
+// SignBasePaymentHeader decodes a base64 x402 header and signs exact EIP-3009
+// or native Permit2 upto, never an EIP-3009 authorization relabeled as upto.
 func SignBasePaymentHeader(privateKey *ecdsa.PrivateKey, paymentHeaderB64 string, providerName string) (string, error) {
 	if privateKey == nil {
 		return "", fmt.Errorf("no private key set for %s wallet", providerName)
@@ -198,9 +203,17 @@ func SignBasePaymentHeader(privateKey *ecdsa.PrivateKey, paymentHeaderB64 string
 	if len(req.Accepts) == 0 {
 		return "", fmt.Errorf("no payment options in x402 response")
 	}
+	if req.X402Version != 2 {
+		return "", fmt.Errorf("unsupported x402 payment version")
+	}
 
 	senderAddr := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	return SignX402Payment(privateKey, senderAddr, req.Accepts[0], req.Resource)
+	for _, option := range req.Accepts {
+		if option.Network == BaseNetwork && strings.EqualFold(option.Asset, BaseUSDCContract) && (option.Scheme == "exact" || option.Scheme == "upto") {
+			return signSponsoredPayment(privateKey, senderAddr, option, req)
+		}
+	}
+	return "", fmt.Errorf("no supported Base USDC payment option; no payment submitted")
 }
 
 // X402SettledUSDHeader carries the actually-settled cost (USD) of an upto
@@ -215,166 +228,111 @@ func storeRespHeader(sink []*http.Header, h http.Header) {
 	}
 }
 
-// captureSettledUSD records the gateway-reported settled cost on the client.
-// Zero when the response carried no settlement header (e.g. exact-scheme
-// routes, where the flat catalog price applies instead).
+// captureSettledUSD records only costs checked by the local receipt verifier.
+// Missing verification remains unknown, never a catalog-price estimate.
 func captureSettledUSD(c *mcp.Client, h http.Header) {
 	c.LastCallSettledUSD = 0
-	if h == nil {
+	c.LastCallSettlementVerified = false
+	if h == nil || h.Get("X-Nofx-Receipt-Verified") != "true" {
 		return
 	}
 	if v := h.Get(X402SettledUSDHeader); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && !math.IsNaN(f) && !math.IsInf(f, 0) {
 			c.LastCallSettledUSD = f
+			c.LastCallSettlementVerified = true
 		}
 	}
 }
 
-// DoX402Request executes an HTTP request and handles the x402 v2 payment flow.
-// An optional headerSink receives the headers of the successful response.
-func DoX402Request(
-	ctx context.Context,
-	httpClient *http.Client,
-	buildReqFn func() (*http.Request, error),
-	signFn X402SignFunc,
-	providerTag string,
-	logger mcp.Logger,
-	headerSink ...*http.Header,
-) ([]byte, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+// PaymentOutcomeUnknownError must never trigger an automatic new authorization.
+// A transport error or any paid HTTP error (including 402) is not proof of expiry.
+type PaymentOutcomeUnknownError struct{ Cause error }
 
-	resp, err := doInitialX402Request(ctx, httpClient, buildReqFn, providerTag, logger)
+func (e *PaymentOutcomeUnknownError) Error() string {
+	// This message reaches API responses and persisted decision logs. Keep raw
+	// transport bytes, URLs and remote bodies out of user-visible errors; callers
+	// can still inspect the original typed cause via errors.Is/As and Unwrap.
+	reason := "payment response or settlement receipt could not be verified"
+	if e.Cause != nil && strings.Contains(strings.ToLower(e.Cause.Error()), "malformed http response") {
+		reason = "payment response could not be read due to an HTTP protocol error"
+	}
+	return "paid request outcome unknown; refusing automatic replay: " + reason + "; check the original payment before retrying [diagnostic:" + e.ReasonCode() + "]"
+}
+
+// ReasonCode exposes only a fixed diagnostic category, never remote text,
+// response bodies, wallet credentials or transport URLs.
+func (e *PaymentOutcomeUnknownError) ReasonCode() string {
+	if e.Cause == nil {
+		return "verification_failed"
+	}
+	text := strings.ToLower(e.Cause.Error())
+	for _, hint := range []string{"schema_required", "schema_additional_properties", "function_schema", "stream_required", "tools_unsupported", "context_length"} {
+		if strings.Contains(text, "hint:"+hint) {
+			return "gateway_" + hint
+		}
+	}
+	for _, r := range []struct{ match, code string }{
+		{"validation:invalid_function_parameters", "gateway_invalid_function_parameters"},
+		{"validation:unsupported_parameter", "gateway_unsupported_parameter"},
+		{"validation:invalid_request_error", "gateway_invalid_request"},
+		{"paid request returned status 400", "gateway_http_400"},
+		{"paid request returned status 429", "gateway_http_429"},
+		{"paid request returned status 502", "gateway_http_502"},
+		{"paid request returned status 503", "gateway_http_503"},
+		{"usage stream", "settlement_stream_invalid"},
+		{"malformed http response", "http_protocol_error"},
+		{"missing payment receipt", "receipt_missing"},
+		{"missing or invalid settled amount", "settled_amount_missing"},
+		{"conflicting", "receipt_conflict"},
+		{"rpc chain mismatch or unavailable", "receipt_rpc_unavailable"},
+		{"receipt unavailable", "settlement_pending"},
+		{"not confirmed successfully", "settlement_pending"},
+		{"does not match authorization", "authorization_mismatch"},
+		{"on-chain amount mismatch", "settlement_mismatch"},
+		{"deadline exceeded", "request_timeout"},
+	} {
+		if strings.Contains(text, r.match) {
+			return r.code
+		}
+	}
+	return "verification_failed"
+}
+
+func (e *PaymentOutcomeUnknownError) Unwrap() error   { return e.Cause }
+func (e *PaymentOutcomeUnknownError) Retryable() bool { return false }
+
+// A gateway's explicit pre-settlement rejection is different from an ambiguous
+// paid/network failure. Neither authorizes automatic re-signing or replay.
+type PaymentVerificationRejectedError struct{ Status int }
+
+func (e *PaymentVerificationRejectedError) Error() string {
+	return fmt.Sprintf("payment verification rejected (status %d); gateway reports no settlement for this attempt; check the current quote, fee-wallet balance and client version before a new request (earlier submissions may still have charged)", e.Status)
+}
+func (e *PaymentVerificationRejectedError) Retryable() bool { return false }
+
+// DoX402Request shares the one-authorization flow with streaming requests.
+func DoX402Request(ctx context.Context, httpClient *http.Client,
+	buildReqFn func() (*http.Request, error), signFn X402SignFunc,
+	providerTag string, logger mcp.Logger, headerSink ...*http.Header,
+) ([]byte, error) {
+	resp, err := DoX402RequestStream(ctx, httpClient, buildReqFn, signFn, providerTag, logger)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusPaymentRequired {
-		paymentHeader := resp.Header.Get("Payment-Required")
-		if paymentHeader == "" {
-			paymentHeader = resp.Header.Get("X-Payment-Required")
-		}
-		if paymentHeader == "" {
-			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("received 402 but no Payment-Required header found. Body: %s", string(body))
-		}
-
-		// Drain 402 body to allow HTTP connection reuse.
-		_, _ = io.Copy(io.Discard, resp.Body)
-
-		paymentSig, err := signFn(paymentHeader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign x402 payment: %w", err)
-		}
-
-		// Retry loop for 5xx / expired-402 errors on the payment-signed request.
-		var lastBody []byte
-		var lastStatus int
-		for attempt := 1; attempt <= X402MaxPaymentRetries; attempt++ {
-			req2, err := buildReqFn()
-			if err != nil {
-				return nil, fmt.Errorf("failed to build retry request: %w", err)
-			}
-			req2 = req2.WithContext(ctx)
-			req2.Header.Set("X-Payment", paymentSig)
-			req2.Header.Set("Payment-Signature", paymentSig)
-
-			resp2, err := httpClient.Do(req2)
-			if err != nil {
-				// The facilitator may have settled the signed authorization before
-				// the transport failed. Replaying it could charge the call twice.
-				return nil, fmt.Errorf("paid request outcome unknown; refusing automatic replay: %w", err)
-			}
-
-			body2, readErr := io.ReadAll(resp2.Body)
-			resp2.Body.Close()
-			if readErr != nil {
-				return nil, fmt.Errorf("failed to read payment retry response: %w", readErr)
-			}
-
-			if resp2.StatusCode == http.StatusOK {
-				if txHash := resp2.Header.Get("Payment-Response"); txHash != "" {
-					logger.Infof("💰 [%s] Payment tx: %s", providerTag, txHash)
-				}
-				if attempt > 1 {
-					logger.Infof("✅ [%s] Payment retry succeeded on attempt %d", providerTag, attempt)
-				}
-				storeRespHeader(headerSink, resp2.Header)
-				return body2, nil
-			}
-
-			lastBody = body2
-			lastStatus = resp2.StatusCode
-
-			retryable := resp2.StatusCode == http.StatusPaymentRequired
-
-			if retryable && attempt < X402MaxPaymentRetries {
-				wait := X402RetryBaseWait * time.Duration(attempt)
-
-				// If we got 402 again, the payment signature expired — re-sign.
-				if resp2.StatusCode == http.StatusPaymentRequired {
-					newHeader := resp2.Header.Get("Payment-Required")
-					if newHeader == "" {
-						newHeader = resp2.Header.Get("X-Payment-Required")
-					}
-					if newHeader != "" {
-						newSig, signErr := signFn(newHeader)
-						if signErr == nil {
-							paymentSig = newSig
-							logger.Warnf("⚠️  [%s] Payment expired (402), re-signed and retrying in %v (%d/%d)...",
-								providerTag, wait, attempt+1, X402MaxPaymentRetries)
-						} else {
-							logger.Warnf("⚠️  [%s] Payment expired (402), re-sign failed: %v, retrying in %v (%d/%d)...",
-								providerTag, signErr, wait, attempt+1, X402MaxPaymentRetries)
-						}
-					} else {
-						logger.Warnf("⚠️  [%s] Got 402 but no new Payment-Required header, retrying in %v (%d/%d)...",
-							providerTag, wait, attempt+1, X402MaxPaymentRetries)
-					}
-				} else {
-					logger.Warnf("⚠️  [%s] Server error (status %d), retrying in %v (%d/%d)...",
-						providerTag, resp2.StatusCode, wait, attempt+1, X402MaxPaymentRetries)
-				}
-
-				if err := x402Sleep(ctx, wait); err != nil {
-					return nil, err
-				}
-				continue
-			}
-
-			// Non-retryable error or final attempt — fail
-			break
-		}
-
-		return nil, fmt.Errorf("%s payment retry failed (status %d): %s", providerTag, lastStatus, string(lastBody))
-	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s API error (status %d): %s", providerTag, resp.StatusCode, string(body))
+		return nil, &PaymentOutcomeUnknownError{Cause: err}
 	}
 	storeRespHeader(headerSink, resp.Header)
 	return body, nil
 }
 
-// DoX402RequestStream executes an HTTP request with x402 v2 payment flow and
-// returns the open *http.Response for streaming. The caller is responsible for
-// reading and closing the response body.
-// The provided ctx is attached to the final successful HTTP request so that
-// cancelling ctx will immediately close the underlying connection and unblock
-// any pending body reads.
-func DoX402RequestStream(
-	ctx context.Context,
-	httpClient *http.Client,
-	buildReqFn func() (*http.Request, error),
-	signFn X402SignFunc,
-	providerTag string,
-	logger mcp.Logger,
+// DoX402RequestStream signs at most once. Only unsigned discovery can retry.
+// The caller owns the successful response body.
+func DoX402RequestStream(ctx context.Context, httpClient *http.Client,
+	buildReqFn func() (*http.Request, error), signFn X402SignFunc,
+	providerTag string, logger mcp.Logger,
 ) (*http.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -383,107 +341,105 @@ func DoX402RequestStream(
 	if err != nil {
 		return nil, err
 	}
-
-	// Non-402 initial response
 	if resp.StatusCode != http.StatusPaymentRequired {
+		resp.Header.Del("X-Nofx-Receipt-Verified")
 		return resp, nil
 	}
-
-	// 402 — extract payment header and sign
 	paymentHeader := resp.Header.Get("Payment-Required")
 	if paymentHeader == "" {
 		paymentHeader = resp.Header.Get("X-Payment-Required")
 	}
-	if paymentHeader == "" {
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("received 402 but no Payment-Required header found. Body: %s", string(body))
-	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-
+	if paymentHeader == "" {
+		return nil, fmt.Errorf("received 402 but no Payment-Required header")
+	}
 	paymentSig, err := signFn(paymentHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign x402 payment: %w", err)
 	}
-
-	// Retry loop for the payment-signed request.
-	// Attach ctx to these requests so the caller can cancel body reads.
-	var lastStatus int
-	var lastBody []byte
-	for attempt := 1; attempt <= X402MaxPaymentRetries; attempt++ {
-		req2, err := buildReqFn()
-		if err != nil {
-			return nil, fmt.Errorf("failed to build retry request: %w", err)
-		}
-		req2 = req2.WithContext(ctx)
-		req2.Header.Set("X-Payment", paymentSig)
-		req2.Header.Set("Payment-Signature", paymentSig)
-
-		resp2, err := httpClient.Do(req2)
-		if err != nil {
-			return nil, fmt.Errorf("paid request outcome unknown; refusing automatic replay: %w", err)
-		}
-
-		if resp2.StatusCode == http.StatusOK {
-			if txHash := resp2.Header.Get("Payment-Response"); txHash != "" {
-				logger.Infof("💰 [%s] Payment tx: %s", providerTag, txHash)
-			}
-			if attempt > 1 {
-				logger.Infof("✅ [%s] Payment retry succeeded on attempt %d", providerTag, attempt)
-			}
-			return resp2, nil // caller reads and closes body
-		}
-
-		// Non-200: read body for error handling / re-sign
-		body2, readErr := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
-		if readErr != nil {
-			return nil, fmt.Errorf("failed to read payment retry response: %w", readErr)
-		}
-
-		lastBody = body2
-		lastStatus = resp2.StatusCode
-
-		retryable := resp2.StatusCode == http.StatusPaymentRequired
-
-		if retryable && attempt < X402MaxPaymentRetries {
-			wait := X402RetryBaseWait * time.Duration(attempt)
-
-			if resp2.StatusCode == http.StatusPaymentRequired {
-				newHeader := resp2.Header.Get("Payment-Required")
-				if newHeader == "" {
-					newHeader = resp2.Header.Get("X-Payment-Required")
-				}
-				if newHeader != "" {
-					newSig, signErr := signFn(newHeader)
-					if signErr == nil {
-						paymentSig = newSig
-						logger.Warnf("⚠️  [%s] Payment expired (402), re-signed and retrying in %v (%d/%d)...",
-							providerTag, wait, attempt+1, X402MaxPaymentRetries)
-					} else {
-						logger.Warnf("⚠️  [%s] Payment expired (402), re-sign failed: %v, retrying in %v (%d/%d)...",
-							providerTag, signErr, wait, attempt+1, X402MaxPaymentRetries)
-					}
-				} else {
-					logger.Warnf("⚠️  [%s] Got 402 but no new Payment-Required header, retrying in %v (%d/%d)...",
-						providerTag, wait, attempt+1, X402MaxPaymentRetries)
-				}
-			} else {
-				logger.Warnf("⚠️  [%s] Server error (status %d), retrying in %v (%d/%d)...",
-					providerTag, resp2.StatusCode, wait, attempt+1, X402MaxPaymentRetries)
-			}
-
-			if err := x402Sleep(ctx, wait); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		break
+	req, err := buildReqFn()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build paid request: %w", err)
 	}
+	req = req.WithContext(ctx)
+	req.Header.Set("X-Payment", paymentSig)
+	req.Header.Set("Payment-Signature", paymentSig)
+	// A reused Go transport can silently replay GET on EOF even without an
+	// application retry. Send paid requests over a fresh, non-reused connection.
+	paidClient := singleUsePaidClient(httpClient)
+	paidResp, err := paidClient.Do(req)
+	if err != nil {
+		return nil, &PaymentOutcomeUnknownError{Cause: err}
+	}
+	if paidResp.StatusCode != http.StatusOK {
+		// Retain only allowlisted protocol metadata. Never include a remote error
+		// message or arbitrary response body: these may echo private inputs.
+		failureBody, _ := io.ReadAll(io.LimitReader(paidResp.Body, 16384))
+		paidResp.Body.Close()
+		if paidResp.StatusCode == http.StatusPaymentRequired && paidResp.Header.Get("X-Claw402-Payment-Stage") == "verification_rejected" && paidResp.Header.Get("Payment-Response") == "" && paidResp.Header.Get("X-Payment-Response") == "" {
+			return nil, &PaymentVerificationRejectedError{Status: paidResp.StatusCode}
+		}
+		return nil, &PaymentOutcomeUnknownError{Cause: fmt.Errorf("%s paid request returned status %d%s; reconcile the original payment before retrying", providerTag, paidResp.StatusCode, paidFailureMetadata(failureBody))}
+	}
+	// Remote headers cannot manufacture this internal verification flag.
+	paidResp.Header.Del("X-Nofx-Receipt-Verified")
+	if err := guardUsageResponse(paidResp, paymentSig); err != nil {
+		paidResp.Body.Close()
+		return nil, &PaymentOutcomeUnknownError{Cause: err}
+	}
+	return paidResp, nil
+}
 
-	return nil, fmt.Errorf("%s payment retry failed (status %d): %s", providerTag, lastStatus, string(lastBody))
+func paidFailureMetadata(body []byte) string {
+	var response struct {
+		Error   json.RawMessage `json:"error"`
+		Code    string          `json:"code"`
+		Message string          `json:"message"`
+	}
+	if json.Unmarshal(body, &response) != nil {
+		return ""
+	}
+	var nested struct {
+		Code    string `json:"code"`
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(response.Error, &nested) == nil {
+		if nested.Code != "" {
+			response.Code = nested.Code
+		} else if nested.Type != "" {
+			response.Code = nested.Type
+		}
+		if nested.Message != "" {
+			response.Message = nested.Message
+		}
+	}
+	message := strings.ToLower(response.Message)
+	if strings.Contains(message, "schema") {
+		if strings.Contains(message, "required") {
+			return " hint:schema_required"
+		}
+		if strings.Contains(message, "additionalproperties") {
+			return " hint:schema_additional_properties"
+		}
+		return " hint:function_schema"
+	}
+	if strings.Contains(message, "stream") && strings.Contains(message, "true") {
+		return " hint:stream_required"
+	}
+	if strings.Contains(message, "tools") && strings.Contains(message, "not supported") {
+		return " hint:tools_unsupported"
+	}
+	if strings.Contains(message, "context length") {
+		return " hint:context_length"
+	}
+	for _, code := range []string{"invalid_function_parameters", "unsupported_parameter", "invalid_request_error"} {
+		if response.Code == code {
+			return " validation:" + code
+		}
+	}
+	return ""
 }
 
 // x402StreamIdleTimeout is the idle timeout for SSE streaming through x402.
@@ -513,6 +469,7 @@ func X402CallStream(c *mcp.Client, signFn X402SignFunc, tag string, systemPrompt
 
 	c.LastCallSettledUSD = 0
 	c.LastCallUsage = nil
+	c.LastCallSettlementVerified = false
 	resp, err := DoX402RequestStream(ctx, c.HTTPClient, func() (*http.Request, error) {
 		return c.Hooks.BuildRequest(c.Hooks.BuildUrl(), jsonData)
 	}, signFn, tag, c.Log)
@@ -563,6 +520,7 @@ func X402CallStream(c *mcp.Client, signFn X402SignFunc, tag string, systemPrompt
 	tee := io.TeeReader(resp.Body, &bodyBuf)
 
 	text, usage, sseErr := mcp.ParseSSEStream(tee, onChunk, onLine)
+	captureSettledUSD(c, resp.Header)
 	mcp.ReportStreamUsage(usage, c.Provider, c.Model)
 	c.LastCallUsage = usage
 
@@ -621,6 +579,7 @@ func X402Call(c *mcp.Client, signFn X402SignFunc, tag string, systemPrompt, user
 
 	c.LastCallSettledUSD = 0
 	var respHeader http.Header
+	c.LastCallSettlementVerified = false
 	body, err := DoX402Request(context.Background(), c.HTTPClient, func() (*http.Request, error) {
 		return c.Hooks.BuildRequest(c.Hooks.BuildUrl(), jsonData)
 	}, signFn, tag, c.Log, &respHeader)
@@ -650,6 +609,7 @@ func X402CallFull(c *mcp.Client, signFn X402SignFunc, tag string, req *mcp.Reque
 
 	c.LastCallSettledUSD = 0
 	var respHeader http.Header
+	c.LastCallSettlementVerified = false
 	body, err := DoX402Request(x402ContextFromRequest(req), c.HTTPClient, func() (*http.Request, error) {
 		return c.Hooks.BuildRequest(c.Hooks.BuildUrl(), jsonData)
 	}, signFn, tag, c.Log, &respHeader)
@@ -694,7 +654,17 @@ func keccak256Bytes(data ...[]byte) []byte {
 }
 
 // SignX402Payment is the shared EIP-712 signing logic for x402 v2 on Base USDC.
+// PaymentQuoteLimitError is returned before signing or sending any payment.
+type PaymentQuoteLimitError struct{ QuoteMicroUSDC int64 }
+
+func (e *PaymentQuoteLimitError) Error() string {
+	return fmt.Sprintf("Model request quote %.6f USDC exceeds the per-call limit of %.2f USDC. No payment was submitted; shorten the request or choose another model.", float64(e.QuoteMicroUSDC)/1e6, float64(MaxX402PaymentMicroUSDC)/1e6)
+}
+
 func SignX402Payment(privateKey *ecdsa.PrivateKey, senderAddr string, opt X402AcceptOption, resource *X402Resource) (string, error) {
+	if privateKey == nil || !strings.EqualFold(senderAddr, crypto.PubkeyToAddress(privateKey.PublicKey).Hex()) {
+		return "", fmt.Errorf("invalid x402 signing wallet")
+	}
 	if opt.Network != BaseNetwork {
 		return "", fmt.Errorf("refusing x402 payment on unexpected network %q", opt.Network)
 	}
@@ -704,15 +674,18 @@ func SignX402Payment(privateKey *ecdsa.PrivateKey, senderAddr string, opt X402Ac
 	if opt.Scheme != "exact" && opt.Scheme != "upto" {
 		return "", fmt.Errorf("refusing unsupported x402 scheme %q", opt.Scheme)
 	}
-	if !common.IsHexAddress(opt.PayTo) {
+	if !permit2.ValidAddress(opt.PayTo) {
 		return "", fmt.Errorf("refusing invalid x402 recipient %q", opt.PayTo)
 	}
 	if opt.MaxTimeoutSeconds <= 0 || opt.MaxTimeoutSeconds > MaxX402PaymentTimeoutSeconds {
 		return "", fmt.Errorf("refusing x402 timeout %d", opt.MaxTimeoutSeconds)
 	}
 	amountBig, err := parseBigInt(opt.Amount)
-	if err != nil || amountBig.Sign() <= 0 || amountBig.Cmp(big.NewInt(MaxX402PaymentMicroUSDC)) > 0 {
+	if err != nil || amountBig.Sign() <= 0 || !amountBig.IsInt64() {
 		return "", fmt.Errorf("refusing x402 amount %q above the per-call safety policy", opt.Amount)
+	}
+	if amountBig.Cmp(big.NewInt(MaxX402PaymentMicroUSDC)) > 0 {
+		return "", &PaymentQuoteLimitError{QuoteMicroUSDC: amountBig.Int64()}
 	}
 	if opt.Extra != nil {
 		if name := opt.Extra["name"]; name != "" && name != "USD Coin" {
@@ -731,9 +704,32 @@ func SignX402Payment(privateKey *ecdsa.PrivateKey, senderAddr string, opt X402Ac
 	if maxTimeout == 0 {
 		maxTimeout = 300
 	}
-	// Echo the scheme offered by the server ("exact" or "upto") instead of
-	// hardcoding — under "upto" the signed amount is a cap and the gateway
-	// settles on actual usage.
+	// EIP-3009 is exact-only. Upto must use the distinct Permit2 domain,
+	// proxy and facilitator-bound witness; never relabel an exact signature.
+	if opt.Scheme == "upto" {
+		facilitator := opt.Extra["facilitatorAddress"]
+		if !permit2.ValidAddress(facilitator) {
+			return "", fmt.Errorf("upto requires a Permit2-capable facilitator; refusing legacy EIP-3009 authorization")
+		}
+		nonce := make([]byte, 32)
+		if _, err := rand.Read(nonce); err != nil {
+			return "", err
+		}
+		p, err := permit2.Sign(privateKey, BaseChainID, permit2.Authorization{
+			From: senderAddr, Permitted: permit2.Permissions{Token: asset, Amount: amount},
+			Spender: permit2.UptoProxy, Nonce: "0x" + hex.EncodeToString(nonce),
+			Deadline: strconv.FormatInt(time.Now().Unix()+int64(maxTimeout), 10),
+			Witness:  permit2.Witness{To: recipient, Facilitator: facilitator, ValidAfter: "0"},
+		})
+		if err != nil {
+			return "", err
+		}
+		b, err := json.Marshal(map[string]interface{}{"x402Version": 2, "accepted": opt, "resource": resource, "payload": p})
+		if err != nil {
+			return "", err
+		}
+		return base64.StdEncoding.EncodeToString(b), nil
+	}
 	scheme := opt.Scheme
 	if scheme == "" {
 		scheme = "exact"

@@ -68,16 +68,16 @@ export function WebCryptoEnvironmentCheck({
 
   const isCompact = variant === 'compact'
   const containerClass = isCompact
-    ? 'p-3 rounded border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter space-y-3'
-    : 'p-4 rounded border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter space-y-4'
+    ? 'p-3 rounded-sm border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter space-y-3'
+    : 'p-4 rounded-sm border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter space-y-4'
 
-  const descriptionColor = isCompact ? '#8A8478' : '#8A8478'
+  const descriptionColor = isCompact ? '#707e92' : '#707e92'
   const showInfo = status !== 'idle'
 
   const statusRendererMap: Record<WebCryptoCheckStatus, () => ReactNode> = {
     secure: () => (
-      <div className="flex items-start gap-2 text-[#2E8B57] text-xs">
-        <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+      <div className="flex items-start gap-2 text-nofx-success text-xs">
+        <ShieldCheck className="w-4 h-4 shrink-0" />
         <div>
           <div className="font-semibold">
             {t('environmentCheck.secureTitle', language)}
@@ -89,7 +89,7 @@ export function WebCryptoEnvironmentCheck({
     insecure: () => (
       <div className="text-xs" style={{ color: '#F59E0B' }}>
         <div className="flex items-start gap-2 mb-1">
-          <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+          <ShieldAlert className="w-4 h-4 shrink-0" />
           <div className="font-semibold">
             {t('environmentCheck.insecureTitle', language)}
           </div>
@@ -108,7 +108,7 @@ export function WebCryptoEnvironmentCheck({
     unsupported: () => (
       <div className="text-xs" style={{ color: '#D6433A' }}>
         <div className="flex items-start gap-2 mb-1">
-          <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+          <ShieldAlert className="w-4 h-4 shrink-0" />
           <div className="font-semibold">
             {t('environmentCheck.unsupportedTitle', language)}
           </div>
@@ -118,7 +118,7 @@ export function WebCryptoEnvironmentCheck({
     ),
     disabled: () => (
       <div className="flex items-start gap-2 text-nofx-text-muted text-xs">
-        <ShieldMinus className="w-4 h-4 flex-shrink-0" />
+        <ShieldMinus className="w-4 h-4 shrink-0" />
         <div>
           <div className="font-semibold">
             {t('environmentCheck.disabledTitle', language)}
@@ -130,7 +130,7 @@ export function WebCryptoEnvironmentCheck({
     checking: () => (
       <div
         className="flex items-center gap-2 text-xs"
-        style={{ color: '#1A1813' }}
+        style={{ color: '#192434' }}
       >
         <Loader2 className="w-4 h-4 animate-spin" />
         <span>{t('environmentCheck.checking', language)}</span>
@@ -150,7 +150,7 @@ export function WebCryptoEnvironmentCheck({
           </div>
         )}
       </div>
-      {showInfo && <div className="min-h-[1.5rem]">{renderStatus()}</div>}
+      {showInfo && <div className="min-h-6">{renderStatus()}</div>}
     </div>
   )
 }

@@ -162,7 +162,7 @@ NOFX is on a mission to become the **Universal AI Trading Operating System** for
   - [ ] Export functionality (CSV, JSON, PDF reports)
 
 - **Alert & Notification System**
-  - [ ] Multi-channel alerts (Email, Telegram, Discord, Webhook)
+  - [ ] Multi-channel alerts (Email, Discord, Webhook)
   - [ ] Configurable alert rules (profit threshold, loss limit, error detection)
   - [ ] Alert priority levels (critical, warning, info)
   - [ ] Alert history and acknowledgment tracking

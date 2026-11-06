@@ -104,7 +104,7 @@ export function ConfirmDialogProvider({
                 {state.title}
               </AlertDialogTitle>
             )}
-            <AlertDialogDescription className="text-[var(--text-primary)] text-base font-medium">
+            <AlertDialogDescription className="text-(--text-primary) text-base font-medium">
               {state.message}
             </AlertDialogDescription>
           </div>

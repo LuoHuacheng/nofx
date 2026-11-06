@@ -5,8 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/http"
-	"nofx/hook"
 	"nofx/logger"
 	"strings"
 	"sync"
@@ -16,12 +14,15 @@ import (
 	"github.com/adshao/go-binance/v2/futures"
 )
 
+const futuresBrokerID = "KzrpZaP9"
+const futuresBrokerPrefix = "x-" + futuresBrokerID
+
 // getBrOrderID generates unique order ID (for futures contracts)
 // Format: x-{BR_ID}{TIMESTAMP}{RANDOM}
 // Futures limit is 32 characters, use this limit consistently
 // Uses nanosecond timestamp + random number to ensure global uniqueness (collision probability < 10^-20)
 func getBrOrderID() string {
-	brID := "KzrpZaP9" // Futures br ID
+	brID := futuresBrokerID // Shared by automatic and approved planning orders
 
 	// Calculate available space: 32 - len("x-KzrpZaP9") = 32 - 11 = 21 characters
 	// Allocation: 13-digit timestamp + 8-digit random = 21 characters (perfect utilization)
@@ -66,32 +67,19 @@ type FuturesTrader struct {
 	cacheDuration time.Duration
 }
 
-// NewFuturesTrader creates futures trader. The optional final argument
-// routes all REST trading calls to the Binance Futures testnet
-// (https://testnet.binancefuture.com). It deliberately does NOT touch
-// the SDK package-level futures.UseTestnet flag — that is process-global
-// and would switch every user's client, not just this one.
+// NewFuturesTrader creates futures trader. The optional final argument routes
+// all REST trading calls to the Binance Futures testnet
+// (https://testnet.binancefuture.com). It deliberately does NOT touch the SDK
+// package-level futures.UseTestnet flag — that is process-global and would
+// switch every user's client, not just this one.
 func NewFuturesTrader(apiKey, secretKey string, userId string, testnet ...bool) *FuturesTrader {
-	client := futures.NewClient(apiKey, secretKey)
+	trader := NewExecutionTrader(apiKey, secretKey, userId)
 	if len(testnet) > 0 && testnet[0] {
-		client.SetApiEndpoint(futures.BaseApiTestnetUrl)
+		trader.client.SetApiEndpoint(futures.BaseApiTestnetUrl)
 		logger.Infof("🏦 Binance Futures trader using TESTNET (%s)", futures.BaseApiTestnetUrl)
 	}
-	// The SDK defaults to http.DefaultClient, which has no timeout — a hung
-	// connection would stall the trading loop indefinitely.
-	client.HTTPClient = &http.Client{Timeout: 30 * time.Second}
-
-	hookRes := hook.HookExec[hook.NewBinanceTraderResult](hook.NEW_BINANCE_TRADER, userId, client)
-	if hookRes != nil && hookRes.GetResult() != nil {
-		client = hookRes.GetResult()
-	}
-
-	// Sync time to avoid "Timestamp ahead" error
+	client := trader.client
 	syncBinanceServerTime(client)
-	trader := &FuturesTrader{
-		client:        client,
-		cacheDuration: 15 * time.Second, // 15-second cache
-	}
 
 	// Set dual-side position mode (Hedge Mode)
 	// This is required because the code uses PositionSide (LONG/SHORT)

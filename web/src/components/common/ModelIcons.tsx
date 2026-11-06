@@ -14,7 +14,7 @@ const MODEL_COLORS: Record<string, string> = {
   grok: '#000000',
   openai: '#10A37F',
   minimax: '#E45735',
-  claw402: '#7C3AED',
+  claw402: '#0B2459',
   zhipu: '#3859F3',
 }
 
@@ -51,7 +51,7 @@ export const getModelIcon = (modelType: string, props: IconProps = {}) => {
       iconPath = '/icons/minimax.svg'
       break
     case 'claw402':
-      iconPath = '/icons/claw402.png'
+      iconPath = '/icons/claw402-mark-color.svg'
       break
     default:
       return null
@@ -71,5 +71,5 @@ export const getModelIcon = (modelType: string, props: IconProps = {}) => {
 // Returns the model color (fallback for when there is no icon)
 export const getModelColor = (modelType: string): string => {
   const type = modelType.includes('_') ? modelType.split('_').pop() : modelType
-  return MODEL_COLORS[type || ''] || '#E0483B'
+  return MODEL_COLORS[type || ''] || '#295be8'
 }

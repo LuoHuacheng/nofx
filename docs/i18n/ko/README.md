@@ -1,14 +1,18 @@
-<p align="center"><strong><a href="https://vergex.trade">vergex.trade</a>가 지원합니다</strong></p>
-
 <p align="center">
-  <img src="../../assets/nofx-banner.svg" alt="NOFX — AI trading terminal" width="100%"/>
+  <img src="../../assets/nofx-banner.svg" alt="nofx — 거래로 이어지는 지능. 직접 운영하는 개방형 트레이딩 시스템." width="100%"/>
 </p>
 
 <p align="center">
-  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Stars"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/releases"><img src="https://img.shields.io/github/v/release/NoFxAiOS/nofx?style=flat-square&labelColor=1A1813&color=E0483B" alt="Release"></a>
-  <a href="https://github.com/NoFxAiOS/nofx/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-E0483B?style=flat-square&labelColor=1A1813" alt="License"></a>
-  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-E0483B?style=flat-square&labelColor=1A1813&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="#frontier">Frontier</a> ·
+  <a href="#run-locally">시작하기</a> ·
+  <a href="#documentation">문서</a> ·
+  <a href="#community">커뮤니티</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/NoFxAiOS/nofx/stargazers"><img src="https://img.shields.io/github/stars/NoFxAiOS/nofx?style=flat&labelColor=192434&color=295BE8" alt="GitHub stars"></a>
+  <a href="../../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-295BE8?style=flat&labelColor=192434" alt="License: AGPL-3.0"></a>
+  <a href="https://t.me/nofx_dev_community"><img src="https://img.shields.io/badge/telegram-community-295BE8?style=flat&labelColor=192434&logo=telegram&logoColor=white" alt="Telegram community"></a>
 </p>
 
 <p align="center">
@@ -21,214 +25,226 @@
   <a href="../vi/README.md">Tiếng Việt</a>
 </p>
 
-<br/>
+NOFX는 자신의 컴퓨터에서 실행하는 오픈 소스 트레이딩 시스템입니다. **Frontier**에서 AI와 거래 아이디어를 검토하고, 차트에서 진입 방식을 비교한 뒤 직접 주문을 승인하세요. **Autopilot**으로는 전략을 지속적으로 실행할 수 있습니다. 두 기능은 설정한 모델과 거래소 계정을 함께 사용합니다.
 
-NOFX는 언어 모델이 곧 전략이 되는 오픈소스 트레이딩 터미널입니다. 각 트레이더는 시장 구조 읽기, 판단, 실행, 근거 기록으로 이어지는 루프를 끊임없이 반복하고, Go 런타임은 모든 주문을 모델이 절대 우회할 수 없는 하드 리스크 한도 안에 묶어 둡니다.
+[Vergex](https://vergex.trade)와 함께 개발하며, AI와 데이터는 [Claw402](https://claw402.ai)를 통해 이용합니다.
 
-트레이더는 자유롭게 조합할 수 있습니다. 어떤 모델이든, 아홉 개 거래소 중 어디든, 어떤 전략이든 가능합니다. 여러 트레이더를 나란히 돌리면서 실현 수익률 기준의 공개 리더보드에서 비교해 보세요. 모든 것은 사용자의 머신에서 실행되며, 거래소 자격 증명은 저장 시 암호화되고 절대 외부로 나가지 않습니다.
+<a id="run-locally"></a>
+
+## 로컬에서 실행하기
+
+**한 줄 설치 — Linux / macOS**
+
+Compose가 포함된 Docker를 설치하고 실행한 뒤 다음 명령을 입력하세요.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
 ```
 
-터미널은 `http://127.0.0.1:3000`에서 열립니다.
+데스크톱 브라우저에서 **http://127.0.0.1:3000**을 여세요.
 
-**첫 실행**
+설치 프로그램이 누락된 환경 설정 키를 생성하고, 배포된 Docker 이미지로 NOFX를 실행합니다. Go나 Node.js를 별도로 설치할 필요가 없습니다. [처음 사용하기](#your-first-session)로 이동하거나 [소스 빌드 및 다른 설치 방법](#source-builds-and-other-options)을 확인하세요.
 
-1. 계정을 등록합니다 — 첫 번째 계정이 해당 인스턴스의 소유자가 됩니다.
-2. 가이드 런치를 따라갑니다. 자동으로 생성된 AI 수수료 지갑에 **$1+ USDC**(Base 네트워크)를 넣은 뒤, Hyperliquid를 연결하고 거래 자금으로 **$12+ USDC**를 입금합니다.
-3. **Autopilot**을 시작합니다. AI가 몇 분마다 시장을 스캔하며 스스로 거래하고, 모든 결정은 발생하는 즉시 대시보드에 표시됩니다. 언제든 클릭 한 번으로 중지할 수 있습니다.
+## Frontier
 
-<br/>
+차트와 대화를 통해, 주문하기 전에 내용을 확인할 수 있는 거래 계획을 만듭니다.
 
-## 거래소 등록
+1. **시장을 선택하세요.** 거래량 상위 종목, 거래소의 종목 코드 검색, Binance AI500 목록을 이용할 수 있습니다. 거래소가 지원하는 경우 주식 연계 종목도 표시됩니다.
+2. **진입 방식을 비교하세요.** 시장가, 지정가, 가중 분할 주문, TWAP 계획을 요청하세요. 진입가, 손절가, 목표가, 레버리지, 포지션 가치, 예상 증거금을 함께 볼 수 있습니다.
+3. **검토하고 주문하세요.** 계획을 선택하면 차트가 해당 계획에 초점을 맞춥니다. 현재 계정과 주문 내용을 확인한 뒤 실행을 명시적으로 승인하세요.
+4. **포지션을 관리하세요.** 차트 아래에서 실시간 포지션과 거래소 주문을 확인하고, 수동으로 진입하거나 포지션을 청산할 수 있습니다.
 
-NOFX는 무료 오픈소스입니다. 아래 파트너 링크로 계정을 개설하면 거래 수수료가 할인되며, 프로젝트의 지속적인 개발에도 보탬이 됩니다.
+Frontier는 **Binance USDT 무기한 선물, Hyperliquid, OKX, Bitget**을 지원합니다. 거래 계정을 연결하기 전에도 공개 시장 데이터를 볼 수 있지만, 주문하려면 해당 거래소 계정이 필요합니다. 계획 생성만으로 주문이 제출되지는 않습니다.
 
-| 거래소                                                                                                                      | 상태 | 수수료 할인 등록                                                          |
-| :---------------------------------------------------------------------------------------------------------------------------- | :----: | :---------------------------------------------------------------------------------- |
-| <img src="../../../web/public/exchange-icons/binance.jpg" width="20" height="20" style="vertical-align: middle;"/> **Binance**       |   ✅   | [등록](https://www.binance.com/join?ref=NOFXENG)                                |
-| <img src="../../../web/public/exchange-icons/bybit.png" width="20" height="20" style="vertical-align: middle;"/> **Bybit**           |   ✅   | [등록](https://partner.bybit.com/b/83856)                                       |
-| <img src="../../../web/public/exchange-icons/okx.svg" width="20" height="20" style="vertical-align: middle;"/> **OKX**               |   ✅   | [등록](https://www.okx.com/join/1865360)                                        |
-| <img src="../../../web/public/exchange-icons/hyperliquid.png" width="20" height="20" style="vertical-align: middle;"/> **Hyperliquid** |   ✅   | [등록](https://app.hyperliquid.xyz/join/AITRADING)                              |
-| <img src="../../../web/public/exchange-icons/bitget.svg" width="20" height="20" style="vertical-align: middle;"/> **Bitget**         |   ✅   | [등록](https://www.bitget.com/referral/register?from=referral&clacCode=c8a43172) |
-| <img src="../../../web/public/exchange-icons/kucoin.svg" width="20" height="20" style="vertical-align: middle;"/> **KuCoin**         |   ✅   | [등록](https://www.kucoin.com/r/broker/CXEV7XKK)                                |
-| <img src="../../../web/public/exchange-icons/gate.svg" width="20" height="20" style="vertical-align: middle;"/> **Gate**             |   ✅   | [등록](https://www.gatenode.xyz/share/VQBGUAxY)                                 |
-| <img src="../../../web/public/exchange-icons/aster.svg" width="20" height="20" style="vertical-align: middle;"/> **Aster**           |   ✅   | [등록](https://www.asterdex.com/en/referral/fdfc0e)                             |
-| <img src="../../../web/public/exchange-icons/lighter.png" width="20" height="20" style="vertical-align: middle;"/> **Lighter**       |   ✅   | [등록](https://app.lighter.xyz/?referral=68151432)                              |
-
-<br/>
-
-## 데모
-
-https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
-
-<br/>
-
-## 모델은 제안하고, 런타임이 결정합니다
-
-의사결정은 [Claw402.ai](https://claw402.ai) · Vergex 데이터 스택을 기반으로 합니다. 전체 시장의 실시간 방향 보드, 종목별 현재 방향과 방향 이력, 코스트·청산 히트맵, 실시간 순유입을 사용합니다. NOFX는 보드 방향을 따르며 나머지 데이터는 실행 맥락으로만 사용합니다.
-
-모든 주문은 모델의 손이 닿지 않는 곳에서 코드로 강제되는 한도를 통과해야 합니다.
-
-|                          |                                                                                    |
-| :----------------------- | :--------------------------------------------------------------------------------- |
-| 포지션 한도          | 최대 동시 포지션 수, 자본 대비 비율로 상한이 걸린 명목 금액, 심볼당 포지션 1개 |
-| 레버리지 클램프          | 모델이 무엇을 요청하든 관계없이 주문 크기 산정 시점에 적용되는 하드 캡     |
-| 거래소 측 보호 | 모든 진입 직후 거래소에 스탑로스와 테이크프로핏을 즉시 배치     |
-| 드로다운 자동 청산      | 고점 대비 이익을 과도하게 반납한 수익 포지션은 자동으로 청산            |
-| 거래 스로틀링         | 최소 보유 시간, 심볼별 재진입 쿨다운, 사이클당·시간당 진입 횟수 제한 |
-| 세이프 모드                | 모델 오류가 반복되면 모델이 복구될 때까지 신규 진입을 차단                 |
-| 런치 프리플라이트         | 트레이더 시작 전에 모델 접근성, 지갑 자금, 전략, 거래소 잔고를 검증 |
-
-각 결정은 모델의 전체 추론 과정과 함께 저장됩니다. 기록 없는 포지션은 존재하지 않습니다.
-
-<br/>
-
-## 터미널
-
-| | |
+| 진입 방식 | 동작 |
 | :--- | :--- |
-| **Autopilot** | 가이드 런치: 자금 입금, 연결, 예치, 시작 — 전 과정에 서버 측 프리플라이트 적용 |
-| **Strategy Studio** | 스타일 프리셋, 코인 유니버스, 지표, 레버리지, 진입 신뢰도, 커스텀 프롬프트 |
-| **경쟁** | 실현 수익률로 순위가 매겨지는 공개 리더보드, 각 항목마다 사용한 모델 표기 |
-| **대시보드** | 실시간 포지션, 주문, 통계, 그리고 모든 결정 뒤에 있는 추론 과정 |
+| **시장가** | 승인 후 체결 가능한 시장 가격으로 진입합니다. 표시된 진입가는 추정치입니다. |
+| **지정가** | 선택한 가격으로 진입 주문을 제출합니다. |
+| **분할 주문** | 여러 가격 구간에 정해진 비중으로 포지션을 나눕니다. |
+| **TWAP** | 승인된 가격 범위 내에서 정해진 횟수의 주문을 시간 간격에 따라 제출합니다. |
+
+지정가 주문과 예약된 분할 주문은 체결되지 않을 수 있습니다. [실행 및 복구 안내](../../features/trade-planning.md)를 참고하세요.
+
+## Autopilot
+
+전략을 지속적으로 실행하려면 모델, 거래소 계정, 전략을 지정해 트레이더를 설정하세요. Autopilot은 시장을 읽고 판단한 뒤 NOFX의 거래소 실행 모듈을 통해 주문합니다. Dashboard에서 포지션, 성과, 의사결정 기록을 확인할 수 있습니다.
+
+**Frontier는 거래마다 승인이 필요합니다. Autopilot은 실행 중 자동으로 주문할 수 있습니다.** Autopilot의 시작과 중지는 별도의 작업입니다.
+
+| 작업 공간 | 용도 |
+| :--- | :--- |
+| **Config** | 모델 연결, AI 지갑 충전, 거래 계정 관리. |
+| **Frontier** | 시장 탐색, 진입 계획 비교, 검토한 주문 실행. |
+| **Dashboard** | 실행 중인 트레이더, 포지션, 의사결정 기록 확인. |
+| **Strategy** | 종목 선택, 지표, 포지션 크기, 거래 지침 설정. |
+| **Leaderboard** | 공개된 트레이더 성과 비교. |
+
+<a id="your-first-session"></a>
+
+## 처음 사용하기
+
+1. **로컬 계정을 만드세요.** 방금 실행한 NOFX에 로그인합니다.
+2. **Config에서 AI를 설정하세요.** 모델을 선택합니다. Claw402를 사용한다면 AI 이용료 지갑을 생성하거나 가져오고, 개인 키를 보관한 뒤 해당 주소로 **Base 네트워크의 USDC**를 보내세요. 이 잔액은 모델 및 유료 데이터 요청에 사용됩니다.
+3. **거래 계정을 추가하세요.** 사용할 거래소를 연결하고 계정 자산과 사용 가능 잔액을 확인합니다. 거래 자금은 AI 이용료 지갑과 별도로 관리됩니다.
+4. **Frontier를 여세요.** 거래소, 계정, 종목을 선택합니다. 계획을 생성하고 차트에서 비교한 다음 준비가 되면 주문을 검토하세요.
+
+지속적인 자동 거래를 하려면 Autopilot을 별도로 설정하고 시작하세요.
+
+### 설치 프로그램으로 설치한 환경 업데이트
+
+실행 중인 Autopilot을 중지하고 진행 중인 Frontier 거래를 확인한 뒤, 설치 디렉터리(기본값 `~/nofx`)에서 다음 명령을 실행하세요.
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+업데이트할 때 `.env`와 `data/` 디렉터리를 보존하세요. 설정, 암호화에 필요한 자료, 저장된 애플리케이션 상태가 포함되어 있습니다.
+
+재시작 후 거래소에서 포지션과 주문을 확인하고, 확인이 필요한 실행 기록을 대조한 뒤 다음 거래를 진행하세요. 프로세스를 중지해도 포지션이 청산되지는 않습니다.
+
+<a id="source-builds-and-other-options"></a>
+
+## 소스 빌드 및 다른 설치 방법
 
 <details>
-<summary>스크린샷</summary>
+<summary>개발자: 소스에서 빌드하고 업데이트하기</summary>
 
-<br/>
+NOFX를 개발하거나 배포 이미지에 반영되기 전의 변경 사항을 테스트할 때 사용하세요. Git과 Compose가 포함된 Docker를 설치하고 Docker를 실행합니다.
 
-|                        개요                         |                          마켓 차트                           |
-| :-----------------------------------------------------: | :-------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-page.png" width="400"/> | <img src="../../../screenshots/dashboard-market-chart.png" width="400"/> |
+```bash
+git clone --recurse-submodules https://github.com/NoFxAiOS/nofx.git
+cd nofx
+./start.sh start --build
+```
 
-|                          거래 통계                           |                          포지션 기록                           |
-| :--------------------------------------------------------------: | :-----------------------------------------------------------------: |
-| <img src="../../../screenshots/dashboard-trading-stats.png" width="400"/> | <img src="../../../screenshots/dashboard-position-history.png" width="400"/> |
+시작 스크립트는 필요한 경우 `.env`를 만들고 누락된 암호화 키를 생성합니다. 서브모듈 없이 복제했다면 빌드 전에 `git submodule update --init web/vendor/charting`을 실행하세요. TradingView 차트 리소스에는 해당 라이선스가 적용됩니다. [차트 통합 안내](../../features/trade-planning.md#harness-chart-and-plugins)를 참고하세요.
 
-|                     전략 에디터                      |                      지표 설정                       |
-| :------------------------------------------------------: | :----------------------------------------------------------: |
-| <img src="../../../screenshots/strategy-studio.png" width="400"/> | <img src="../../../screenshots/strategy-indicators.png" width="400"/> |
+소스로 설치한 환경을 업데이트하려면 실행 중인 Autopilot을 중지하고 진행 중인 Frontier 거래를 확인한 뒤 다음을 실행합니다.
 
-|                     경쟁                           |                    설정                              |
-| :-------------------------------------------------------: | :-----------------------------------------------------------: |
-| <img src="../../../screenshots/competition-page.png" width="400"/> | <img src="../../../screenshots/config-ai-exchanges.png" width="400"/>  |
+```bash
+git pull --ff-only
+git submodule update --init web/vendor/charting
+./start.sh start --build
+```
 
 </details>
 
-<br/>
+<details>
+<summary>Windows, Railway 및 원격 배포</summary>
 
-## 모델
+**Windows**
 
-자신의 키로 사용할 수 있는 여덟 개 제공업체 — DeepSeek, OpenAI, Claude, Qwen, Gemini, Grok, Kimi, MiniMax — 커스텀 엔드포인트와 모델 이름도 지원합니다.
-
-키가 전혀 없어도 됩니다. [Claw402](https://claw402.ai)는 x402 프로토콜을 통해 모델 사용량을 호출 단위로 USDC로 정산합니다. Base 네트워크의 지갑 하나가 모든 API 키를 대신합니다.
-
-| 제공업체 | 이용 방법 |
-| :------- | :----- |
-| **Claw402** | [공식 할인이 적용된 종량제 AI 모델](https://claw402.ai) |
-
-## 시장
-
-아홉 개 거래소 전체에서 암호화폐 무기한 선물을 거래합니다. Hyperliquid에서는 같은 런타임이 암호화폐와 함께 토큰화된 미국 주식, 원자재, 지수, 외환, 프리 IPO 무기한 선물 — TSLA, NVDA, GOLD, SPX, EUR, OPENAI — 도 거래합니다.
-
-<br/>
-
-## 아키텍처
-
-```
-    ┌─────────────────────────────────────────────────┐
-    │                 Trading Terminal                 │
-    │        React · TypeScript · TradingView          │
-    │   Dashboard · Strategy Studio · Competition      │
-    ├─────────────────────────────────────────────────┤
-    │                  API Server (Go)                  │
-    │      JWT auth · encrypted credential store        │
-    ├──────────────┬──────────────┬───────────────────┤
-    │   Strategy    │  Autopilot   │   Trader Runtime  │
-    │    Engine     │  Preflight   │    Risk Engine    │
-    ├──────────────┴──────────────┴───────────────────┤
-    │                 AI Model Layer                    │
-    │  DeepSeek · OpenAI · Claude · Qwen · Gemini      │
-    │  Grok · Kimi · MiniMax · Claw402 (x402 USDC)     │
-    ├─────────────────────────────────────────────────┤
-    │              Exchange Connectivity                │
-    │ Binance · Bybit · OKX · Hyperliquid · Bitget     │
-    │ KuCoin · Gate · Aster · Lighter                  │
-    └─────────────────────────────────────────────────┘
-```
-
-<br/>
-
-## 설치
-
-**Linux / macOS**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-```
+Docker Desktop과 WSL2 같은 Bash 환경을 준비한 뒤 위의 한 줄 설치 명령을 실행하세요.
 
 **Railway**
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
+[![Railway에 배포](https://railway.com/button.svg)](https://railway.com/deploy/nofx?referralCode=nofx)
 
-**Docker**
+**원격 배포**
 
-```bash
-curl -O https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**Windows** — [Docker Desktop](https://www.docker.com/products/docker-desktop/)을 설치한 뒤:
-
-```powershell
-curl -o docker-compose.prod.yml https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod.yml
-docker compose -f docker-compose.prod.yml up -d
-```
-
-**소스에서 빌드** — Go 1.21+, Node.js 18+:
-
-```bash
-git clone https://github.com/NoFxAiOS/nofx.git && cd nofx
-go build -o nofx && ./nofx            # backend
-cd web && npm install && npm run dev  # frontend, in a second terminal
-```
-
-**업데이트** — 설치 스크립트를 다시 실행하면 제자리에서 업그레이드됩니다.
-
-<details>
-<summary>서버 배포</summary>
-
-<br/>
-
-**HTTP**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
-# http://YOUR_IP:3000
-```
-
-**Cloudflare를 통한 HTTPS**
-
-1. [Cloudflare](https://dash.cloudflare.com)에 도메인 추가(무료 플랜)
-2. A 레코드 → 서버 IP, Proxied 설정
-3. SSL/TLS → Flexible
-4. `.env`에 `TRANSPORT_ENCRYPTION=true` 설정
+설치 프로그램은 프로덕션 Compose 설정을 사용하며, 기본적으로 호스트의 모든 네트워크 인터페이스에 포트를 공개합니다. 소스의 Compose 설정은 프런트엔드와 API를 기본적으로 `127.0.0.1`에 바인딩합니다. 원격 인스턴스를 외부에 공개하기 전에 바인딩 주소와 인증 기능을 갖춘 HTTPS 프록시를 설정하세요.
 
 </details>
 
-<br/>
+<details>
+<summary>Docker 없이 개발하기</summary>
+
+[go.mod](../../../go.mod)에 지정된 Go 버전, 프런트엔드 Docker 빌드에서 사용하는 Node.js 24, TA-Lib을 사용합니다. 프런트엔드 시작 전에 차트 서브모듈을 초기화하고 [.env.example](../../../.env.example)을 참고해 환경을 설정하세요.
+
+```bash
+# 백엔드
+go build -o nofx .
+./nofx
+
+# 프런트엔드: 다른 터미널에서 실행
+cd web
+npm ci
+npm run dev
+```
+
+</details>
+
+## 모델과 데이터
+
+Frontier와 Autopilot은 NOFX에 설정된 모델을 함께 사용합니다. [Claw402](https://claw402.ai)는 여러 모델을 제공하며 Base 네트워크의 USDC로 사용량에 따라 정산합니다. Config에서 모델을 선택하고 작업 공간에서 전환할 수 있습니다.
+
+가격과 캔들 데이터는 선택한 거래소에서 가져옵니다. AI500과 지원되는 보유자 분석은 Claw402 유료 경로를 이용합니다. 데이터 제공 여부는 시장과 제공업체에 따라 달라집니다. Hyperliquid 보유자 데이터를 Binance, OKX, Bitget 데이터로 대신 사용하지 않습니다. 활동 스트림에서 데이터 조회와 계획 생성 진행 상황을 확인할 수 있습니다.
+
+AI 이용료, 유료 데이터 요금, 거래소 자금은 별개입니다. 거래가 실행되지 않아도 모델 요청에는 요금이 발생할 수 있습니다.
+
+## 거래소
+
+현재 Frontier에서 선택할 수 있는 거래소는 Binance, Hyperliquid, OKX, Bitget입니다. NOFX의 전체 실행 모듈에는 Bybit, Gate, KuCoin, Aster, Lighter도 포함됩니다. 이용 가능한 상품, 주문 유형, 계정 권한은 거래소마다 다릅니다.
+
+아래는 개발을 지원하는 파트너 가입 링크입니다. 수수료 혜택은 각 거래소가 정합니다.
+
+| 거래소 | 지원 | 파트너 링크 |
+| :--- | :---: | :--- |
+| <img src="../../../web/public/exchange-icons/binance.jpg" width="20" height="20" style="vertical-align: middle;"/> **Binance**       |   ✅   | [가입](https://www.binance.com/join?ref=NOFXENG)                                |
+| <img src="../../../web/public/exchange-icons/bybit.png" width="20" height="20" style="vertical-align: middle;"/> **Bybit**           |   ✅   | [가입](https://partner.bybit.com/b/83856)                                       |
+| <img src="../../../web/public/exchange-icons/okx.svg" width="20" height="20" style="vertical-align: middle;"/> **OKX**               |   ✅   | [가입](https://www.okx.com/join/1865360)                                        |
+| <img src="../../../web/public/exchange-icons/hyperliquid.png" width="20" height="20" style="vertical-align: middle;"/> **Hyperliquid** |   ✅   | [가입](https://app.hyperliquid.xyz/join/AITRADING)                              |
+| <img src="../../../web/public/exchange-icons/bitget.svg" width="20" height="20" style="vertical-align: middle;"/> **Bitget**         |   ✅   | [가입](https://www.bitget.com/referral/register?from=referral&clacCode=c8a43172) |
+| <img src="../../../web/public/exchange-icons/kucoin.svg" width="20" height="20" style="vertical-align: middle;"/> **KuCoin**         |   ✅   | [가입](https://www.kucoin.com/r/broker/CXEV7XKK)                                |
+| <img src="../../../web/public/exchange-icons/gate.svg" width="20" height="20" style="vertical-align: middle;"/> **Gate**             |   ✅   | [가입](https://www.gatenode.xyz/share/VQBGUAxY)                                 |
+| <img src="../../../web/public/exchange-icons/aster.svg" width="20" height="20" style="vertical-align: middle;"/> **Aster**           |   ✅   | [가입](https://www.asterdex.com/en/referral/fdfc0e)                             |
+| <img src="../../../web/public/exchange-icons/lighter.png" width="20" height="20" style="vertical-align: middle;"/> **Lighter**       |   ✅   | [가입](https://app.lighter.xyz/?referral=68151432)                              |
+
+## 주문 실행 방식
+
+계획과 전략의 결정은 기존 NOFX 거래소 어댑터를 통해 실행됩니다. 모델 프롬프트에는 지갑 개인 키나 거래소 인증 정보가 포함되지 않습니다.
+
+- **승인 전 검토.** Frontier는 계정, 주문 규모, 진입 및 청산 정보를 표시합니다. Autopilot은 설정한 전략과 실행 제한을 따릅니다.
+- **계정에 맞춘 주문 규모.** Frontier는 선택한 레버리지와 현재 사용 가능한 증거금을 기준으로 계산하며 실행 비용을 남겨 둡니다. 수량 정밀도, 호가 단위, 거래소 제한도 적용됩니다.
+- **거래소에 제출하는 보호 주문.** 체결을 확인하면 지원되는 손절 및 익절 주문을 제출합니다. 진입과 보호 주문은 하나의 원자적 작업이 아니므로 보호 주문에 실패하면 거래소에서 확인하세요.
+- **주문 상태 대조.** 제출 결과가 불확실하면 무조건 재전송하지 않고 거래소에서 확인합니다. 해결되지 않은 실행 상태가 있으면 추가 진입이 일시 중지될 수 있습니다.
+- **로컬 설정.** 거래소 인증 정보는 NOFX 서버에 암호화되어 저장됩니다. 설치 환경에는 서명에 필요한 자료도 있으므로 파일과 백업을 보호하세요.
+
+## 아키텍처
+
+```text
+데스크톱 브라우저
+  Frontier · Config · Dashboard · Strategy
+    → NOFX API
+      → Frontier: 계획, 검토, 승인
+      → Autopilot: 전략 반복 실행
+    → 공통 실행 모듈 → 거래소 어댑터 → 사용자 거래 계정
+
+모델과 유료 데이터: NOFX 공급자 클라이언트 · Claw402
+저장: 로컬 설정, 계획, 실행 기록
+```
+
+<details>
+<summary>이전 인터페이스 데모</summary>
+
+이 영상은 이전 버전의 인터페이스를 보여 줍니다. 현재는 탐색 메뉴와 디자인이 변경되었습니다.
+
+https://github.com/user-attachments/assets/3310f495-14c5-4586-a1cc-3d32e44aa505
+
+</details>
+
+## 브랜드 자료
+
+- [로고 심벌 — SVG](../../../web/public/icons/nofx-flow.svg)
+- [GitHub 아바타 — PNG, 512 × 512](../../../web/public/brand/nofx-avatar-512.png)
+- [GitHub 아바타 — SVG 원본](../../../web/public/brand/nofx-avatar.svg)
+- [README 배너 — SVG](../../assets/nofx-banner.svg)
+
+<a id="documentation"></a>
 
 ## 문서
 
-|                                                         |                                       |
-| :------------------------------------------------------ | :------------------------------------ |
-| [시작하기](../../getting-started/README.md)       | 배포 및 거래소 API 가이드    |
-| [아키텍처](../../architecture/README.md)             | 시스템 설계와 모듈 색인        |
-| [전략 모듈](../../architecture/STRATEGY_MODULE.md) | 코인 선정, AI 프롬프트, 실행 |
-| [FAQ](../../guides/faq.en.md)                            | 자주 묻는 질문                      |
-| [문제 해결](../../guides/TROUBLESHOOTING.md)       | 흔한 문제 진단하기              |
+| 가이드 | 내용 |
+| :--- | :--- |
+| [Frontier](../../features/trade-planning.md) | 계획, 실거래 실행, 데이터, 복구 |
+| [시작하기](../../getting-started/README.md) | 배포 및 거래소 API 안내 |
+| [아키텍처](../../architecture/README.md) | 시스템 설계와 모듈 목록 |
+| [전략 모듈](../../architecture/STRATEGY_MODULE.md) | 종목 선택, AI 프롬프트, 실행 |
+| [자주 묻는 질문](../../guides/faq.en.md) | 일반적인 질문과 답변 |
+| [문제 해결](../../guides/TROUBLESHOOTING.md) | 일반적인 문제 진단 |
+
+<a id="community"></a>
 
 ## 커뮤니티
 

@@ -31,16 +31,27 @@ export type WalletProvider = {
 }
 
 const announcedWalletNames = new WeakMap<WalletProvider, string>()
+const discoveredProviders = new Set<WalletProvider>()
+const signingProviders = new Map<string, WalletProvider>()
+
+export function rememberWalletProvider(
+  address: string,
+  provider: WalletProvider
+) {
+  signingProviders.set(normalizeAddress(address), provider)
+  discoveredProviders.add(provider)
+}
 
 export function getWalletProviders(): WalletProvider[] {
   const injected = window.ethereum
-  if (!injected) return []
   const providers =
-    Array.isArray(injected.providers) && injected.providers.length > 0
+    Array.isArray(injected?.providers) && injected.providers.length > 0
       ? injected.providers
-      : [injected]
+      : injected
+        ? [injected]
+        : []
   const seen = new Set<WalletProvider>()
-  return providers.filter((provider) => {
+  return [...providers, ...discoveredProviders].filter((provider) => {
     if (!provider || seen.has(provider)) return false
     seen.add(provider)
     return true
@@ -89,6 +100,7 @@ export function subscribeWalletProviders(
     }
 
     const walletProvider = provider as WalletProvider
+    discoveredProviders.add(walletProvider)
     const announcedName = detail?.info?.name
     if (typeof announcedName === 'string' && announcedName.trim()) {
       announcedWalletNames.set(walletProvider, announcedName.trim())
@@ -134,6 +146,8 @@ export async function getWalletProviderForAddress(
   const preferred = getPreferredWalletProvider()
   const expected = normalizeAddress(expectedAddress || '')
   if (!expected) return preferred
+  const selected = signingProviders.get(expected)
+  if (selected) return selected
 
   const providers = getWalletProviders()
   const ordered = preferred
@@ -158,7 +172,50 @@ export async function getWalletProviderForAddress(
     }
   }
 
-  return preferred
+  // Do not silently fall back to another extension for a known account.
+  // A single provider can still be locked and require explicit connection.
+  if (providers.length <= 1) return providers[0]
+  throw new Error(
+    'Reconnect this account using its wallet before continuing. Several wallets are installed, but none exposes the selected account.'
+  )
+}
+
+// Call only from an explicit user authorization action, never during polling.
+export async function ensureWalletSigningAccount(
+  provider: WalletProvider,
+  expectedAddress: string
+) {
+  let accounts: unknown
+  try {
+    accounts = await provider.request({ method: 'eth_accounts' })
+  } catch {
+    accounts = []
+  }
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    try {
+      accounts = await provider.request({ method: 'eth_requestAccounts' })
+    } catch (err) {
+      throw new Error(
+        `Wallet connection unavailable. Unlock your wallet, select the main account and reconnect this site. ${getWalletErrorMessage(err, '')}`
+      )
+    }
+  }
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    throw new Error(
+      'No signing account is connected. Unlock your wallet and connect the main account to this site before authorizing.'
+    )
+  }
+  if (
+    !accounts.some(
+      (a) =>
+        typeof a === 'string' &&
+        normalizeAddress(a) === normalizeAddress(expectedAddress)
+    )
+  ) {
+    throw new Error(
+      `Wrong wallet account. Select the main account ${shortAddress(expectedAddress)} before authorizing.`
+    )
+  }
 }
 
 export function getWalletErrorMessage(error: unknown, fallback: string) {

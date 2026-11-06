@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,13 +15,20 @@ import (
 	"nofx/store"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // Server HTTP API server
 type Server struct {
+	planningOnce              sync.Once
+	planningMu                sync.RWMutex
+	planningClosing           bool
+	planning                  *planningServices
+	planningError             error
 	router                    *gin.Engine
 	traderManager             *manager.TraderManager
 	store                     *store.Store
@@ -29,8 +37,7 @@ type Server struct {
 	exchangeAccountStateCache *ExchangeAccountStateCache
 	httpServer                *http.Server
 	port                      int
-	telegramReloadCh          chan<- struct{} // signal Telegram bot to reload
-	authLimiter               *ipRateLimiter  // per-IP throttle for login/register
+	authLimiter               *ipRateLimiter // per-IP throttle for login/register
 }
 
 // NewServer Creates API server
@@ -39,6 +46,9 @@ func NewServer(traderManager *manager.TraderManager, st *store.Store, cryptoServ
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.Default()
+	if err := configureTrustedProxies(router, os.Getenv("NOFX_TRUSTED_PROXIES")); err != nil {
+		panic(fmt.Sprintf("invalid NOFX_TRUSTED_PROXIES: %v", err))
+	}
 
 	// Enable CORS
 	router.Use(corsMiddleware())
@@ -152,6 +162,7 @@ func (s *Server) setupRoutes() {
 		// Wallet validation (no authentication required — used by frontend config form)
 		api.POST("/wallet/validate", s.handleWalletValidate)
 		api.POST("/wallet/generate", s.handleWalletGenerate)
+		api.GET("/wallet/balance", s.handleWalletBalance)
 		s.route(api, "GET", "/hyperliquid/connect-config", "Get NOFX Hyperliquid builder authorization config", s.handleHyperliquidConnectConfig)
 		s.route(api, "GET", "/hyperliquid/account", "Get Hyperliquid account balance summary", s.handleHyperliquidAccount)
 		s.route(api, "GET", "/hyperliquid/agent", "Get Hyperliquid approved agent wallets and authorization expiry", s.handleHyperliquidAgent)
@@ -201,6 +212,9 @@ func (s *Server) setupRoutes() {
 
 		// Routes requiring authentication
 		protected := api.Group("/", s.authMiddleware())
+		s.registerPlanning(api, protected)
+		// UI-only secret export: do not register in the AI route/tool catalog.
+		protected.POST("/wallet/export", s.handleWalletExport)
 		{
 			// Logout (add to blacklist)
 			s.route(protected, "POST", "/logout", "Logout (blacklist token)", s.handleLogout)
@@ -224,6 +238,8 @@ func (s *Server) setupRoutes() {
 				s.route(protected, "GET", "/vergex/direction-change/history", "Vergex bull/bear direction history via claw402 (?symbol=BTC&type=all&page=1&page_size=20)", s.handleVergexDirectionChangeHistory)
 				s.route(protected, "GET", "/vergex/cost-liquidation-heatmap", "Vergex cost/liquidation heatmap via claw402 (?marketType=hip3_perp&symbol=AAPL)", s.handleVergexCostLiquidationHeatmap)
 				s.route(protected, "GET", "/vergex/flow-markets", "Vergex net-flow market ranking via claw402 (?chain=mainnet&window=1h&limit=25)", s.handleVergexFlowMarkets)
+				s.route(protected, "GET", "/vergex/holder-winrate-map", "Vergex holder win-rate matrix via claw402 (?marketType=hip3_perp&symbol=NVDA&winMin=0&winMax=100&costMin=92&costMax=108)", s.handleVergexHolderWinrateMap)
+				s.route(protected, "GET", "/vergex/holder-winrate-map/holders", "Vergex win-rate matrix address drilldown via claw402 (?marketType=hip3_perp&symbol=NVDA&snapshotId=…&row=0&rowEnd=19&column=1&columnEnd=16&side=long&offset=0&limit=50)", s.handleVergexHolderWinrateHolders)
 			}
 
 			// AI trader management
@@ -321,21 +337,6 @@ Use this to enable/disable an exchange or update API credentials. The "id" field
 				`:id = EXACT id from GET /api/exchanges. Permanently removes the exchange account and disconnects any traders using it.`,
 				s.handleDeleteExchange)
 
-			// Telegram bot configuration
-			s.routeWithSchema(protected, "GET", "/telegram", "Get Telegram bot configuration",
-				`Returns: {"bot_token":"<string>","model_id":"<EXACT id of configured AI model>","chat_id":"<bound Telegram chat id, empty if not bound>"}`,
-				s.handleGetTelegramConfig)
-			s.routeWithSchema(protected, "POST", "/telegram", "Set Telegram bot token and AI model",
-				`Body: {"bot_token":"<string — Telegram BotFather token>","model_id":"<EXACT id from GET /api/models>"}
-Both fields are required. After saving, the user must send /start in Telegram to bind their account.`,
-				s.handleUpdateTelegramConfig)
-			s.routeWithSchema(protected, "POST", "/telegram/model", "Update Telegram bot AI model only",
-				`Body: {"model_id":"<EXACT id from GET /api/models>"}`,
-				s.handleUpdateTelegramModel)
-			s.routeWithSchema(protected, "DELETE", "/telegram/binding", "Unbind Telegram account",
-				`No body needed. Clears the Telegram chat_id binding so the user can re-bind with /start.`,
-				s.handleUnbindTelegram)
-
 			// Strategy management
 			s.routeWithSchema(protected, "GET", "/strategies", "List user's strategies",
 				`Returns: [{"id":"<EXACT id — use as strategy_id when creating/updating a trader>","name":"<string>","is_active":<bool>,"is_default":<bool>}]
@@ -376,7 +377,7 @@ StrategyConfig fields:
   indicators.rsi_periods: [7,14] default
   indicators.atr_periods: [14] default
   indicators.boll_periods: [20] default
-  indicators.nofxos_api_key: ALWAYS "cm_568c67eae410d912c54c"
+  indicators.nofxos_api_key: leave empty; paid data uses the configured Claw402 fee wallet
   indicators.enable_quant_data: ALWAYS true
   indicators.enable_quant_oi: ALWAYS true
   indicators.enable_quant_netflow: ALWAYS true
@@ -703,13 +704,6 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 		tokenString := tokenParts[1]
 
-		// Blacklist check
-		if auth.IsTokenBlacklisted(tokenString) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired, please login again"})
-			c.Abort()
-			return
-		}
-
 		// Validate JWT token
 		claims, err := auth.ValidateJWT(tokenString)
 		if err != nil {
@@ -719,17 +713,41 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// A valid signature alone is not an active session. Password changes,
+		// account deletion and logout must also take effect across restarts.
+		user, err := s.store.User().GetByID(claims.UserID)
+		if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && user.AuthVersion != claims.AuthVersion) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Session expired, please login again"})
+			return
+		}
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Unable to validate session"})
+			return
+		}
+		revoked, err := s.store.User().IsSessionRevoked(claims.UserID, claims.ID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Unable to validate session"})
+			return
+		}
+		if revoked {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Session expired, please login again"})
+			return
+		}
+
 		// Store user information in context
 		c.Set("user_id", claims.UserID)
-		c.Set("email", claims.Email)
+		c.Set("email", user.Email)
 		c.Next()
 	}
 }
 
 // Start Start server
 func (s *Server) Start() error {
-	addr := fmt.Sprintf(":%d", s.port)
-	logger.Infof("🌐 API server starting at http://localhost%s", addr)
+	addr, err := apiListenAddress(s.port)
+	if err != nil {
+		return err
+	}
+	logger.Infof("🌐 API server starting at http://%s", addr)
 	logger.Infof("📊 API Documentation:")
 	logger.Infof("  • GET  /api/health           - Health check")
 	logger.Infof("  • GET  /api/traders          - Public AI trader leaderboard top 50 (no auth required)")
@@ -762,17 +780,32 @@ func (s *Server) Start() error {
 	return s.httpServer.ListenAndServe()
 }
 
+// Native installs are local-only by default. Container images explicitly bind
+// their internal interface; Compose separately restricts the published ports.
+func apiListenAddress(port int) (string, error) {
+	host := strings.TrimSpace(os.Getenv("NOFX_API_BIND_ADDRESS"))
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if net.ParseIP(host) == nil {
+		return "", fmt.Errorf("NOFX_API_BIND_ADDRESS must be an IP address")
+	}
+	return net.JoinHostPort(host, fmt.Sprint(port)), nil
+}
+
 // Shutdown Gracefully shutdown server
 func (s *Server) Shutdown() error {
+	s.planningMu.Lock()
+	s.planningClosing = true
+	planning := s.planning
+	s.planningMu.Unlock()
+	if planning != nil {
+		planning.live.Shutdown()
+	}
 	if s.httpServer == nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return s.httpServer.Shutdown(ctx)
-}
-
-// SetTelegramReloadCh sets the channel used to signal the Telegram bot to reload
-func (s *Server) SetTelegramReloadCh(ch chan<- struct{}) {
-	s.telegramReloadCh = ch
 }

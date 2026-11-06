@@ -40,7 +40,7 @@ export default function BrandStats() {
               <div className="text-3xl md:text-6xl font-black text-white tracking-tighter mb-2 group-hover:scale-110 transition-transform duration-300 origin-left relative z-10">
                 {stat.value}
               </div>
-              <div className="text-[10px] md:text-base font-bold text-white/80 md:text-white/80 uppercase tracking-widest bg-white/10 md:bg-white/20 inline-block px-2 py-1 rounded relative z-10">
+              <div className="text-[10px] md:text-base font-bold text-white/80 md:text-white/80 uppercase tracking-widest bg-white/10 md:bg-white/20 inline-block px-2 py-1 rounded-sm relative z-10">
                 {stat.label}
               </div>
             </motion.div>

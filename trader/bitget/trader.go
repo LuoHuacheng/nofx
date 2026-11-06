@@ -2,6 +2,7 @@ package bitget
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"nofx/logger"
 	"strconv"
 	"strings"
@@ -34,9 +36,10 @@ const (
 
 // BitgetTrader Bitget futures trader
 type BitgetTrader struct {
-	apiKey     string
-	secretKey  string
-	passphrase string
+	accountOnly bool
+	apiKey      string
+	secretKey   string
+	passphrase  string
 
 	// HTTP client
 	httpClient *http.Client
@@ -136,6 +139,10 @@ func (t *BitgetTrader) sign(timestamp, method, requestPath, body string) string 
 
 // doRequest executes HTTP request
 func (t *BitgetTrader) doRequest(method, path string, body interface{}) ([]byte, error) {
+	return t.doRequestContext(context.Background(), method, path, body)
+}
+
+func (t *BitgetTrader) doRequestContext(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	var bodyBytes []byte
 	var err error
 	var queryString string
@@ -144,11 +151,11 @@ func (t *BitgetTrader) doRequest(method, path string, body interface{}) ([]byte,
 		if method == "GET" {
 			// For GET requests, body is query parameters
 			if params, ok := body.(map[string]interface{}); ok {
-				var parts []string
+				parts := url.Values{}
 				for k, v := range params {
-					parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+					parts.Set(k, fmt.Sprint(v))
 				}
-				queryString = strings.Join(parts, "&")
+				queryString = parts.Encode()
 				if queryString != "" {
 					path = path + "?" + queryString
 				}
@@ -171,7 +178,7 @@ func (t *BitgetTrader) doRequest(method, path string, body interface{}) ([]byte,
 	signature := t.sign(timestamp, method, path, signBody)
 
 	url := bitgetBaseURL + path
-	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -187,20 +194,26 @@ func (t *BitgetTrader) doRequest(method, path string, body interface{}) ([]byte,
 		req.Header.Set("X-CHANNEL-API-CODE", "7fygt")
 	}
 
-	resp, err := t.httpClient.Do(req)
+	// Signed credentials must never be forwarded to a redirect destination.
+	client := *t.httpClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var bitgetResp BitgetResponse
 	if err := json.Unmarshal(respBody, &bitgetResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w, body: %s", err, string(respBody))
+		return nil, fmt.Errorf("invalid Bitget response (HTTP %d): %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Bitget HTTP %d (code %s): %s", resp.StatusCode, bitgetResp.Code, bitgetResp.Msg)
 	}
 
 	if bitgetResp.Code != "00000" {
@@ -315,4 +328,24 @@ func genBitgetClientOid() string {
 	timestamp := time.Now().UnixNano() % 10000000000000
 	rand := time.Now().Nanosecond() % 100000
 	return fmt.Sprintf("nofx%d%05d", timestamp, rand)
+}
+
+// NewAccountTrader initializes a read-only account client without changing exchange settings.
+func NewAccountTrader(apiKey, secretKey, passphrase string) *BitgetTrader {
+	httpClient := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: http.DefaultTransport,
+	}
+
+	trader := &BitgetTrader{
+		apiKey:         apiKey,
+		secretKey:      secretKey,
+		passphrase:     passphrase,
+		httpClient:     httpClient,
+		cacheDuration:  15 * time.Second,
+		contractsCache: make(map[string]*BitgetContract),
+	}
+
+	trader.accountOnly = true
+	return trader
 }

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { DecisionRecord } from '../../types'
+import { formatRequestError } from '../../lib/requestErrors'
 
 /**
  * ExecutionLog renders the AI trading agent's real decisions and order results
@@ -9,8 +10,8 @@ import type { DecisionRecord } from '../../types'
  * indented sub-line per execution-log entry, color-coded by
  * success / throttle / risk.
  *
- * Real data only — renders verbatim what's present on each DecisionRecord;
- * verbose throttle strings are tidied for the gist but never invented.
+ * Real data only — renders each DecisionRecord without changing stored history;
+ * verbose throttle and transport errors are summarized without inventing results.
  */
 
 const C_AMBER = '#c8860b' // throttle / block warnings
@@ -23,12 +24,12 @@ function baseSymbol(raw: string): string {
     .replace(/(USDT|USDC|USD)$/, '')
 }
 
-// HH:MM:SS from an ISO timestamp; guards against invalid input.
+// Include the local date: old sessions must not appear to be today's trades.
 function fmtTime(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '--:--:--'
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 type Side = 'long' | 'short' | 'flat'
@@ -109,7 +110,7 @@ function cleanLog(raw: string): string {
     /^[A-Z0-9:_-]{2,12}\s+(open_long|open_short|close_long|close_short|partial_close|adjust_stop_loss)\s+/i,
     ''
   )
-  return s
+  return formatRequestError(s)
 }
 
 interface ExecutionLogProps {
@@ -219,6 +220,12 @@ function Cycle({ record }: CycleProps) {
   const actions = record.decisions ?? []
   const logs = record.execution_log ?? []
   const count = actions.length
+  const trades = actions.filter(
+    (a) => a.action !== 'hold' && a.action !== 'wait'
+  )
+  const failed = trades.filter((a) => !a.success).length
+  // Also correct the display of older records whose aggregate flag was wrong.
+  const fault = !record.success || failed > 0
 
   return (
     <div style={{ borderBottom: '1px solid var(--tm-hair)', padding: '5px 0' }}>
@@ -233,8 +240,8 @@ function Cycle({ record }: CycleProps) {
           padding: '2px 6px',
           marginBottom:
             actions.length || logs.length || record.error_message ? 4 : 0,
-          background: 'rgba(26,24,19,0.045)',
-          borderLeft: `2px solid ${record.success ? 'var(--tm-hair)' : 'var(--tm-dn)'}`,
+          background: 'rgba(25,36,52,0.045)',
+          borderLeft: `2px solid ${fault ? 'var(--tm-dn)' : 'var(--tm-hair)'}`,
           color: 'var(--tm-ink-2)',
         }}
       >
@@ -242,12 +249,19 @@ function Cycle({ record }: CycleProps) {
           CYCLE {record.cycle_number}
         </span>
         <span style={{ color: 'var(--tm-muted)' }}>·</span>
-        <span style={{ color: 'var(--tm-muted)' }}>{time}</span>
+        <span style={{ color: 'var(--tm-muted)' }} title="Local time">
+          {time}
+        </span>
         <span style={{ marginLeft: 'auto', color: 'var(--tm-muted)' }}>
           {count === 0 ? 'no action' : `${count} action${count > 1 ? 's' : ''}`}
         </span>
-        {!record.success ? (
-          <span style={{ color: 'var(--tm-dn)', fontWeight: 700 }}>FAULT</span>
+        {fault ? (
+          <span style={{ color: 'var(--tm-dn)', fontWeight: 700 }}>
+            FAULT
+            {failed > 0
+              ? ` · ${failed}/${trades.length} trades failed/blocked`
+              : ''}
+          </span>
         ) : null}
       </div>
 
@@ -357,7 +371,7 @@ function SubLine({ tone, text }: { tone: LogTone; text: string }) {
       <span style={{ flex: '0 0 auto', width: 10, textAlign: 'center' }}>
         {glyph}
       </span>
-      <span style={{ wordBreak: 'break-word' }}>{text}</span>
+      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{text}</span>
     </div>
   )
 }

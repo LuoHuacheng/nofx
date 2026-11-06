@@ -33,7 +33,11 @@ func newBacktestTestServer(t *testing.T) (*Server, *store.Store) {
 	}
 	if err := db.AutoMigrate(&store.BacktestRun{}, &store.BacktestEquityPoint{},
 		&store.BacktestTradeEvent{}, &store.BacktestDecisionLog{},
-		&store.Strategy{}, &store.AIModel{}); err != nil {
+		&store.Strategy{}, &store.AIModel{}, &store.User{}); err != nil {
+		t.Fatal(err)
+	}
+	// session validation also reads the revocation table
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS revoked_sessions (session_hash TEXT PRIMARY KEY, expires_at DATETIME NOT NULL)`).Error; err != nil {
 		t.Fatal(err)
 	}
 	st, err := store.NewFromGorm(db)
@@ -54,6 +58,10 @@ func newBacktestTestServer(t *testing.T) (*Server, *store.Store) {
 		t.Fatal(err)
 	}
 	if err := st.AIModel().Create("u1", "m1", "deepseek", "deepseek", true, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	// session validation resolves the token subject against the users table
+	if err := db.Create(&store.User{ID: "u1", Email: "test@nofx.local", PasswordHash: "x"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +118,9 @@ func authedReq(t *testing.T, method, path string, body any) *http.Request {
 		buf.Write(b)
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	token, err := auth.GenerateJWT("u1", "test@nofx.local")
+	// upstream GenerateJWT now refuses to sign without a configured secret
+	auth.SetJWTSecret("isolated-backtest-test-secret")
+	token, err := auth.GenerateJWT("u1", "test@nofx.local", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

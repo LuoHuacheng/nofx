@@ -195,7 +195,7 @@ export function TraderConfigModal({
   const selectedStrategy = strategies.find((s) => s.id === formData.strategy_id)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs p-4 overflow-y-auto">
       <div
         className="bg-nofx-bg-lighter border border-nofx-gold/20 rounded-xl shadow-2xl max-w-2xl w-full my-8"
         style={{ maxHeight: 'calc(100vh - 4rem)' }}
@@ -254,7 +254,7 @@ export function TraderConfigModal({
                   onChange={(e) =>
                     handleInputChange('trader_name', e.target.value)
                   }
-                  className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded text-nofx-text focus:border-nofx-gold focus:outline-none"
+                  className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded-sm text-nofx-text focus:border-nofx-gold focus:outline-hidden"
                   placeholder={t('enterTraderNamePlaceholder', language)}
                 />
               </div>
@@ -266,7 +266,7 @@ export function TraderConfigModal({
                   <NofxSelect
                     value={formData.ai_model}
                     onChange={(val) => handleInputChange('ai_model', val)}
-                    className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded text-nofx-text"
+                    className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded-sm text-nofx-text"
                     options={availableModels.map((model) => ({
                       value: model.id,
                       label: getShortName(model.name || model.id).toUpperCase(),
@@ -280,7 +280,7 @@ export function TraderConfigModal({
                   <NofxSelect
                     value={formData.exchange_id}
                     onChange={handleExchangeChange}
-                    className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded text-nofx-text"
+                    className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded-sm text-nofx-text"
                     options={availableExchanges.map((exchange) => ({
                       value: exchange.id,
                       label:
@@ -313,7 +313,7 @@ export function TraderConfigModal({
                           <UserPlus className="w-3.5 h-3.5" />
                           <span>{t('noExchangeAccount', language)}</span>
                           {regLink.hasReferral && (
-                            <span className="px-1.5 py-0.5 bg-nofx-gold/10 text-nofx-gold rounded text-[10px]">
+                            <span className="px-1.5 py-0.5 bg-nofx-gold/10 text-nofx-gold rounded-sm text-[10px]">
                               {t('discount', language)}
                             </span>
                           )}
@@ -341,7 +341,7 @@ export function TraderConfigModal({
                 <NofxSelect
                   value={formData.strategy_id}
                   onChange={(val) => handleInputChange('strategy_id', val)}
-                  className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded text-nofx-text"
+                  className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded-sm text-nofx-text"
                   options={[
                     { value: '', label: t('noStrategyManual', language) },
                     ...strategies.map((strategy) => ({
@@ -372,7 +372,7 @@ export function TraderConfigModal({
                       {t('strategyDetails', language)}
                     </span>
                     {selectedStrategy.is_active && (
-                      <span className="px-2 py-0.5 bg-nofx-success/20 text-nofx-success text-xs rounded">
+                      <span className="px-2 py-0.5 bg-nofx-success/20 text-nofx-success text-xs rounded-sm">
                         {t('activating', language)}
                       </span>
                     )}
@@ -495,7 +495,7 @@ export function TraderConfigModal({
                         : 3
                       handleInputChange('scan_interval_minutes', safeValue)
                     }}
-                    className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded text-nofx-text focus:border-nofx-gold focus:outline-none"
+                    className="w-full px-3 py-2 bg-nofx-bg-lighter border border-nofx-gold/20 rounded-sm text-nofx-text focus:border-nofx-gold focus:outline-hidden"
                     min="3"
                     max="60"
                     step="1"
@@ -544,7 +544,7 @@ export function TraderConfigModal({
                 </p>
               </div>
 
-              <div className="p-3 bg-nofx-bg-lighter border border-nofx-gold/20 rounded flex items-center gap-2">
+              <div className="p-3 bg-nofx-bg-lighter border border-nofx-gold/20 rounded-sm flex items-center gap-2">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="w-4 h-4 text-nofx-gold"

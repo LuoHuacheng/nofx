@@ -1,0 +1,3 @@
+[submodule "web/vendor/charting"]
+	path = web/vendor/charting
+	url = https://github.com/tinkle-community/charting_library.git

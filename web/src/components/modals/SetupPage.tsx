@@ -90,7 +90,7 @@ export function SetupPage() {
       {/* Grid */}
       <div className="absolute inset-0 pointer-events-none">
         <div
-          className="absolute inset-x-0 bottom-0 h-[60vh] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-40"
+          className="absolute inset-x-0 bottom-0 h-[60vh] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[40px_40px] mask-[radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-40"
           style={{
             transform:
               'perspective(500px) rotateX(60deg) translateY(80px) scale(2)',
@@ -110,10 +110,10 @@ export function SetupPage() {
         {/* Fake header bar */}
         <div className="h-14 border-b border-nofx-text/20 flex items-center px-6 gap-4">
           <div className="w-8 h-8 rounded-lg bg-nofx-text/40" />
-          <div className="h-3 w-20 rounded bg-nofx-text/30" />
-          <div className="h-3 w-16 rounded bg-nofx-text/20 ml-4" />
-          <div className="h-3 w-16 rounded bg-nofx-text/20" />
-          <div className="h-3 w-16 rounded bg-nofx-text/20" />
+          <div className="h-3 w-20 rounded-sm bg-nofx-text/30" />
+          <div className="h-3 w-16 rounded-sm bg-nofx-text/20 ml-4" />
+          <div className="h-3 w-16 rounded-sm bg-nofx-text/20" />
+          <div className="h-3 w-16 rounded-sm bg-nofx-text/20" />
         </div>
         {/* Fake content cards */}
         <div className="p-6 grid grid-cols-4 gap-4 mt-2">
@@ -141,7 +141,7 @@ export function SetupPage() {
               <div className="relative">
                 <div className="absolute -inset-4 bg-nofx-gold/20 rounded-full blur-2xl" />
                 <img
-                  src="/icons/nofx.svg"
+                  src="/icons/nofx-flow.svg"
                   alt="NOFX"
                   className="w-14 h-14 relative z-10"
                 />
@@ -154,7 +154,7 @@ export function SetupPage() {
           </div>
 
           {/* Card */}
-          <div className="bg-nofx-bg-lighter backdrop-blur-2xl border border-[rgba(26,24,19,0.14)] rounded-2xl p-8 shadow-lg">
+          <div className="bg-nofx-bg-lighter backdrop-blur-2xl border border-[rgba(25,36,52,0.14)] rounded-2xl p-8 shadow-lg">
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email */}
               <div>
@@ -165,7 +165,7 @@ export function SetupPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] rounded-xl px-4 py-3 text-sm text-nofx-text placeholder-nofx-text-muted focus:outline-none focus:border-nofx-gold/60 focus:ring-1 focus:ring-nofx-gold/30 transition-all"
+                  className="w-full bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] rounded-xl px-4 py-3 text-sm text-nofx-text placeholder-nofx-text-muted focus:outline-hidden focus:border-nofx-gold/60 focus:ring-1 focus:ring-nofx-gold/30 transition-all"
                   placeholder={l.emailPlaceholder}
                   required
                   autoFocus
@@ -182,7 +182,7 @@ export function SetupPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] rounded-xl px-4 py-3 pr-11 text-sm text-nofx-text placeholder-nofx-text-muted focus:outline-none focus:border-nofx-gold/60 focus:ring-1 focus:ring-nofx-gold/30 transition-all"
+                    className="w-full bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] rounded-xl px-4 py-3 pr-11 text-sm text-nofx-text placeholder-nofx-text-muted focus:outline-hidden focus:border-nofx-gold/60 focus:ring-1 focus:ring-nofx-gold/30 transition-all"
                     placeholder={l.passwordPlaceholder}
                     required
                   />

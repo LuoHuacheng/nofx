@@ -1,0 +1,27 @@
+name: Read pinned private chart library
+description: Fetch the exact chart submodule revision using a dedicated read-only deploy key.
+inputs:
+  ssh-key:
+    description: Read-only deploy key scoped only to the chart library repository.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Resolve pinned chart revision
+      id: revision
+      shell: bash
+      run: |
+        revision="$(git ls-tree HEAD web/vendor/charting | awk '{print $3}')"
+        if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::Missing pinned chart library revision"
+          exit 1
+        fi
+        echo "sha=$revision" >> "$GITHUB_OUTPUT"
+    - name: Checkout licensed chart source
+      uses: actions/checkout@v4
+      with:
+        repository: tinkle-community/charting_library
+        ref: ${{ steps.revision.outputs.sha }}
+        path: web/vendor/charting
+        ssh-key: ${{ inputs.ssh-key }}
+        persist-credentials: false

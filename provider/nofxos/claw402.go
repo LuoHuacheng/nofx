@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"net/http"
+	"net/url"
 	"nofx/mcp"
 	"nofx/mcp/payment"
 	"os"
@@ -39,7 +40,10 @@ func NewClaw402DataClient(claw402URL, privateKeyHex string, logger mcp.Logger) (
 		return nil, fmt.Errorf("claw402 wallet private key not set")
 	}
 
-	hexKey := strings.TrimPrefix(privateKeyHex, "0x")
+	hexKey := strings.TrimSpace(privateKeyHex)
+	if len(hexKey) >= 2 && strings.EqualFold(hexKey[:2], "0x") {
+		hexKey = hexKey[2:]
+	}
 	pk, err := crypto.HexToECDSA(hexKey)
 	if err != nil {
 		return nil, fmt.Errorf("invalid claw402 private key: %w", err)
@@ -75,19 +79,29 @@ func mapEndpoint(nofxosPath string) string {
 
 // DoRequest makes a GET request through claw402 with x402 payment.
 func (c *Claw402DataClient) DoRequest(endpoint string) ([]byte, error) {
+	return c.DoRequestContext(context.Background(), endpoint)
+}
+
+// DoRequestContext preserves request cancellation through payment and data reads.
+func (c *Claw402DataClient) DoRequestContext(ctx context.Context, endpoint string) ([]byte, error) {
 	claw402Path := mapEndpoint(endpoint)
-	// Strip auth= query params (claw402 uses x402 payment, not auth keys)
-	if idx := strings.Index(claw402Path, "?auth="); idx != -1 {
-		claw402Path = claw402Path[:idx]
+	// Remove only the legacy credential, never the filters following it.
+	parsed, err := url.Parse(claw402Path)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || !strings.HasPrefix(parsed.Path, "/api/v1/nofx/") {
+		return nil, fmt.Errorf("invalid Claw402 data endpoint")
 	}
-	if idx := strings.Index(claw402Path, "&auth="); idx != -1 {
-		claw402Path = claw402Path[:idx]
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Claw402 data query")
 	}
+	query.Del("auth")
+	parsed.RawQuery = query.Encode()
+	claw402Path = parsed.String()
 
 	fullURL := c.claw402URL + claw402Path
 
 	buildReq := func() (*http.Request, error) {
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fullURL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -98,7 +112,7 @@ func (c *Claw402DataClient) DoRequest(endpoint string) ([]byte, error) {
 	signFn := payment.MakeClaw402SignFunc(c.privateKey)
 
 	body, err := payment.DoX402Request(
-		context.Background(),
+		ctx,
 		c.httpClient,
 		buildReq,
 		signFn,

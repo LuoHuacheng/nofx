@@ -50,7 +50,7 @@ describe('RegistrationDisabled Component', () => {
       renderComponent()
       const logo = screen.getByAltText('NoFx Logo')
       expect(logo).toBeTruthy()
-      expect(logo.getAttribute('src')).toBe('/icons/nofx.svg')
+      expect(logo.getAttribute('src')).toBe('/icons/nofx-flow.svg')
     })
 
     it('should display registration closed heading', () => {
@@ -89,9 +89,9 @@ describe('RegistrationDisabled Component', () => {
     it('should have correct background color', () => {
       const { container } = renderComponent()
       const mainDiv = container.firstChild as HTMLElement
-      // Browser converts hex to rgb (cream paper theme)
+      // Browser converts hex to rgb (Flow canvas theme)
       expect(mainDiv.style.background).toMatch(
-        /rgb\(241,\s*236,\s*226\)|#F1ECE2/i
+        /rgb\(246,\s*248,\s*252\)|#F6F8FC/i
       )
     })
 
@@ -99,7 +99,7 @@ describe('RegistrationDisabled Component', () => {
       const { container } = renderComponent()
       const mainDiv = container.firstChild as HTMLElement
       // Browser converts hex to rgb (ink text)
-      expect(mainDiv.style.color).toMatch(/rgb\(26,\s*24,\s*19\)|#1A1813/i)
+      expect(mainDiv.style.color).toMatch(/rgb\(25,\s*36,\s*52\)|#192434/i)
     })
 
     it('should have centered layout', () => {

@@ -63,7 +63,9 @@ export function formatPrice(
     // Pad with zeros if there are fewer than minDecimals decimals
     const dotIndex = formatted.indexOf('.')
     if (dotIndex === -1) {
-      formatted += '.' + '0'.repeat(minDecimals)
+      if (minDecimals > 0) {
+        formatted += '.' + '0'.repeat(minDecimals)
+      }
     } else {
       const currentDecimals = formatted.length - dotIndex - 1
       if (currentDecimals < minDecimals) {
@@ -114,7 +116,9 @@ export function formatQuantity(
     formatted = formatted.replace(/\.?0+$/, '')
     const dotIndex = formatted.indexOf('.')
     if (dotIndex === -1) {
-      formatted += '.' + '0'.repeat(minDecimals)
+      if (minDecimals > 0) {
+        formatted += '.' + '0'.repeat(minDecimals)
+      }
     } else {
       const currentDecimals = formatted.length - dotIndex - 1
       if (currentDecimals < minDecimals) {
@@ -138,7 +142,7 @@ export function formatPercent(
   decimals = 2
 ): string {
   if (value === undefined || value === null || isNaN(value)) {
-    return '0.00'
+    return (0).toFixed(decimals)
   }
   return value.toFixed(decimals)
 }

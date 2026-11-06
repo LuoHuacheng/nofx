@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,15 +79,14 @@ type Client struct {
 	Log        Logger       // Exported for sub-packages
 	Cfg        *Config      // Exported for sub-packages
 
-	// LastCallSettledUSD is the actually-settled cost (USD) of the most
-	// recent call, reported by x402 upto gateways via response header.
-	// Zero when the last call carried no settlement information.
-	LastCallSettledUSD float64
+	// LastCallSettledUSD is the independently verified cost of the last upto
+	// call, from a JSON receipt or SSE settlement event. The separate verified
+	// flag distinguishes a confirmed zero charge from missing payment evidence.
+	LastCallSettledUSD         float64
+	LastCallSettlementVerified bool
 
 	// LastCallUsage is the token usage of the most recent streamed call.
-	// On SSE responses the gateway cannot deliver the settlement header
-	// (headers are flushed before usage is known), so callers derive the
-	// actual cost from this instead. Nil when the stream carried no usage.
+	// Token usage is informational; it is not proof of payment or a refund.
 	LastCallUsage *TokenUsage
 
 	// Hooks are used to implement dynamic dispatch (polymorphism)
@@ -225,12 +225,13 @@ func (client *Client) SetAuthHeader(reqHeader http.Header) {
 }
 
 // modelSupportsCustomTemperature reports whether the target model accepts a
-// non-default temperature. OpenAI reasoning models (gpt-5 family, o-series)
+// non-default temperature. OpenAI reasoning models (gpt-5/6 families, o-series)
 // reject any value other than the default and fail the whole request with
 // "unsupported_value", so temperature must be omitted for them.
 func modelSupportsCustomTemperature(model string) bool {
 	m := strings.ToLower(model)
 	return !strings.HasPrefix(m, "gpt-5") &&
+		!strings.HasPrefix(m, "gpt-6") &&
 		!strings.HasPrefix(m, "o1") &&
 		!strings.HasPrefix(m, "o3") &&
 		!strings.HasPrefix(m, "o4")
@@ -461,6 +462,13 @@ func (c *Client) BaseClient() *Client { return c }
 
 // IsRetryableError determines if error is retryable (network errors, timeouts, etc.)
 func (client *Client) IsRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var policy interface{ Retryable() bool }
+	if errors.As(err, &policy) && !policy.Retryable() {
+		return false
+	}
 	errStr := err.Error()
 	// Network errors, timeouts, EOF, etc. can be retried
 	for _, retryable := range client.Cfg.RetryableErrors {

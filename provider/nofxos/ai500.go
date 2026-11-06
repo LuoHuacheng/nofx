@@ -33,6 +33,14 @@ type AI500Response struct {
 // GetAI500List retrieves AI500 coin list with retry mechanism
 func (c *Client) GetAI500List() ([]CoinData, error) {
 	maxRetries := 3
+	// The payment layer retries unsigned discovery only. Never wrap a paid
+	// request (including a successful charge followed by malformed JSON) in
+	// another retry loop that creates a fresh spending authorization.
+	c.mu.RLock()
+	if c.claw402 != nil || c.gatewayErr != nil {
+		maxRetries = 1
+	}
+	c.mu.RUnlock()
 	var lastErr error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {

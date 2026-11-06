@@ -1,0 +1,43 @@
+name: One-time planning checks
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['planning/**', 'api/*planning*', 'trader/**', 'web/**', 'go.*', '.github/workflows/planning.yml', '.github/actions/charting/**']
+  push:
+    branches: [main, dev]
+    paths: ['planning/**', 'api/*planning*', 'trader/**', 'web/**', 'go.*', '.github/workflows/planning.yml', '.github/actions/charting/**']
+permissions:
+  contents: read
+jobs:
+  planning:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch private chart library
+        uses: ./.github/actions/charting
+        with:
+          ssh-key: ${{ secrets.CHARTING_LIBRARY_SSH_KEY }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Exact math, harness, persistence and mocked native execution
+        run: go test -race ./planning/... ./api ./manager ./trader ./trader/binance ./trader/hyperliquid
+      - name: Scan reachable Go vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm audit --audit-level=low
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm test -- src/pages/TradingPlanningPage.test.tsx src/components/planning src/lib/frontierAccount.test.ts src/lib/planning.stream.test.ts src/lib/planningPresentation.test.ts src/lib/requestErrors.test.ts
+        working-directory: web

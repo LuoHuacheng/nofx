@@ -46,6 +46,17 @@ func (at *AutoTrader) runCycle() error {
 		ExecutionLog: []string{},
 		Success:      true,
 	}
+	// Check permission before paid data/model calls. Reading account balances
+	// does not prove that the configured signing agent can execute trades.
+	if err := at.checkTradingAuthorization(); err != nil {
+		record.Success = false
+		record.ErrorMessage = "Trading blocked: " + err.Error()
+		record.ExecutionLog = append(record.ExecutionLog, record.ErrorMessage)
+		if saveErr := at.saveDecision(record); saveErr != nil {
+			at.logWarnf("Failed to save blocked cycle: %v", saveErr)
+		}
+		return fmt.Errorf("trading authorization check failed: %w", err)
+	}
 
 	// 1. Check if trading needs to be stopped
 	if time.Now().Before(at.stopUntil) {
@@ -147,7 +158,7 @@ func (at *AutoTrader) runCycle() error {
 			if actual, has := r.LastCallCostUSD(); has {
 				chargeErr = at.store.AICharge().RecordWithCost(at.id, chargeModel, at.config.AIModel, actual)
 			} else {
-				chargeErr = at.store.AICharge().Record(at.id, chargeModel, at.config.AIModel)
+				at.logWarnf("AI payment outcome unverified; skipping estimated charge entry. Reconcile the original payment.")
 			}
 		} else {
 			chargeErr = at.store.AICharge().Record(at.id, chargeModel, at.config.AIModel)

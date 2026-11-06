@@ -10,6 +10,9 @@ import (
 
 // GetPositions gets all positions
 func (t *OKXTrader) GetPositions() ([]map[string]interface{}, error) {
+	if t.accountOnly {
+		return t.frontierPositions()
+	}
 	// Check cache
 	t.positionsCacheMutex.RLock()
 	if t.cachedPositions != nil && time.Since(t.positionsCacheTime) < t.cacheDuration {

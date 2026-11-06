@@ -1,6 +1,7 @@
 package nofxos
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -9,9 +10,10 @@ import (
 )
 
 // ResolveClient returns a nofxos data client, routed through the claw402
-// x402 payment gateway when a wallet key is available. Resolution order:
+// x402 payment gateway. Resolution order:
 // the explicit walletKey argument, then the CLAW402_WALLET_KEY environment
-// variable, then the direct nofxos.ai client with the default auth key.
+// variable. Missing/invalid keys fail closed; they must not bypass payment.
+// Legacy constructors cannot enable a direct-origin fallback.
 func ResolveClient(walletKey string) *Client {
 	walletKey = strings.TrimSpace(walletKey)
 	if !config.IsClaw402DataEnabled() {
@@ -23,13 +25,15 @@ func ResolveClient(walletKey string) *Client {
 	}
 	client := NewClient(DefaultBaseURL, DefaultAuthKey)
 	if walletKey == "" {
+		client.gatewayErr = fmt.Errorf("Claw402 fee wallet is not configured; paid data access is unavailable")
 		return client
 	}
 
 	claw402URL := strings.TrimSpace(os.Getenv("CLAW402_URL"))
 	claw402Client, err := NewClaw402DataClient(claw402URL, walletKey, &logger.MCPLogger{})
 	if err != nil {
-		logger.Warnf("⚠️ Failed to init claw402 data client: %v (using direct nofxos.ai)", err)
+		client.gatewayErr = fmt.Errorf("cannot initialize paid Claw402 data client: %w", err)
+		logger.Warnf("⚠️ Claw402 data access disabled: %v", err)
 		return client
 	}
 	client.SetClaw402(claw402Client)

@@ -1,0 +1,2831 @@
+.planning-page {
+  background: var(--background);
+  color: var(--text-primary);
+  min-height: calc(100vh - 80px);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color-scheme: light;
+  max-width: 1920px;
+  margin: 0 auto;
+  padding: 82px 24px 32px;
+  --line: #e3e0d7;
+  --panel-bg: #fffefa;
+  --panel-bg-hover: #f5f3ed;
+  --accent: var(--nofx-accent);
+}
+.planning-page button,
+.planning-page input,
+.planning-page select,
+.planning-page textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.planning-page button {
+  cursor: pointer;
+}
+.planning-page button:hover {
+  border-color: var(--accent);
+}
+.planning-page button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.planning-page a {
+  color: var(--accent);
+}
+.planning-page small {
+  color: var(--text-secondary);
+}
+.planning-page p {
+  line-height: 1.7;
+}
+.planning-page select {
+  max-width: 270px;
+}
+.planning-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.planning-page textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+.planning-page summary {
+  cursor: pointer;
+  padding: 10px 0;
+  color: var(--text-secondary);
+}
+.planning-page table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.planning-page th,
+.planning-page td {
+  text-align: left;
+  padding: 7px;
+  border-bottom: 1px solid var(--line);
+}
+.planning-page td {
+  font-variant-numeric: tabular-nums;
+}
+.planning-page pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 250px;
+  overflow: auto;
+}
+.planning-page code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.planning-page .planning-primary {
+  background: var(--accent);
+  color: #fffaf5;
+  font-weight: 700;
+}
+.planning-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.planning-toolbar form {
+  display: flex;
+  gap: 6px;
+}
+.planning-toolbar input {
+  width: 130px;
+}
+.planning-toolbar > a {
+  margin-left: auto;
+}
+.planning-live {
+  font-size: 11px;
+  color: var(--binance-red);
+  border: 1px solid var(--binance-red-border);
+  border-radius: 5px;
+  padding: 5px 8px;
+}
+.planning-error {
+  background: var(--binance-red-bg);
+  color: var(--binance-red);
+  border: 1px solid var(--binance-red-border);
+  padding: 12px;
+  margin: 10px 0;
+  display: flex;
+  justify-content: space-between;
+}
+.planning-empty {
+  padding: 20px;
+  background: var(--panel-bg);
+  margin: 12px 0;
+}
+.planning-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  margin-top: 14px;
+}
+.planning-chart-pane {
+  min-width: 0;
+}
+.planning-market {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.planning-market > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.planning-market strong {
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+}
+.planning-chart {
+  height: clamp(380px, 54vh, 640px);
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+}
+.planning-legend {
+  padding: 8px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.planning-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.planning-legend .entry {
+  background: #9b6a14;
+}
+.planning-legend .stop {
+  background: var(--binance-red);
+}
+.planning-legend .target {
+  background: var(--binance-green);
+}
+.planning-legend button {
+  margin-left: auto;
+}
+.stop-text {
+  color: var(--binance-red);
+}
+.target-text {
+  color: var(--binance-green);
+}
+.planning-selected,
+.planning-tools,
+.planning-candidates {
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.planning-price-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.planning-price-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.planning-price-row strong {
+  font-size: 19px;
+  color: #9b6a14;
+}
+.planning-price-row .stop-text {
+  color: var(--binance-red);
+}
+.planning-price-row .target-text {
+  color: var(--binance-green);
+}
+.planning-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.planning-card-list {
+  display: flex;
+  overflow-x: auto;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+.planning-page .planning-card {
+  min-width: 220px;
+  max-width: 260px;
+  flex: 0 0 230px;
+  text-align: left;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.planning-page .planning-card.selected {
+  border-color: var(--accent);
+  background: var(--panel-bg-hover);
+}
+.planning-card > strong {
+  font-size: 14px;
+}
+.planning-card > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+.planning-card > div > span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+.planning-card b {
+  font-size: 16px;
+}
+.planning-limit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.planning-assistant {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 80px;
+  height: calc(100dvh - 206px);
+  min-height: 440px;
+  overflow: hidden;
+}
+.planning-assistant-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.planning-assistant > select {
+  max-width: none;
+  width: 100%;
+}
+.planning-messages {
+  flex: 1;
+  min-height: 150px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.planning-message {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 8px;
+}
+.planning-message.user {
+  background: var(--panel-bg-hover);
+  margin-left: 25px;
+}
+.planning-message.assistant {
+  background: transparent;
+}
+.planning-message.error {
+  color: var(--binance-red);
+}
+.planning-process {
+  max-height: 150px;
+  overflow: auto;
+  font-size: 11px;
+}
+.planning-process summary {
+  padding: 3px 0;
+}
+.planning-process p {
+  margin: 4px 0;
+}
+.planning-composer textarea {
+  width: 100%;
+  min-height: 90px;
+}
+.planning-composer > div {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.planning-review {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.planning-review p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.planning-review small {
+  font-size: 10px;
+}
+.planning-history {
+  max-height: 150px;
+  overflow: auto;
+}
+.planning-history button {
+  display: block;
+  width: 100%;
+  margin: 5px 0;
+  text-align: left;
+}
+.planning-run {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: auto;
+}
+.planning-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #000b;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.planning-modal {
+  width: min(650px, 95vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 18px 70px #0009;
+}
+.planning-modal h2 {
+  font-size: 22px;
+}
+.planning-modal > div:last-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.planning-modal table {
+  max-width: 100%;
+}
+@media (max-width: 1100px) {
+  .planning-workspace {
+    grid-template-columns: minmax(0, 1fr) 310px;
+  }
+  .planning-limit-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 850px) {
+  .planning-workspace {
+    grid-template-columns: 1fr;
+  }
+  .planning-assistant {
+    position: static;
+    height: 700px;
+    min-height: 0;
+  }
+  .planning-chart {
+    height: 420px;
+  }
+  .planning-toolbar > a {
+    margin-left: 0;
+  }
+  .planning-market {
+    flex-wrap: wrap;
+  }
+  .planning-page {
+    padding: 10px;
+  }
+  .planning-modal {
+    padding: 16px;
+  }
+}
+
+.planning-plugin-switches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.planning-plugin-switches > div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.planning-plugin-switches label {
+  flex-direction: row;
+  align-items: center;
+}
+.planning-plugin-switches input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.planning-plugin-switches button {
+  margin-top: auto;
+}
+.planning-plugin-metrics {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 16px 0;
+}
+.planning-plugin-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.planning-data-panel svg {
+  width: 100%;
+  height: auto;
+  max-height: 350px;
+}
+.planning-plugin-heat-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.planning-plugin-heat-pair small {
+  display: block;
+  margin-top: 8px;
+}
+.planning-plugin-heat-pair rect:focus {
+  outline: 1px solid white;
+}
+.planning-plugin-hover {
+  padding: 12px;
+  background: var(--panel-bg-hover);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.planning-plugin-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.planning-plugin-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.planning-plugin-legend i {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+}
+.planning-plugin-table {
+  max-height: 320px;
+  overflow: auto;
+}
+.planning-plugin-table td {
+  white-space: nowrap;
+}
+@media (max-width: 1000px) {
+  .planning-plugin-heat-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Use the same paper, ink and vermilion system as the NOFX shell. */
+.planning-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.planning-heading h1 {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.04em;
+}
+.planning-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.planning-heading > a {
+  font-size: 12px;
+  padding: 8px 0;
+  white-space: nowrap;
+}
+.planning-toolbar {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  gap: 8px;
+}
+.planning-toolbar .planning-live {
+  margin-left: auto;
+  background: transparent;
+  color: #7a6553;
+  border-color: #e3ddd0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.planning-chart-pane {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.planning-market {
+  padding: 16px 18px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.planning-market strong {
+  font-size: 26px;
+  letter-spacing: -0.05em;
+}
+.planning-market b {
+  font-size: 13px;
+}
+.planning-chart {
+  border: none;
+  border-bottom: 1px solid var(--line);
+}
+.planning-legend {
+  padding: 10px 18px;
+}
+.planning-selected,
+.planning-tools,
+.planning-candidates {
+  padding: 16px 18px;
+}
+.planning-selected {
+  background: var(--panel-bg-hover);
+  border-left: 3px solid var(--nofx-accent);
+}
+.planning-price-row {
+  gap: 32px;
+}
+.planning-price-row strong,
+.planning-card b {
+  font-variant-numeric: tabular-nums;
+}
+.planning-page button {
+  transition:
+    background-color 0.12s,
+    border-color 0.12s;
+}
+.planning-page button:hover:not(:disabled) {
+  background: var(--panel-bg-hover);
+}
+.planning-page .planning-primary {
+  border-color: var(--nofx-accent);
+  background: var(--nofx-accent);
+  color: #fffaf5;
+}
+.planning-page .planning-primary:hover:not(:disabled) {
+  background: #c73d32;
+}
+.planning-page button:focus-visible,
+.planning-page input:focus-visible,
+.planning-page select:focus-visible,
+.planning-page textarea:focus-visible {
+  outline: 2px solid var(--nofx-accent);
+  outline-offset: 2px;
+}
+.planning-page .planning-card {
+  background: var(--panel-bg);
+  border-radius: 10px;
+  gap: 12px;
+  min-height: 174px;
+}
+.planning-page .planning-card.selected {
+  border-color: var(--nofx-accent);
+  box-shadow: inset 0 3px 0 var(--nofx-accent);
+  background: var(--panel-bg-hover);
+}
+.planning-card > small {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.planning-assistant {
+  border-radius: 12px;
+  box-shadow: none;
+}
+.planning-assistant-title {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.planning-assistant-title b {
+  font-size: 14px;
+}
+.planning-message.user {
+  border: 1px solid var(--line);
+  border-radius: 10px 10px 2px 10px;
+}
+.planning-message.assistant {
+  padding: 6px 0;
+}
+.planning-composer textarea {
+  background: var(--background);
+  border-radius: 10px;
+  resize: vertical;
+  max-height: 200px;
+}
+.planning-error,
+.planning-empty {
+  border-radius: 10px;
+}
+.planning-data-panel {
+  margin: 0;
+}
+.planning-plugin-switches input[type='checkbox'] {
+  padding: 0;
+}
+.planning-review .planning-primary {
+  padding: 11px;
+  font-size: 13px;
+}
+@media (max-width: 850px) {
+  .planning-heading {
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+  .planning-toolbar {
+    padding: 12px;
+    gap: 8px;
+  }
+  .planning-toolbar .planning-live {
+    margin-left: 0;
+  }
+  .planning-assistant {
+    height: 680px;
+  }
+  .planning-market {
+    padding: 12px;
+  }
+  .planning-selected,
+  .planning-tools,
+  .planning-candidates {
+    padding: 14px 12px;
+  }
+}
+
+.planning-progress {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex-shrink: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.planning-progress button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.planning-spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 2px solid var(--line);
+  border-top-color: var(--nofx-accent);
+  border-radius: 50%;
+  animation: planning-spin 1s linear infinite;
+}
+@keyframes planning-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planning-spinner {
+    animation: none;
+  }
+}
+.planning-ai500 {
+  margin-top: 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.planning-ai500 > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.planning-ai500 input {
+  width: 200px;
+  margin-left: auto;
+}
+.planning-ai500-symbols {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-height: 140px;
+  overflow: auto;
+  margin: 10px 0;
+}
+.planning-ai500-symbols button {
+  padding: 5px 8px;
+}
+
+/* Execution preview shares the chart frame but has its own honest time axis. */
+.planning-execution-band {
+  padding: 14px 20px 12px 64px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-bg-hover);
+}
+.planning-execution-band header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.planning-execution-band header div {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.planning-execution-band header span,
+.planning-execution-band small,
+.planning-execution-band p {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.planning-execution-band p {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+.planning-execution-steps {
+  display: flex;
+  list-style: none;
+  gap: 0;
+  padding: 0;
+  margin: 16px 0 0;
+  overflow-x: auto;
+}
+.planning-execution-steps li {
+  position: relative;
+  display: flex;
+  flex: 1 0 135px;
+  gap: 9px;
+  padding-right: 14px;
+}
+.planning-execution-steps li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 23px;
+  right: 8px;
+  top: 11px;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.planning-step-dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  background: var(--panel-bg);
+  border: 1px solid #9b6a14;
+  color: #9b6a14;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.planning-execution-steps li > div {
+  z-index: 1;
+  background: var(--panel-bg-hover);
+  padding-right: 10px;
+}
+.planning-execution-steps b,
+.planning-execution-steps span:not(.planning-step-dot),
+.planning-execution-steps div > small {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.planning-execution-steps span small {
+  display: inline;
+}
+.planning-structures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.planning-structures article {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 14px;
+  background: var(--panel-bg);
+}
+.planning-structures article.selected {
+  border-color: var(--nofx-accent);
+  box-shadow: inset 0 2px var(--nofx-accent);
+}
+.planning-structures header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.planning-structures header span,
+.planning-structures p {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.planning-structures article > b {
+  font-size: 12px;
+}
+.planning-structures p {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.planning-all-plans > summary {
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  margin: 12px 0;
+}
+.planning-live-activity {
+  flex-shrink: 0;
+  margin: 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  overflow: hidden;
+}
+.planning-live-activity > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.planning-live-activity > header strong {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.planning-live-activity > header > span {
+  color: var(--text-secondary);
+  font-size: 10px;
+  margin-left: auto;
+}
+.planning-live-activity > header button {
+  padding: 3px 7px;
+  font-size: 10px;
+}
+.activity-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2e8b57;
+  box-shadow: 0 0 0 3px #2e8b5718;
+  animation: activityPulse 1.6s ease-in-out infinite;
+}
+.planning-activity-list {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.planning-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.planning-activity-item:last-child {
+  border-bottom: 0;
+}
+.planning-activity-item .activity-state {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px;
+  border-radius: 50%;
+  background: var(--panel-bg-hover);
+  color: #2e8b57;
+}
+.planning-activity-item.failed .activity-state {
+  color: #b67718;
+}
+.planning-activity-item.running {
+  background: var(--panel-bg-hover);
+}
+.planning-activity-item > div {
+  flex: 1;
+  min-width: 0;
+}
+.planning-activity-item b {
+  font-size: 11px;
+  font-weight: 600;
+}
+.planning-activity-item p {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  margin: 4px 0 0;
+}
+.planning-activity-item time {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  white-space: nowrap;
+}
+@keyframes activityPulse {
+  50% {
+    box-shadow: 0 0 0 5px #2e8b570a;
+  }
+}
+@media (max-width: 900px) {
+  .planning-structures {
+    grid-template-columns: 1fr;
+  }
+  .planning-execution-band {
+    padding-left: 18px;
+  }
+  .planning-execution-band header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-live-dot {
+    animation: none;
+  }
+}
+
+/* One conversation scrollbar; keep input and trade review reachable. */
+.planning-thread {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.planning-thread .planning-messages {
+  flex: none;
+  min-height: 0;
+  overflow: visible;
+}
+.planning-thread .planning-activity-list {
+  max-height: none;
+  overflow: visible;
+}
+.planning-assistant > :not(.planning-thread) {
+  flex-shrink: 0;
+}
+.planning-assistant .planning-composer textarea {
+  height: 80px;
+  min-height: 64px;
+  max-height: 120px;
+  resize: none;
+}
+.planning-assistant .planning-review {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.planning-assistant .planning-history[open] {
+  max-height: 120px;
+  overflow-y: auto;
+}
+.planning-message {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.planning-message.user {
+  margin: 8px 0 12px 16px;
+}
+
+.frontier-account {
+  margin: 0;
+  padding: 16px 18px;
+  background: var(--panel-bg);
+  border-top: 1px solid var(--line);
+}
+.frontier-account > header,
+.frontier-account-subhead,
+.frontier-trade-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.frontier-account > header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+.frontier-account header p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.frontier-account-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.planning-page .frontier-long {
+  background: #e6f2e9;
+  color: #236b44;
+  border-color: #b8d5bf;
+  font-weight: 600;
+}
+.planning-page .frontier-short {
+  background: #f9e7e1;
+  color: #ad4335;
+  border-color: #e6c0b5;
+  font-weight: 600;
+}
+.frontier-account-subhead {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+.frontier-account-subhead span,
+.frontier-account small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.frontier-account > small {
+  display: block;
+  margin-top: 10px;
+}
+.frontier-table-scroll {
+  overflow-x: auto;
+}
+.frontier-account td {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.frontier-account th {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.frontier-account th,
+.frontier-account td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.frontier-account td:first-child,
+.frontier-account th:first-child {
+  padding-left: 0;
+}
+.frontier-flat {
+  color: var(--text-secondary);
+  padding: 8px 0;
+}
+.frontier-notice {
+  background: #f9efdc;
+  border: 1px solid #dfc89e;
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+.frontier-protection {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--panel-bg-hover);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.frontier-native-orders {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.frontier-trade-summary {
+  display: block;
+  padding: 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  background: transparent;
+}
+.frontier-trade-summary.attention {
+  border-color: var(--line);
+}
+.frontier-trade-summary p {
+  margin: 5px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.frontier-trade-summary > div:last-of-type {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.frontier-trade-summary details {
+  width: 100%;
+  overflow-x: auto;
+  font-size: 11px;
+}
+.frontier-trade-summary a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+@media (max-width: 850px) {
+  .frontier-account > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .frontier-account {
+    padding: 14px 12px;
+  }
+  .frontier-account-actions {
+    width: 100%;
+  }
+}
+
+/* Chart and decision first; compact account activity below. */
+.planning-page button,
+.planning-page select,
+.planning-page input {
+  min-height: 34px;
+}
+.planning-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.planning-heading > a {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.planning-toolbar > select {
+  max-width: 230px;
+}
+.planning-toolbar > select,
+.planning-toolbar input {
+  background: transparent;
+}
+.planning-market > div:last-child {
+  gap: 6px;
+}
+.planning-market button {
+  font-size: 11px;
+  background: transparent;
+}
+.planning-market strong {
+  font-size: 30px;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+.planning-market small {
+  font-size: 11px;
+}
+.planning-legend {
+  gap: 7px;
+  font-size: 10px;
+  padding-block: 7px;
+}
+.planning-legend i {
+  width: 6px;
+  height: 6px;
+  margin-right: 9px;
+}
+.frontier-sizing {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.frontier-sizing label {
+  flex-direction: row;
+  align-items: center;
+  margin: 0;
+  gap: 8px;
+}
+.frontier-sizing select {
+  min-height: 28px;
+  padding: 3px 8px;
+  color: var(--text-primary);
+}
+.frontier-sizing > span {
+  font-size: 10px;
+}
+.planning-candidates {
+  padding-top: 12px;
+}
+.planning-section-title b {
+  font-weight: 600;
+  font-size: 13px;
+}
+.planning-candidates > p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.planning-tools > summary,
+.planning-all-plans > summary {
+  font-size: 11px;
+  padding-block: 5px;
+}
+.frontier-count {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 0 6px;
+  min-width: 20px;
+  border-radius: 4px;
+  background: #eeece5;
+  color: #777269;
+  font-size: 11px;
+  justify-content: center;
+}
+.frontier-account header p {
+  font-size: 10px;
+  margin-top: 2px;
+}
+.frontier-account-actions {
+  align-items: center;
+  gap: 6px;
+}
+.frontier-account-actions button {
+  min-height: 29px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.frontier-account-actions a {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+.frontier-account > small {
+  font-size: 10px;
+  margin-top: 6px;
+}
+.frontier-account-subhead,
+.frontier-account-subhead span {
+  font-size: 10px;
+}
+.frontier-account table {
+  margin: 6px 0;
+}
+.frontier-account th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10px;
+}
+.frontier-account td {
+  font-size: 12px;
+}
+.frontier-account td button {
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+.frontier-protection {
+  padding: 7px 10px;
+  margin: 8px 0 0;
+  font-size: 10px;
+  gap: 12px;
+  border-radius: 5px;
+}
+.frontier-native-orders {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.frontier-native-orders > summary {
+  padding: 6px 0;
+}
+.frontier-trade-summary > .frontier-record-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  padding: 9px 0;
+}
+.frontier-record-toggle::before {
+  content: '▸';
+  color: var(--text-secondary);
+}
+.frontier-trade-summary[open] > .frontier-record-toggle::before {
+  content: '▾';
+}
+.frontier-record-toggle > span:first-child {
+  flex: 1;
+  font-weight: 600;
+}
+.frontier-record-label {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+.frontier-review-badge {
+  background: #f7eedb;
+  color: #8a672e;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+.frontier-trade-summary > div {
+  padding: 4px 0;
+}
+.frontier-trade-summary > details {
+  margin-top: 6px;
+}
+.frontier-monitor-alert {
+  color: #8a672e;
+}
+.frontier-welcome {
+  padding: 28px 8px;
+}
+.frontier-eyebrow {
+  color: #9a8f7d;
+  letter-spacing: 0.13em;
+  font-size: 9px;
+  font-weight: 600;
+}
+.frontier-welcome h2 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  margin: 14px 0 12px;
+  max-width: 230px;
+}
+.frontier-welcome p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.8;
+  max-width: 260px;
+}
+.frontier-welcome-note {
+  margin-top: 20px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.planning-assistant-title b {
+  font-weight: 600;
+  font-size: 13px;
+}
+.planning-assistant-title button {
+  font-size: 11px;
+  background: transparent;
+}
+.planning-assistant > select {
+  font-size: 11px;
+  background: transparent;
+}
+.planning-message.user {
+  background: #f3f1eb;
+  border-color: transparent;
+}
+.planning-assistant .planning-composer textarea {
+  padding: 12px;
+  background: #f7f6f1;
+  border-color: #ddd9cf;
+  font-size: 12px;
+}
+.planning-composer > div > button {
+  font-size: 11px;
+}
+.planning-composer > div > button[type='submit'] {
+  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+  padding-inline: 18px;
+}
+@media (max-width: 1100px) {
+  .planning-toolbar .planning-live {
+    display: none;
+  }
+  .frontier-account > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .frontier-account-actions {
+    width: 100%;
+  }
+  .frontier-sizing > span {
+    max-width: 240px;
+  }
+}
+@media (max-width: 850px) {
+  .planning-page {
+    padding: 76px 12px 24px;
+  }
+  .planning-heading > div {
+    gap: 8px;
+  }
+  .planning-heading p {
+    display: none;
+  }
+  .planning-toolbar > select {
+    flex: 1;
+    min-width: 130px;
+    max-width: none;
+  }
+  .planning-toolbar form {
+    flex: 1;
+  }
+  .planning-toolbar input {
+    width: 100%;
+    min-width: 80px;
+  }
+  .planning-market {
+    padding: 12px;
+    flex-wrap: wrap;
+  }
+  .frontier-sizing {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  .frontier-sizing > span {
+    max-width: none;
+  }
+  .frontier-record-toggle {
+    flex-wrap: wrap;
+  }
+  .planning-assistant {
+    height: min(720px, 90dvh);
+    min-height: 440px;
+  }
+}
+
+/* First-use setup stays in the workspace; normal use keeps the chart in focus. */
+.frontier-setup-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 18px;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+.frontier-setup-strip > div {
+  flex: 1;
+  min-width: 220px;
+}
+.frontier-setup-strip b,
+.frontier-setup-strip span {
+  display: block;
+}
+.frontier-setup-strip span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.frontier-setup-strip .setup-done {
+  color: #2e8b57;
+}
+.frontier-setup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #1a181354;
+  backdrop-filter: blur(3px);
+}
+.frontier-setup-dialog {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px #1a18132b;
+  padding: 24px;
+  width: min(660px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.frontier-setup-dialog header,
+.frontier-setup-dialog footer,
+.frontier-setup-dialog nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.frontier-setup-dialog header {
+  margin-bottom: 18px;
+}
+.frontier-setup-dialog h2 {
+  font-size: 23px;
+  margin: 4px 0 0;
+  letter-spacing: -0.5px;
+  font-weight: 650;
+}
+.frontier-setup-dialog nav {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+.frontier-setup-dialog nav button {
+  flex: 1;
+}
+.frontier-setup-dialog button[aria-current='step'],
+.frontier-exchange-choices button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: #e0483b0a;
+}
+.frontier-setup-dialog p {
+  color: var(--text-secondary);
+  margin: 14px 0;
+}
+.frontier-setup-dialog footer {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.frontier-setup-dialog .frontier-setup-error {
+  color: #b53025;
+}
+.frontier-wallet-card {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 20px 0;
+}
+.frontier-wallet-card svg {
+  flex-shrink: 0;
+  padding: 8px;
+  background: white;
+  border-radius: 8px;
+}
+.frontier-wallet-card > div {
+  min-width: 0;
+}
+.frontier-wallet-card code {
+  user-select: all;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.frontier-setup-start,
+.frontier-setup-success {
+  background: #f6f4ed;
+  border-radius: 10px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.frontier-setup-dialog .frontier-setup-note {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.frontier-exchange-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+.frontier-exchange-choices button {
+  text-align: left;
+  padding: 16px;
+}
+.frontier-exchange-choices span {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.planning-ai500 {
+  margin: 12px 0;
+  padding: 12px 16px;
+}
+.planning-ai500-symbols {
+  flex-wrap: nowrap;
+  max-height: none;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+}
+.planning-ai500-symbols button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.planning-ai500-symbols button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: #e0483b0d;
+  color: var(--accent);
+}
+.planning-ai500-setup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  margin-top: 10px;
+}
+@media (max-width: 650px) {
+  .frontier-wallet-card {
+    flex-direction: column;
+    align-items: center;
+  }
+  .frontier-exchange-choices {
+    grid-template-columns: 1fr;
+  }
+  .frontier-setup-backdrop {
+    padding: 10px;
+  }
+  .frontier-setup-dialog {
+    padding: 18px;
+    max-height: calc(100dvh - 20px);
+  }
+}
+.frontier-markets {
+  margin: 12px 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+.frontier-market-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.frontier-market-filters > b {
+  margin-right: 6px;
+  font-size: 12px;
+}
+.frontier-market-filters button {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.frontier-market-filters button[aria-pressed='true'],
+.frontier-market-shortcuts button[aria-pressed='true'] {
+  background: #e0483b0d;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.frontier-market-filters input {
+  margin-left: auto;
+  width: min(240px, 100%);
+  font-size: 12px;
+}
+.frontier-markets .planning-ai500 {
+  padding: 0;
+  border: 0;
+  margin: 10px 0 0;
+}
+.frontier-markets .planning-ai500 > div:first-child > b {
+  display: none;
+}
+.frontier-market-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 6px;
+  max-height: 230px;
+  overflow-y: auto;
+}
+.frontier-market-shortcuts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.frontier-market-shortcuts b {
+  font-weight: 550;
+}
+.frontier-market-shortcuts small {
+  font-size: 10px;
+}
+.frontier-markets > small {
+  display: block;
+  font-size: 10px;
+}
+.frontier-show-markets {
+  font-size: 11px !important;
+  padding: 5px 8px !important;
+  margin-bottom: 5px;
+}
+
+/* Frontier workspace: market, decision, then actual account activity. */
+.planning-page {
+  --panel-bg: #ffffff;
+  --panel-bg-hover: #f7f7f5;
+  --line: #e8e7e3;
+  background: #f6f6f3;
+  padding: 82px 24px 28px;
+  font-size: 13px;
+}
+.planning-page [hidden] {
+  display: none !important;
+}
+.planning-heading {
+  margin-bottom: 16px;
+}
+.planning-heading h1 {
+  font-size: 24px;
+  letter-spacing: -1px;
+}
+.planning-heading > div {
+  gap: 14px;
+}
+.frontier-workflow {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-left: auto;
+}
+.frontier-workflow span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: #777873;
+}
+.frontier-workflow b {
+  display: grid;
+  place-items: center;
+  border: 1px solid #dddeda;
+  border-radius: 50%;
+  width: 21px;
+  height: 21px;
+  font-size: 10px;
+  font-weight: 500;
+}
+.frontier-workflow span:first-child {
+  color: #242924;
+}
+.frontier-workflow span:first-child b {
+  background: #263b30;
+  color: white;
+  border-color: #263b30;
+}
+.planning-toolbar {
+  border-radius: 12px 12px 0 0;
+  padding: 10px 16px;
+  gap: 22px;
+}
+.frontier-toolbar-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.frontier-toolbar-field > span {
+  color: #858680;
+  font-size: 11px;
+}
+.planning-toolbar select {
+  max-width: 225px;
+  border: 0;
+  padding-left: 0;
+  font-weight: 550;
+}
+.planning-toolbar form input {
+  width: 132px;
+  background: #f7f7f5;
+}
+.planning-toolbar form button {
+  border-color: transparent;
+  font-size: 11px;
+}
+.planning-toolbar .planning-live {
+  border: 0;
+  color: #646d64;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+}
+.planning-live i,
+.frontier-live-dot {
+  display: inline-block;
+  height: 5px;
+  width: 5px;
+  border-radius: 50%;
+  background: #4d9b75;
+}
+.frontier-markets {
+  margin: 0 0 14px;
+  border-radius: 0 0 12px 12px;
+  border-top: 0;
+  padding: 9px 16px;
+}
+.frontier-market-filters {
+  gap: 4px;
+}
+.frontier-market-filters > b {
+  display: none;
+}
+.frontier-market-filters button {
+  border-color: transparent;
+  background: transparent;
+  font-size: 11px;
+  min-height: 28px;
+  padding: 4px 9px;
+}
+.frontier-market-filters button[aria-pressed='true'] {
+  background: #f0f1ed;
+  border-color: transparent;
+  color: #263b30;
+  font-weight: 650;
+}
+.frontier-market-filters input {
+  min-height: 28px;
+  padding: 4px 9px;
+  width: 200px;
+}
+.frontier-market-filters > small {
+  font-size: 9px;
+}
+.frontier-market-shortcuts {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 7px 0 0;
+  padding-bottom: 4px;
+  max-height: 100px;
+  scrollbar-width: thin;
+}
+.frontier-market-shortcuts button {
+  white-space: nowrap;
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 11px;
+  border-color: #eeeeea;
+}
+.frontier-market-shortcuts small {
+  font-size: 9px;
+}
+.frontier-markets > small {
+  margin-top: 3px;
+  font-size: 9px;
+  color: #8c8e87;
+}
+.frontier-show-markets {
+  margin: 4px 0 0;
+  min-height: 24px !important;
+  font-size: 10px !important;
+}
+.frontier-markets .planning-ai500 {
+  margin-top: 5px;
+}
+.frontier-markets .planning-ai500 > div:first-child {
+  gap: 8px;
+}
+.frontier-markets .planning-ai500 input {
+  min-height: 26px;
+  padding: 3px 8px;
+}
+.frontier-markets .planning-ai500 button {
+  min-height: 26px;
+  padding: 3px 9px;
+}
+.frontier-markets .planning-ai500 small {
+  font-size: 9px;
+}
+.frontier-markets .planning-ai500-symbols {
+  margin: 5px 0 0;
+}
+.planning-workspace {
+  grid-template-columns: minmax(0, 1fr) 370px;
+  gap: 16px;
+  margin-top: 0;
+  align-items: start;
+}
+.planning-chart-pane {
+  border-radius: 12px;
+  background: white;
+}
+.planning-market {
+  padding: 14px 18px 10px;
+  border-bottom: 0;
+}
+.planning-market strong {
+  font-size: 29px;
+  font-weight: 550;
+  letter-spacing: -1px;
+}
+.planning-market small {
+  font-size: 10px;
+  color: #858980;
+}
+.planning-market button {
+  font-size: 10px;
+  min-height: 29px;
+  padding: 4px 8px;
+  border-color: #ecece7;
+}
+.planning-chart {
+  height: clamp(320px, calc(100dvh - 450px), 560px);
+}
+.frontier-sizing {
+  padding: 0 18px 10px;
+  border: 0;
+  gap: 12px;
+  font-size: 10px;
+}
+.frontier-sizing select {
+  min-height: 25px;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+.frontier-sizing > span {
+  font-size: 9px;
+}
+.planning-legend {
+  padding: 8px 18px;
+  gap: 6px;
+  font-size: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.planning-selected {
+  padding: 12px 18px;
+  margin: 0;
+  background: #f8faf8;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+.planning-selected > b {
+  font-size: 12px;
+}
+.planning-price-row {
+  margin-top: 9px;
+  gap: 28px;
+}
+.planning-selected .planning-price-row strong {
+  font-size: 17px;
+}
+.frontier-advanced > summary {
+  padding: 10px 18px;
+  font-size: 10px;
+  list-style-position: inside;
+}
+.frontier-advanced[open] {
+  border-top: 1px solid var(--line);
+}
+.frontier-advanced .planning-tools {
+  padding: 8px 18px;
+}
+.planning-assistant {
+  position: sticky;
+  top: 80px;
+  height: clamp(630px, calc(100dvh - 285px), 860px);
+  min-height: 0;
+  padding: 18px;
+  gap: 10px;
+  border-radius: 12px;
+}
+.planning-assistant-title {
+  padding-bottom: 10px;
+  border: 0;
+  align-items: center;
+}
+.planning-assistant-title > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.planning-assistant-title b {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.planning-assistant-title .frontier-eyebrow {
+  color: #8f968d;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+.planning-assistant-title button {
+  min-height: 28px;
+  font-size: 10px;
+  padding: 4px 8px;
+  color: #7c8178;
+}
+.frontier-model-settings {
+  font-size: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+.frontier-model-settings summary {
+  padding: 0;
+  color: #6a756c;
+  list-style: none;
+}
+.frontier-model-settings summary span {
+  float: right;
+  color: #90958d;
+}
+.frontier-model-settings select {
+  width: 100%;
+  max-width: none;
+  margin-top: 8px;
+}
+.frontier-assistant-action .planning-primary {
+  width: 100%;
+  min-height: 38px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.planning-thread {
+  scrollbar-gutter: auto;
+}
+.frontier-welcome {
+  padding: 18px 0 8px;
+}
+.frontier-welcome-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #edf2e9;
+  color: #5b7755;
+  font-size: 23px;
+  margin-bottom: 15px;
+}
+.frontier-welcome h2 {
+  font-size: 25px;
+  line-height: 1.18;
+  font-weight: 550;
+  letter-spacing: -0.9px;
+  margin: 0 0 12px;
+}
+.frontier-welcome p {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #868b80;
+  max-width: 285px;
+}
+.frontier-welcome-note {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0 !important;
+  margin-top: 12px !important;
+  border: 0 !important;
+  font-size: 9px;
+  color: #868e7e;
+}
+.frontier-starters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.frontier-starters button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8f9f6;
+  border-color: #eff0eb;
+  text-align: left;
+  font-size: 11px;
+  padding: 9px 11px;
+}
+.frontier-starters button span {
+  color: #97a18e;
+}
+.planning-assistant .planning-card-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+}
+.planning-assistant .planning-card {
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  padding: 12px;
+  gap: 6px;
+  text-align: left;
+}
+.planning-assistant .planning-card strong {
+  font-size: 12px;
+}
+.planning-assistant .planning-composer {
+  border: 1px solid #dbdfd5;
+  border-radius: 10px;
+  padding: 9px;
+  background: #fafbf8;
+  margin: 0;
+}
+.planning-assistant .planning-composer textarea {
+  border: 0;
+  background: transparent;
+  padding: 2px;
+  font-size: 12px;
+  height: 60px;
+  min-height: 60px;
+}
+.planning-composer > div {
+  padding-top: 5px;
+}
+.planning-composer > div button {
+  font-size: 10px;
+  min-height: 27px;
+  padding: 3px 8px;
+}
+.planning-composer button[type='submit'] {
+  background: #263b30;
+  border-color: #263b30;
+  color: white;
+}
+.planning-assistant .planning-review {
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  max-height: 195px;
+}
+.planning-review > p.frontier-no-orders {
+  margin: 0;
+  font-size: 10px;
+  color: #7c8577;
+}
+.frontier-no-orders span {
+  margin-right: 4px;
+}
+.planning-history {
+  font-size: 10px;
+}
+.planning-history summary {
+  padding: 0;
+}
+.frontier-portfolio {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+.frontier-portfolio .frontier-account {
+  margin: 0;
+  border: 0;
+  padding: 18px;
+}
+.frontier-portfolio .frontier-account > header h2 {
+  font-size: 15px;
+}
+.frontier-portfolio .frontier-account header p {
+  font-size: 11px;
+}
+@media (min-width: 1600px) {
+  .planning-workspace {
+    grid-template-columns: minmax(0, 1fr) 390px;
+  }
+}
+@media (max-width: 1100px) {
+  .frontier-workflow {
+    display: none;
+  }
+  .planning-toolbar {
+    gap: 10px;
+  }
+  .frontier-toolbar-field > span {
+    display: none;
+  }
+  .planning-toolbar .planning-live {
+    display: none;
+  }
+  .planning-workspace {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+@media (max-width: 850px) {
+  .planning-page {
+    padding: 76px 12px 20px;
+  }
+  .planning-heading {
+    flex-direction: row;
+  }
+  .planning-heading p {
+    display: none;
+  }
+  .planning-toolbar {
+    padding: 8px;
+  }
+  .planning-toolbar select {
+    max-width: 180px;
+  }
+  .frontier-market-filters > small {
+    display: none;
+  }
+  .frontier-markets {
+    padding: 8px;
+  }
+  .planning-workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .planning-chart-pane,
+  .planning-assistant {
+    width: 100%;
+  }
+  .planning-chart {
+    height: 360px;
+  }
+  .planning-assistant {
+    position: static;
+    height: 650px;
+  }
+  .planning-market {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .planning-market strong {
+    font-size: 25px;
+  }
+  .frontier-sizing > span {
+    max-width: 220px;
+  }
+  .planning-price-row {
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planning-page *,
+  .planning-page *::before,
+  .planning-page *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+.frontier-account-link {
+  color: #42563f !important;
+  font-size: 11px !important;
+}
+.frontier-portfolio {
+  scroll-margin-top: 86px;
+}
+.frontier-workflow span:first-child {
+  color: #777873;
+}
+.frontier-workflow span:first-child b {
+  background: transparent;
+  color: inherit;
+  border-color: #dddeda;
+}
+.frontier-workflow span[data-active='true'] {
+  color: #243c2c;
+}
+.frontier-workflow span[data-active='true'] b {
+  background: #263b30;
+  color: white;
+  border-color: #263b30;
+}
+.frontier-plan-levels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.frontier-plan-levels dt {
+  font-size: 10px;
+  color: #868e80;
+}
+.frontier-plan-levels dd {
+  margin: 3px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.frontier-plan-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  font-size: 10px;
+}
+.frontier-plan-outcomes small {
+  width: 100%;
+  color: #8b9285;
+  font-size: 9px;
+}
+.planning-page .frontier-market-filters > small {
+  font-size: 10px;
+}
+.planning-page .frontier-market-shortcuts small {
+  font-size: 10px;
+}
+.planning-page .frontier-market-shortcuts button {
+  font-size: 12px;
+}
+.planning-page .frontier-model-settings {
+  font-size: 11px;
+}
+.planning-page .frontier-sizing > span {
+  font-size: 10px;
+}
+.planning-page .frontier-sizing {
+  font-size: 11px;
+}
+.planning-page .frontier-starters button {
+  font-size: 12px;
+}
+.planning-page .frontier-welcome-note {
+  font-size: 10px;
+}
+.planning-page .frontier-no-orders {
+  font-size: 11px !important;
+}
+.planning-page .frontier-toolbar-field > span {
+  font-size: 12px;
+}
+.planning-page .planning-legend {
+  font-size: 11px;
+}
+
+.frontier-portfolio .frontier-position-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0 0;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.3;
+  background: #fceeea;
+  color: #af4c42;
+}
+.frontier-portfolio .frontier-position-badge.long {
+  background: #ecf5ed;
+  color: #367044;
+}
+.frontier-portfolio .frontier-position-badge b {
+  font-size: 13px;
+  font-weight: 750;
+}
+.frontier-portfolio .frontier-position-value strong {
+  font-size: 18px;
+  letter-spacing: -0.4px;
+  font-weight: 650;
+}
+.frontier-portfolio .frontier-position-value small,
+.frontier-portfolio .frontier-position-margin small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+}
+.frontier-portfolio .frontier-position-margin strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.frontier-portfolio .frontier-margin-note {
+  margin: 7px 0 12px;
+  font-size: 10px;
+  color: #868b80;
+}
+.frontier-portfolio .frontier-account td:first-child > strong {
+  display: block;
+  font-size: 14px;
+}
+
+.frontier-order-blocker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 24px;
+  margin-bottom: 18px;
+  border: 1px solid #e7d1a4;
+  border-left: 4px solid #ac7827;
+  border-radius: 14px;
+  background: #fffbf2;
+  color: #453b28;
+}
+.frontier-order-blocker strong {
+  font-size: 16px;
+}
+.frontier-order-blocker p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+.frontier-order-blocker small,
+.frontier-order-blocker .frontier-check-hint {
+  font-size: 12px;
+  color: #746650;
+}
+.frontier-blocker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 190px;
+}
+.frontier-blocker-actions button {
+  background: white;
+  border: 1px solid #ddcfb4;
+  color: #453b28;
+}
+.frontier-blocker-actions a {
+  font-size: 13px;
+  padding: 8px;
+}
+.frontier-order-notice {
+  padding: 18px 24px;
+  background: #eef7f0;
+  color: #285b3a;
+  border-radius: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 800px) {
+  .frontier-order-blocker {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+.frontier-funding {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  background: rgba(46, 139, 87, 0.04);
+}
+.frontier-funding-equation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.frontier-funding-equation div {
+  display: grid;
+  gap: 6px;
+}
+.frontier-funding-equation strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.frontier-funding-equation span,
+.frontier-funding-equation small,
+.frontier-funding p,
+.frontier-funding-compact small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary, #6b7280);
+}
+.frontier-funding p {
+  margin: 12px 0 0;
+}
+.frontier-funding-compact small {
+  display: block;
+  margin-top: 4px;
+}
+
+/* Entry plans live in the main workspace, without a nested scrolling panel. */
+.frontier-plan-deck {
+  container-type: inline-size;
+  padding: 24px;
+  border-top: 1px solid var(--line);
+  background: #fcfdfb;
+  scroll-margin-top: 88px;
+}
+.frontier-deck-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.frontier-deck-heading h2 {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+  margin: 0 0 6px;
+}
+.frontier-deck-heading p,
+.frontier-deck-empty {
+  font-size: 14px;
+  color: #737b70;
+  margin: 0;
+}
+.frontier-deck-heading > span {
+  white-space: nowrap;
+  font-size: 13px;
+  color: #576250;
+}
+.frontier-plan-deck .planning-structures {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.frontier-plan-deck .planning-structures article {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+  border-color: #dfe5dc;
+}
+.frontier-plan-deck .planning-structures article.selected {
+  border-color: #405e43;
+  box-shadow: 0 0 0 1px #405e43;
+  background: #f5f9f3;
+}
+.frontier-plan-deck .planning-structures header {
+  font-size: 16px;
+  margin-bottom: 14px;
+}
+.frontier-plan-deck .planning-structures header span {
+  font-size: 11px;
+}
+.frontier-plan-deck .planning-structures article > b {
+  font-size: 17px;
+  line-height: 1.4;
+}
+.frontier-plan-side {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 7px;
+}
+.frontier-plan-deck .planning-structures article p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.frontier-plan-deck .frontier-plan-levels {
+  margin: 6px 0;
+  padding-top: 14px;
+}
+.frontier-plan-deck .frontier-plan-levels dt {
+  font-size: 12px;
+}
+.frontier-plan-deck .frontier-plan-levels dd {
+  font-size: 20px;
+  letter-spacing: -0.4px;
+  overflow-wrap: anywhere;
+}
+.frontier-funding-compact {
+  margin: 14px 0;
+  padding: 14px 0;
+  border-top: 1px solid #e5e9e1;
+  border-bottom: 1px solid #e5e9e1;
+}
+.frontier-funding-compact > span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #63705c;
+}
+.frontier-funding-compact > span b {
+  font-size: 14px;
+  color: #284a31;
+  background: #e9f0e4;
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+.frontier-funding-compact > strong {
+  display: block;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+  margin: 6px 0;
+  font-variant-numeric: tabular-nums;
+}
+.frontier-funding-compact strong small {
+  display: inline;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.frontier-plan-deck .frontier-plan-outcomes {
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.frontier-plan-deck .frontier-plan-outcomes small {
+  font-size: 11px;
+}
+.frontier-plan-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+}
+.frontier-plan-actions button {
+  min-height: 42px;
+  font-size: 13px;
+  padding: 8px;
+  border-radius: 7px;
+}
+.frontier-plans-link {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 14px;
+  color: #35563c;
+  border-bottom: 1px solid var(--line);
+}
+.frontier-plans-link span {
+  font-weight: 600;
+}
+@container (min-width: 1200px) {
+  .frontier-plan-deck .planning-structures {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container (max-width: 560px) {
+  .frontier-plan-deck .planning-structures {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 850px) {
+  .frontier-plan-deck {
+    padding: 16px;
+  }
+  .frontier-deck-heading {
+    align-items: start;
+  }
+  .frontier-deck-heading h2 {
+    font-size: 20px;
+  }
+}
+
+/* Connections describe separate purposes; each opens an in-place setup flow. */
+.frontier-connections {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.frontier-connections > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  min-height: 42px;
+  background: white;
+}
+.frontier-connections span {
+  color: #626b64;
+  font-size: 12px;
+}
+.frontier-connections b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.frontier-connections .frontier-funds-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+}
+.frontier-funds-metric b {
+  color: #27362d;
+  font-variant-numeric: tabular-nums;
+}
+.frontier-connections > small {
+  margin-left: auto;
+  color: #717870;
+  font-size: 12px;
+}
+.frontier-account-check {
+  padding: 16px;
+  border: 1px solid #deded6;
+  border-radius: 10px;
+  margin: 16px 0;
+}
+.frontier-ai-options {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.frontier-own-ai {
+  width: 100%;
+  text-align: left;
+}
+.frontier-order-blocker.is-active {
+  background: #f1f7f2;
+  border-color: #d5e5d8;
+  color: #284936;
+}
+.frontier-order-blocker.is-active strong {
+  color: #284936;
+}
+.frontier-order-blocker small {
+  display: block;
+  color: #7f5d21;
+  margin-top: 8px;
+  font-size: 12px;
+}
+#frontier-chart,
+#frontier-plans,
+#frontier-assistant,
+#frontier-account {
+  scroll-margin-top: 90px;
+}
+.frontier-plan-deck .frontier-deck-heading p {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.frontier-plan-deck .planning-structures article > b {
+  font-size: 17px;
+  line-height: 1.4;
+}
+.frontier-plan-deck .frontier-plan-levels dd {
+  font-size: 19px;
+}
+.frontier-plan-deck .planning-structures article p {
+  font-size: 13px;
+}
+.frontier-plan-deck .frontier-plan-actions button {
+  min-height: 42px;
+  font-size: 13px;
+}
+.frontier-plan-deck .frontier-plan-outcomes {
+  font-size: 13px;
+}
+.frontier-plan-deck .planning-structures article[data-empty='true'] {
+  min-height: 0;
+  background: #fafbf9;
+}
+.frontier-plan-deck .planning-all-plans {
+  margin-top: 18px;
+}
+.frontier-illustrative {
+  color: #747970;
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.frontier-order-blocker {
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+}
+.frontier-order-blocker p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+.frontier-order-blocker small {
+  margin-top: 4px;
+}
+.frontier-wallet-details {
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  padding: 14px;
+  border-radius: 10px;
+}
+.frontier-wallet-details > summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+
+.frontier-draft-stale {
+  color: #926a24;
+}
+.frontier-plan-hint {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #697367;
+  margin: 12px 0;
+}

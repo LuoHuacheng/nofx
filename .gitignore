@@ -140,3 +140,6 @@ PR_DESCRIPTION.md
 .agents/
 skills-lock.json
 img.png
+
+# Generated from the pinned charting submodule by web prebuild/predev.
+web/public/charting_library/

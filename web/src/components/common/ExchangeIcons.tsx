@@ -36,7 +36,7 @@ const ExchangeImage: React.FC<IconProps & { src: string; alt: string }> = ({
       borderRadius: 6,
       overflow: 'hidden',
       flexShrink: 0,
-      background: '#E8E2D5',
+      background: '#edf1f7',
     }}
   >
     <img
@@ -64,13 +64,13 @@ const FallbackIcon: React.FC<IconProps & { label: string }> = ({
       width,
       height,
       borderRadius: 6,
-      background: '#E8E2D5',
+      background: '#edf1f7',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontSize: Math.max(10, (width || 24) * 0.4),
       fontWeight: 'bold',
-      color: '#1A1813',
+      color: '#192434',
       flexShrink: 0,
     }}
   >

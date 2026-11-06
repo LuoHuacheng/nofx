@@ -65,27 +65,6 @@ export async function resolveLaunchModel(): Promise<AIModel | null> {
     ) || pickTradingModel(models)
   if (model) return model
 
-  if (onboarding.configured_model_id && onboarding.private_key) {
-    await api.updateModelConfigs({
-      models: {
-        [onboarding.configured_model_id]: {
-          enabled: true,
-          api_key: onboarding.private_key,
-          custom_api_url: '',
-          custom_model_name: onboarding.default_model,
-        },
-      },
-    })
-    models = await api.getModelConfigs()
-    model =
-      models.find(
-        (item) =>
-          item.id === onboarding.configured_model_id &&
-          item.enabled &&
-          modelHasCredential(item)
-      ) || pickTradingModel(models)
-  }
-
   return model
 }
 

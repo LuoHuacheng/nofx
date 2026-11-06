@@ -331,7 +331,7 @@ function signalBiasInfo(bias: string | undefined) {
     label: 'Neutral',
     hint: 'Neutral bias',
     classes:
-      'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper text-nofx-text-muted',
+      'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper text-nofx-text-muted',
     icon: Target,
   }
 }
@@ -414,7 +414,7 @@ function directionStyle(direction?: string) {
   return {
     dot: 'bg-slate-400',
     text: 'text-nofx-text-muted',
-    chip: 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper text-nofx-text-muted',
+    chip: 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper text-nofx-text-muted',
     bar: 'bg-slate-500/70',
   }
 }
@@ -442,7 +442,7 @@ function DetailMetricCard({
             : 'text-nofx-text'
 
   return (
-    <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-3">
+    <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper p-3">
       <div className="text-xs text-nofx-text-muted">{label}</div>
       <div className={`mt-2 font-mono text-lg ${toneClass}`}>{value}</div>
       {note ? (
@@ -463,7 +463,7 @@ function DirectionChangePanel({
 }) {
   if (!current && !history) {
     return (
-      <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-4 text-sm text-nofx-text-muted">
+      <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper p-4 text-sm text-nofx-text-muted">
         Bull/Bear Radar has not loaded yet.
       </div>
     )
@@ -471,8 +471,8 @@ function DirectionChangePanel({
   const direction = current?.direction || current?.new_bias || 'neutral'
   const factors = Object.entries(current?.reason || {})
   return (
-    <section className="overflow-hidden rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter shadow-lg">
-      <div className="border-b border-[rgba(26,24,19,0.14)] px-5 py-4">
+    <section className="overflow-hidden rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter shadow-lg">
+      <div className="border-b border-[rgba(25,36,52,0.14)] px-5 py-4">
         <div className="text-base font-semibold text-nofx-text">
           Bull/Bear Radar
         </div>
@@ -500,7 +500,7 @@ function DirectionChangePanel({
           ))}
         </div>
       ) : null}
-      <div className="border-t border-[rgba(26,24,19,0.14)] p-5">
+      <div className="border-t border-[rgba(25,36,52,0.14)] p-5">
         <div className="mb-3 text-sm font-semibold text-nofx-text">
           Direction changes
         </div>
@@ -564,7 +564,7 @@ function ChartGridLines() {
         <div
           key={left}
           className={`absolute top-0 h-full w-px ${
-            left === 50 ? 'bg-[rgba(26,24,19,0.24)]' : 'bg-nofx-bg-deeper'
+            left === 50 ? 'bg-[rgba(25,36,52,0.24)]' : 'bg-nofx-bg-deeper'
           }`}
           style={{ left: `${left}%` }}
         />
@@ -611,7 +611,7 @@ function HeatmapChartRow({
         {formatPrice(price)}
       </div>
       <div
-        className={`relative h-6 overflow-visible rounded-sm ${
+        className={`relative h-6 overflow-visible rounded-xs ${
           isCurrent ? 'bg-nofx-gold/10' : 'bg-nofx-bg-lighter'
         }`}
       >
@@ -657,7 +657,7 @@ function CostLiquidationHeatmap({
 
   if (!data || bins.length === 0) {
     return (
-      <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-4 text-sm text-nofx-text-muted">
+      <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper p-4 text-sm text-nofx-text-muted">
         Cost/liquidation heatmap has not loaded yet.
       </div>
     )
@@ -681,8 +681,8 @@ function CostLiquidationHeatmap({
   const includedLiq = data.liqAddrs || 0
 
   return (
-    <section className="overflow-hidden rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter shadow-lg">
-      <div className="border-b border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter px-5 py-4">
+    <section className="overflow-hidden rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter shadow-lg">
+      <div className="border-b border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-base font-semibold text-nofx-text">
@@ -717,24 +717,24 @@ function CostLiquidationHeatmap({
       <div className="px-5 py-5">
         <div className="mb-4 flex flex-wrap justify-center gap-4 text-sm text-nofx-text-muted">
           <span className="inline-flex items-center gap-1">
-            <span className="h-3 w-3 rounded bg-nofx-success/70" />
+            <span className="h-3 w-3 rounded-sm bg-nofx-success/70" />
             Long cost
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="h-3 w-3 rounded bg-nofx-danger/70" />
+            <span className="h-3 w-3 rounded-sm bg-nofx-danger/70" />
             Short cost
           </span>
           <span className="inline-flex items-center gap-1 text-orange-300">
-            <span className="h-3 w-3 rounded bg-orange-400" />
+            <span className="h-3 w-3 rounded-sm bg-orange-400" />
             Long liquidation
           </span>
           <span className="inline-flex items-center gap-1 text-nofx-gold">
-            <span className="h-3 w-3 rounded bg-nofx-gold" />
+            <span className="h-3 w-3 rounded-sm bg-nofx-gold" />
             Short liquidation
           </span>
         </div>
 
-        <div className="relative rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-4 py-5">
+        <div className="relative rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-4 py-5">
           <ChartGridLines />
           <div className="relative z-10 max-h-[720px] space-y-1 overflow-y-auto pr-2">
             {bins.map((bin, index) => (
@@ -1385,8 +1385,8 @@ export function StrategyStudioPage() {
   }
 
   return (
-    <DeepVoidBackground className="min-h-[calc(100vh-64px)] bg-nofx-bg">
-      <div className="border-b border-[rgba(26,24,19,0.14)] bg-nofx-bg/75 px-5 py-4 backdrop-blur">
+    <DeepVoidBackground className="nofx-strategy min-h-[calc(100vh-72px)] bg-nofx-bg">
+      <div className="nofx-strategy-heading border-b border-[rgba(25,36,52,0.14)] bg-nofx-bg px-5 py-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold text-nofx-text">
@@ -1417,7 +1417,7 @@ export function StrategyStudioPage() {
       </div>
 
       <div className="grid min-h-[calc(100vh-137px)] grid-cols-1">
-        <aside className="hidden border-r border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-3">
+        <aside className="hidden border-r border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper p-3">
           <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wide text-nofx-text-muted">
             {text(language, 'My strategies', 'My strategies')}
           </div>
@@ -1434,7 +1434,7 @@ export function StrategyStudioPage() {
                 className={`w-full rounded-lg border px-3 py-3 text-left transition ${
                   selectedStrategy?.id === strategy.id
                     ? 'border-nofx-gold bg-nofx-gold/10'
-                    : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter hover:border-[rgba(26,24,19,0.24)]'
+                    : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter hover:border-[rgba(25,36,52,0.24)]'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -1442,7 +1442,7 @@ export function StrategyStudioPage() {
                     {strategy.name}
                   </span>
                   {strategy.is_active ? (
-                    <span className="rounded bg-nofx-success/15 px-1.5 py-0.5 text-[10px] text-nofx-success">
+                    <span className="rounded-sm bg-nofx-success/15 px-1.5 py-0.5 text-[10px] text-nofx-success">
                       {text(language, 'Active', 'Active')}
                     </span>
                   ) : null}
@@ -1460,7 +1460,7 @@ export function StrategyStudioPage() {
         <main className="overflow-y-auto p-5">
           {selectedStrategy && aiConfig && coinSource && indicators && risk ? (
             <div className="mx-auto max-w-7xl space-y-4">
-              <section className="hidden rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
+              <section className="hidden rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter p-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <input
@@ -1472,7 +1472,7 @@ export function StrategyStudioPage() {
                         })
                         setHasChanges(true)
                       }}
-                      className="w-full bg-transparent text-lg font-semibold text-nofx-text outline-none"
+                      className="w-full bg-transparent text-lg font-semibold text-nofx-text outline-hidden"
                     />
                     <input
                       value={selectedStrategy.description || ''}
@@ -1488,7 +1488,7 @@ export function StrategyStudioPage() {
                         'One-line strategy note',
                         'One-line strategy note'
                       )}
-                      className="mt-1 w-full bg-transparent text-sm text-nofx-text-muted outline-none placeholder:text-nofx-text-muted/50"
+                      className="mt-1 w-full bg-transparent text-sm text-nofx-text-muted outline-hidden placeholder:text-nofx-text-muted/50"
                     />
                     {hasChanges ? (
                       <div className="mt-2 text-xs text-nofx-gold">
@@ -1547,7 +1547,7 @@ export function StrategyStudioPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
+              <section className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2 text-sm font-semibold text-nofx-text">
@@ -1572,7 +1572,7 @@ export function StrategyStudioPage() {
                       className={`hidden items-center gap-2 rounded-lg border px-3 py-2 text-xs disabled:opacity-50 ${
                         listMode === 'claw402'
                           ? 'border-nofx-gold bg-nofx-gold/10 text-nofx-gold'
-                          : 'border-[rgba(26,24,19,0.14)] text-nofx-text-muted hover:text-nofx-text'
+                          : 'border-[rgba(25,36,52,0.14)] text-nofx-text-muted hover:text-nofx-text'
                       }`}
                     >
                       <Sparkles className="h-3.5 w-3.5" />
@@ -1586,8 +1586,8 @@ export function StrategyStudioPage() {
                       disabled={symbolsLoading}
                       className={`hidden items-center gap-2 rounded-lg border px-3 py-2 text-xs disabled:opacity-50 ${
                         listMode === 'pool'
-                          ? 'border-[rgba(26,24,19,0.24)] bg-nofx-bg-deeper text-nofx-text'
-                          : 'border-[rgba(26,24,19,0.14)] text-nofx-text-muted hover:text-nofx-text'
+                          ? 'border-[rgba(25,36,52,0.24)] bg-nofx-bg-deeper text-nofx-text'
+                          : 'border-[rgba(25,36,52,0.14)] text-nofx-text-muted hover:text-nofx-text'
                       }`}
                     >
                       <RefreshCw
@@ -1601,7 +1601,7 @@ export function StrategyStudioPage() {
                         void loadSignals()
                       }}
                       disabled={signalsLoading}
-                      className="inline-flex items-center gap-2 rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-3 py-2 text-xs text-nofx-text-muted hover:text-nofx-text disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-3 py-2 text-xs text-nofx-text-muted hover:text-nofx-text disabled:opacity-50"
                     >
                       <RefreshCw
                         className={`h-3.5 w-3.5 ${signalsLoading ? 'animate-spin' : ''}`}
@@ -1617,7 +1617,7 @@ export function StrategyStudioPage() {
                             vergex_market_type: 'all',
                           })
                         }
-                        className="hidden rounded-lg border border-[rgba(26,24,19,0.14)] px-3 py-2 text-xs text-nofx-text-muted hover:text-nofx-text"
+                        className="hidden rounded-lg border border-[rgba(25,36,52,0.14)] px-3 py-2 text-xs text-nofx-text-muted hover:text-nofx-text"
                       >
                         Clear selected
                       </button>
@@ -1650,7 +1650,7 @@ export function StrategyStudioPage() {
                         className={`rounded-lg border px-3 py-2 text-xs transition ${
                           scope === option.value
                             ? 'border-nofx-gold bg-nofx-gold/10 text-nofx-gold'
-                            : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper text-nofx-text-muted hover:text-nofx-text'
+                            : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper text-nofx-text-muted hover:text-nofx-text'
                         }`}
                       >
                         {option.en}
@@ -1678,7 +1678,7 @@ export function StrategyStudioPage() {
                     className={`rounded-lg border p-4 text-left transition ${
                       selectedSymbols.length === 0
                         ? 'border-nofx-success bg-nofx-success/10'
-                        : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper hover:border-[rgba(26,24,19,0.24)]'
+                        : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper hover:border-[rgba(25,36,52,0.24)]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -1707,7 +1707,7 @@ export function StrategyStudioPage() {
                     className={`rounded-lg border p-4 text-left transition ${
                       selectedSymbols.length > 0
                         ? 'border-nofx-gold bg-nofx-gold/10'
-                        : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper hover:border-[rgba(26,24,19,0.24)]'
+                        : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper hover:border-[rgba(25,36,52,0.24)]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -1740,7 +1740,7 @@ export function StrategyStudioPage() {
                           vergex_limit: Math.max(Number(event.target.value), 5),
                         })
                       }
-                      className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
+                      className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
                     >
                       {topNOptions.map((value) => (
                         <option key={value} value={value}>
@@ -1798,7 +1798,7 @@ export function StrategyStudioPage() {
                             className={`cursor-pointer rounded-lg border p-3 text-left transition ${
                               detailSelected || selected
                                 ? 'border-nofx-gold bg-nofx-gold/10'
-                                : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper hover:border-[rgba(26,24,19,0.24)]'
+                                : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper hover:border-[rgba(25,36,52,0.24)]'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -1820,7 +1820,7 @@ export function StrategyStudioPage() {
                                 {formatSignalStrength(item)}
                               </span>
                             </div>
-                            <div className="mt-4 flex items-center justify-between gap-3 border-t border-[rgba(26,24,19,0.14)] pt-3 text-[11px] uppercase tracking-wide text-nofx-text-muted">
+                            <div className="mt-4 flex items-center justify-between gap-3 border-t border-[rgba(25,36,52,0.14)] pt-3 text-[11px] uppercase tracking-wide text-nofx-text-muted">
                               <span>{categoryLabel(item.category, 'en')}</span>
                               <span>{signalMarketType(item)}</span>
                             </div>
@@ -1839,7 +1839,7 @@ export function StrategyStudioPage() {
                             className={`rounded-lg border p-3 text-left transition ${
                               selected
                                 ? 'border-nofx-gold bg-nofx-gold/10'
-                                : 'border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper hover:border-[rgba(26,24,19,0.24)]'
+                                : 'border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper hover:border-[rgba(25,36,52,0.24)]'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -1873,7 +1873,7 @@ export function StrategyStudioPage() {
                   >
                     {detailSignal ? (
                       <>
-                        <section className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter px-4 py-3">
+                        <section className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter px-4 py-3">
                           <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
@@ -1909,7 +1909,7 @@ export function StrategyStudioPage() {
                                   )
                                 }
                                 disabled={detailLoading}
-                                className="inline-flex items-center gap-2 rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-3 py-2 text-xs text-nofx-text-muted hover:text-nofx-text disabled:opacity-50"
+                                className="inline-flex items-center gap-2 rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-3 py-2 text-xs text-nofx-text-muted hover:text-nofx-text disabled:opacity-50"
                               >
                                 <RefreshCw
                                   className={`h-3.5 w-3.5 ${
@@ -1940,7 +1940,7 @@ export function StrategyStudioPage() {
                         />
                       </>
                     ) : (
-                      <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-4 py-4 text-sm text-nofx-text-muted">
+                      <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-4 py-4 text-sm text-nofx-text-muted">
                         NOFX Autopilot follows the Claw402 direction board and
                         uses liquidation structure and raw candles as context.
                       </div>
@@ -1951,7 +1951,7 @@ export function StrategyStudioPage() {
                 {listMode === 'claw402' &&
                 signals.length > 0 &&
                 visibleSignalItems.length === 0 ? (
-                  <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-3 py-3 text-sm text-nofx-text-muted">
+                  <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-3 py-3 text-sm text-nofx-text-muted">
                     No Claw402 markets available.
                   </div>
                 ) : null}
@@ -1959,17 +1959,17 @@ export function StrategyStudioPage() {
                 {listMode === 'pool' &&
                 visibleSymbols.length === 0 &&
                 !symbolsLoading ? (
-                  <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper px-3 py-3 text-sm text-nofx-text-muted">
+                  <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper px-3 py-3 text-sm text-nofx-text-muted">
                     No markets available.
                   </div>
                 ) : null}
               </section>
 
-              <details className="hidden rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-4">
+              <details className="hidden rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-deeper p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-nofx-text">
                   {text(language, 'Advanced settings', 'Advanced settings')}
                 </summary>
-                <div className="mt-4 rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
+                <div className="mt-4 rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter p-4">
                   <div className="mb-3 text-sm font-semibold text-nofx-text">
                     {text(language, 'Trading style', 'Trading style')}
                   </div>
@@ -1982,7 +1982,7 @@ export function StrategyStudioPage() {
                         className={`rounded-lg border px-3 py-2 text-sm transition ${
                           activeProfile === profile.value
                             ? 'border-nofx-gold bg-nofx-gold/10 text-nofx-gold'
-                            : 'border-[rgba(26,24,19,0.14)] text-nofx-text-muted hover:text-nofx-text'
+                            : 'border-[rgba(25,36,52,0.14)] text-nofx-text-muted hover:text-nofx-text'
                         }`}
                       >
                         {text(language, profile.zh, profile.en)}
@@ -1991,7 +1991,7 @@ export function StrategyStudioPage() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
+                  <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter p-4">
                     <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-nofx-text">
                       <Sparkles className="h-4 w-4 text-nofx-gold" />
                       {text(language, 'Raw candles', 'Raw candles')}
@@ -2011,7 +2011,7 @@ export function StrategyStudioPage() {
                                 indicators.klines.primary_timeframe ===
                                 timeframe
                                   ? 'border-nofx-gold bg-nofx-gold/10 text-nofx-gold'
-                                  : 'border-[rgba(26,24,19,0.14)] text-nofx-text-muted hover:text-nofx-text'
+                                  : 'border-[rgba(25,36,52,0.14)] text-nofx-text-muted hover:text-nofx-text'
                               }`}
                             >
                               {timeframe}
@@ -2032,7 +2032,7 @@ export function StrategyStudioPage() {
                               className={`rounded-lg border px-3 py-2 text-sm ${
                                 indicators.klines.primary_count === count
                                   ? 'border-nofx-gold bg-nofx-gold/10 text-nofx-gold'
-                                  : 'border-[rgba(26,24,19,0.14)] text-nofx-text-muted hover:text-nofx-text'
+                                  : 'border-[rgba(25,36,52,0.14)] text-nofx-text-muted hover:text-nofx-text'
                               }`}
                             >
                               {count}
@@ -2043,7 +2043,7 @@ export function StrategyStudioPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
+                  <div className="rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter p-4">
                     <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-nofx-text">
                       <Shield className="h-4 w-4 text-nofx-success" />
                       {text(
@@ -2064,7 +2064,7 @@ export function StrategyStudioPage() {
                               max_positions: Number(event.target.value),
                             })
                           }
-                          className="w-full rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
+                          className="w-full rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
                         >
                           {[1, 2, 3, 4, 5, 6, 7, 8].map((value) => (
                             <option key={value} value={value}>
@@ -2082,7 +2082,7 @@ export function StrategyStudioPage() {
                           onChange={(event) =>
                             setLeverage(Number(event.target.value))
                           }
-                          className="w-full rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
+                          className="w-full rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
                         >
                           {[1, 2, 3, 5, 8, 10].map((value) => (
                             <option key={value} value={value}>
@@ -2106,7 +2106,7 @@ export function StrategyStudioPage() {
                               min_confidence: Number(event.target.value),
                             })
                           }
-                          className="w-full rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
+                          className="w-full rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text"
                         >
                           {confidenceOptions.map((value) => (
                             <option key={value} value={value}>
@@ -2119,7 +2119,7 @@ export function StrategyStudioPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
+                <div className="mt-4 rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg-lighter p-4">
                   <div className="mb-2 text-sm font-semibold text-nofx-text">
                     {text(language, 'Strategy note', 'Strategy note')}
                   </div>
@@ -2133,7 +2133,7 @@ export function StrategyStudioPage() {
                       'Example: only trade clean trends; skip entries when board signals conflict with candles.',
                       'Example: only trade clean trends; skip entries when board signals conflict with candles.'
                     )}
-                    className="h-28 w-full resize-none rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text outline-none placeholder:text-nofx-text-muted/50"
+                    className="h-28 w-full resize-none rounded-lg border border-[rgba(25,36,52,0.14)] bg-nofx-bg px-3 py-2 text-sm text-nofx-text outline-hidden placeholder:text-nofx-text-muted/50"
                   />
                 </div>
               </details>

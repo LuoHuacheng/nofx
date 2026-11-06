@@ -1,0 +1,329 @@
+.ai-wallet-setup {
+  color: #192434;
+  font-size: 14px;
+  line-height: 1.55;
+  display: grid;
+  gap: 20px;
+}
+.ai-wallet-setup h2 {
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+  margin: 0;
+}
+.ai-wallet-setup p {
+  margin: 8px 0 16px;
+  color: #637087;
+}
+.ai-wallet-setup button {
+  transition: background 0.15s;
+}
+.ai-wallet-setup button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ai-wallet-setup button:focus-visible,
+.ai-wallet-setup summary:focus-visible,
+.ai-wallet-setup input:focus-visible {
+  outline: 2px solid #295be8;
+  outline-offset: 3px;
+}
+.ai-wallet-primary,
+.ai-wallet-secondary {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  border-radius: 9px;
+  font-weight: 600;
+  padding: 11px 18px;
+}
+.ai-wallet-primary {
+  color: white;
+  background: #295be8;
+  border: 1px solid #295be8;
+}
+.ai-wallet-primary:hover:not(:disabled) {
+  background: #204bc4;
+}
+.ai-wallet-secondary {
+  color: #39475b;
+  background: white;
+  border: 1px solid #e1e7f0;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+.ai-wallet-link {
+  color: #637087;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 13px;
+  background: none;
+  padding: 4px 0;
+}
+.ai-wallet-model {
+  border: 1px solid #e1e7f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 18px;
+}
+.ai-wallet-model summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+}
+.ai-wallet-model summary > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ai-wallet-model small,
+.ai-wallet-muted {
+  color: #707e92;
+  font-size: 12px;
+}
+.ai-wallet-model-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.ai-wallet-model-grid button {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid #e1e7f0;
+  border-radius: 8px;
+}
+.ai-wallet-model-grid button[aria-pressed='true'] {
+  border-color: #295be8;
+  background: #edf2ff;
+}
+.ai-wallet-model-grid span {
+  font-size: 11px;
+  color: #637087;
+}
+.ai-wallet-steps {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+  font-size: 12px;
+  color: #707e92;
+}
+.ai-wallet-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-wallet-steps li > span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  border: 1px solid #e1e7f0;
+}
+.ai-wallet-steps [aria-current='step'] {
+  color: #295be8;
+  font-weight: 600;
+}
+.ai-wallet-steps [aria-current='step'] > span,
+.ai-wallet-steps [data-complete='true'] > span {
+  background: #295be8;
+  border-color: #295be8;
+  color: white;
+}
+.ai-wallet-welcome,
+.ai-wallet-panel {
+  border: 1px solid #e1e7f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 24px;
+}
+.ai-wallet-welcome {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 30px 40px;
+}
+.ai-wallet-welcome > p {
+  max-width: 490px;
+}
+.ai-wallet-welcome .ai-wallet-primary {
+  min-width: 270px;
+  margin: 4px 0 12px;
+}
+.ai-wallet-icon {
+  color: #295be8;
+  background: #edf2ff;
+  padding: 15px;
+  border-radius: 16px;
+  margin-bottom: 15px;
+}
+.ai-wallet-setup .ai-wallet-caption {
+  font-size: 12px;
+  margin: 14px 0 0;
+  color: #707e92;
+}
+.ai-wallet-panel > label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.ai-wallet-panel > input,
+.ai-wallet-key {
+  border: 1px solid #e1e7f0;
+  border-radius: 8px;
+  background: #f6f8fc;
+  width: 100%;
+  margin-bottom: 12px;
+}
+.ai-wallet-panel input:not([type='checkbox']) {
+  font-family: monospace;
+  padding: 12px;
+  width: 100%;
+}
+.ai-wallet-key {
+  display: flex;
+  align-items: center;
+}
+.ai-wallet-key input {
+  background: transparent;
+  min-width: 0;
+}
+.ai-wallet-key button {
+  padding: 12px;
+}
+.ai-wallet-panel > .ai-wallet-primary {
+  display: flex;
+  width: 100%;
+  margin-top: 16px;
+}
+.ai-wallet-panel > .ai-wallet-link {
+  display: block;
+  margin: 12px auto 0;
+}
+.ai-wallet-panel .ai-wallet-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 14px;
+}
+.ai-wallet-check input {
+  width: 17px;
+  height: 17px;
+  accent-color: #295be8;
+}
+.ai-wallet-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.ai-wallet-network {
+  white-space: nowrap;
+  font-size: 12px;
+  color: #245dc3;
+  background: #edf3ff;
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+.ai-wallet-deposit {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 18px;
+  border: 1px solid #e1e7f0;
+  border-radius: 10px;
+}
+.ai-wallet-qr {
+  background: white;
+  padding: 4px;
+  flex-shrink: 0;
+}
+.ai-wallet-deposit label {
+  color: #707e92;
+  font-size: 12px;
+}
+.ai-wallet-deposit code {
+  display: block;
+  font-size: 13px;
+  word-break: break-all;
+  margin: 5px 0 12px;
+}
+.ai-wallet-funding-guide {
+  list-style: decimal;
+  padding-left: 22px;
+  margin: 18px 0 10px;
+}
+.ai-wallet-funding-guide li {
+  padding: 3px 0;
+}
+.ai-wallet-setup .ai-wallet-network-note {
+  color: #8d641f;
+  font-size: 12px;
+  margin: 10px 0 18px;
+}
+.ai-wallet-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  background: #f6f8fc;
+  border-radius: 10px;
+  padding: 16px;
+}
+.ai-wallet-balance > div {
+  display: grid;
+  gap: 4px;
+}
+.ai-wallet-balance strong {
+  font-size: 22px;
+  color: #192434;
+}
+.ai-wallet-balance small,
+.ai-wallet-balance span {
+  font-size: 12px;
+  color: #637087;
+}
+.ai-wallet-balance button {
+  flex-shrink: 0;
+}
+.ai-wallet-finish {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+.ai-wallet-advanced {
+  border-top: 1px solid #eceee7;
+  margin-top: 20px;
+  padding-top: 12px;
+  font-size: 12px;
+  color: #7d8375;
+}
+.ai-wallet-advanced summary {
+  cursor: pointer;
+}
+.ai-wallet-custody {
+  padding: 0 6px;
+  font-size: 12px;
+  color: #4d604e;
+}
+.ai-wallet-custody p {
+  margin: 4px 0 0;
+  line-height: 1.6;
+}
+.ai-wallet-error {
+  background: #fff0ed;
+  color: #b7382e !important;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 0 !important;
+}

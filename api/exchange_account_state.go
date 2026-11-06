@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -225,13 +226,16 @@ func probeExchangeAccountState(exchangeCfg *store.Exchange, userID string) Excha
 func buildExchangeProbeTrader(exchangeCfg *store.Exchange, userID string) (trader.Trader, error) {
 	switch exchangeCfg.ExchangeType {
 	case "binance":
-		return binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID, exchangeCfg.Testnet), nil
+		if exchangeCfg.Testnet {
+			return binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID, true), nil
+		}
+		return binance.NewAccountTrader(context.Background(), string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID)
 	case "bybit":
 		return bybit.NewBybitTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey)), nil
 	case "okx":
-		return okx.NewOKXTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), string(exchangeCfg.Passphrase)), nil
+		return okx.NewAccountTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), string(exchangeCfg.Passphrase)), nil
 	case "bitget":
-		return bitget.NewBitgetTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), string(exchangeCfg.Passphrase)), nil
+		return bitget.NewAccountTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), string(exchangeCfg.Passphrase)), nil
 	case "gate":
 		return gate.NewGateTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey)), nil
 	case "kucoin":

@@ -202,7 +202,8 @@ func (e *StrategyEngine) buildVergexSystemPrompt(accountEquity float64, variant 
 		sb.WriteString("1. Claw402.ai Direction Board: authoritative trading direction for every symbol.\n")
 		sb.WriteString("2. Claw402.ai Current Direction and Direction History: supporting state-transition context only.\n")
 		sb.WriteString("3. Claw402.ai Cost/Liquidation Heatmap: supporting market-structure context only.\n")
-		sb.WriteString("4. Raw OHLCV candles: supporting price context only.\n\n")
+		sb.WriteString("4. Claw402.ai Holder Win-Rate Matrix: supporting holder-quality context only (crowd skill mix, trapped above/below water, entry-cost concentration).\n")
+		sb.WriteString("5. Raw OHLCV candles: supporting price context only.\n\n")
 		sb.WriteString("# Trading Rules\n\n")
 		sb.WriteString("- Follow the current Claw402 direction exactly; detail data and candles may explain the signal but may not veto, reverse, or prematurely exit it.\n")
 		sb.WriteString(vergexHoldRules())
@@ -213,7 +214,8 @@ func (e *StrategyEngine) buildVergexSystemPrompt(accountEquity float64, variant 
 		sb.WriteString("1. Claw402.ai Direction Board: authoritative trading direction for every symbol.\n")
 		sb.WriteString("2. Claw402.ai Current Direction and Direction History: supporting state-transition context only.\n")
 		sb.WriteString("3. Claw402.ai Cost/Liquidation Heatmap: supporting market-structure context only.\n")
-		sb.WriteString("4. Raw OHLCV candles: supporting price context only.\n\n")
+		sb.WriteString("4. Claw402.ai Holder Win-Rate Matrix: supporting holder-quality context only (crowd skill mix, trapped above/below water, entry-cost concentration).\n")
+		sb.WriteString("5. Raw OHLCV candles: supporting price context only.\n\n")
 		sb.WriteString("# Trading Rules\n\n")
 		sb.WriteString("- Follow the current Claw402 direction exactly; detail data and candles may explain the signal but may not veto, reverse, or prematurely exit it.\n")
 		sb.WriteString(vergexHoldRules())
@@ -897,10 +899,8 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 				sb.WriteString(e.formatQuantData(quantData))
 			}
 		}
-		if ctx.VergexDataMap != nil {
-			if vergexData, hasVergex := ctx.VergexDataMap[coin.Symbol]; hasVergex {
-				sb.WriteString(e.formatVergexData(vergexData))
-			}
+		if data := vergexDataForSymbol(ctx, coin.Symbol); data != nil {
+			sb.WriteString(e.formatVergexData(data))
 		}
 		sb.WriteString("\n")
 	}
@@ -967,12 +967,12 @@ func (e *StrategyEngine) formatPositionInfo(index int, pos PositionInfo, ctx *Co
 				sb.WriteString(e.formatQuantData(quantData))
 			}
 		}
-		if ctx.VergexDataMap != nil {
-			if vergexData, hasVergex := ctx.VergexDataMap[pos.Symbol]; hasVergex {
-				sb.WriteString(e.formatVergexData(vergexData))
-			}
-		}
 		sb.WriteString("\n")
+	}
+	// Signals remain essential even when the candle request failed. Position
+	// symbols use SOLUSDT while Vergex keys use SOL; retain HIP-3 namespaces.
+	if data := vergexDataForSymbol(ctx, pos.Symbol); data != nil {
+		sb.WriteString(e.formatVergexData(data))
 	}
 
 	return sb.String()
@@ -1079,9 +1079,13 @@ func (e *StrategyEngine) formatMarketData(data *market.Data) string {
 	if indicators.EnableOI || indicators.EnableFundingRate {
 		sb.WriteString(fmt.Sprintf("Additional data for %s:\n\n", data.Symbol))
 
-		if indicators.EnableOI && data.OpenInterest != nil {
-			sb.WriteString(fmt.Sprintf("Open Interest: Latest: %.2f Average: %.2f\n\n",
-				data.OpenInterest.Latest, data.OpenInterest.Average))
+		if indicators.EnableOI {
+			if data.OpenInterest == nil {
+				sb.WriteString("Open Interest: unavailable (not a measured zero); OI liquidity has not been verified\n\n")
+			} else {
+				sb.WriteString(fmt.Sprintf("Open Interest: Latest: %.2f Average: %.2f\n\n",
+					data.OpenInterest.Latest, data.OpenInterest.Average))
+			}
 		}
 
 		if indicators.EnableFundingRate {

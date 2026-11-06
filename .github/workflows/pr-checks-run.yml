@@ -25,11 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: go.mod
 
       - name: Install dependencies
         run: |
@@ -103,6 +105,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch private chart library
+        uses: ./.github/actions/charting
+        with:
+          ssh-key: ${{ secrets.CHARTING_LIBRARY_SSH_KEY }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

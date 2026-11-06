@@ -1,6 +1,8 @@
 package store
 
 import (
+	"math"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -24,6 +26,10 @@ var modelPrices = map[string]float64{
 	"deepseek-reasoner": 0.005,
 	"deepseek-v4-flash": 0.003,
 	"deepseek-v4-pro":   0.01,
+	"gpt-6":             0.24,
+	"gpt-6.1-sol":       0.05,
+	"gpt-6-sol":         0.05,
+	"gpt-6-luna":        0.004,
 	"gpt-5.6":           0.06,
 	"gpt-5.6-terra":     0.03,
 	"gpt-5.6-luna":      0.012,
@@ -40,43 +46,76 @@ func GetModelPrice(model string) float64 {
 	return 0.01 // default fallback
 }
 
-// modelTokenPrices maps model → USD per 1M input/output tokens, mirroring the
-// claw402 gateway pricing config (providers/*.yaml). Used to derive the actual
-// upto-settled cost from streamed token usage, where the gateway cannot
-// deliver the settlement header (SSE headers are flushed before usage is known).
-var modelTokenPrices = map[string]struct{ In, Out float64 }{
-	"gpt-5.6":           {5, 30},
-	"gpt-5.6-terra":     {2.5, 15},
-	"gpt-5.6-luna":      {1, 6},
-	"claude-fable":      {10, 50},
-	"claude-opus":       {5, 25},
-	"deepseek-v4-flash": {0.14, 0.28},
-	"deepseek-v4-pro":   {1.74, 3.48},
-	"deepseek":          {0.27, 1.1},
-	"deepseek-reasoner": {0.55, 2.19},
-	"glm-5":             {0.6, 2},
+// modelTokenPrices is an indicative gateway cost basis, not a receipt or invoice.
+// DeepSeek uses peak rates because this estimator has no request timestamps.
+// Actual Claw402 charges must come from verified settlement, never this table.
+type modelTokenPrice struct {
+	In, Out        float64
+	LongContextAt  int
+	LongContextIn  float64
+	LongContextOut float64
+}
+
+var modelTokenPrices = map[string]modelTokenPrice{
+	"gpt-6":             {In: 12.5, Out: 50, LongContextAt: 272000, LongContextIn: 25, LongContextOut: 75},
+	"gpt-6.1-sol":       {In: 2.5, Out: 10, LongContextAt: 272000, LongContextIn: 5, LongContextOut: 15},
+	"gpt-6-sol":         {In: 2.5, Out: 10, LongContextAt: 272000, LongContextIn: 5, LongContextOut: 15},
+	"gpt-6-luna":        {In: .125, Out: .5, LongContextAt: 272000, LongContextIn: .25, LongContextOut: .75},
+	"gpt-5.6":           {In: 5, Out: 30, LongContextAt: 272000, LongContextIn: 10, LongContextOut: 45},
+	"gpt-5.6-terra":     {In: 2.5, Out: 15, LongContextAt: 272000, LongContextIn: 5, LongContextOut: 22.5},
+	"gpt-5.6-luna":      {In: 1, Out: 6, LongContextAt: 272000, LongContextIn: 2, LongContextOut: 9},
+	"claude-fable":      {In: 12.5, Out: 50},
+	"claude-opus":       {In: 6.25, Out: 25},
+	"deepseek-v4-flash": {In: .30, Out: 1.20},
+	"deepseek-v4-pro":   {In: 1.32, Out: 3.96},
+	"glm-5":             {In: 1, Out: 3.2},
 }
 
 // Gateway upto settlement formula constants (see claw402 token_estimate
 // pricing: token_safety_margin 0.15, token_min_price 0.0001).
 const (
-	uptoSafetyMargin = 1.15
-	uptoMinPriceUSD  = 0.0001
+	uptoSafetyMargin  = 1.15
+	uptoMinPriceUSD   = 0.0001
+	uptoServiceFeeUSD = 0.0012
 )
 
-// ComputeUsageCost derives the upto-settled cost of a call from token usage,
-// using the same formula as the claw402 gateway. ok is false for models
-// without a token price entry.
+// ComputeUsageCost estimates retail cost. It cannot prove payment, resolve
+// time-based DeepSeek rates or replace the gateway's verified settlement amount.
 func ComputeUsageCost(model string, promptTokens, completionTokens int) (float64, bool) {
+	if promptTokens < 0 || completionTokens < 0 {
+		return 0, false
+	}
+	model = strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(model, "/"); i >= 0 {
+		model = model[i+1:]
+	}
+	switch model {
+	case "gpt6", "gpt-6-astra":
+		model = "gpt-6"
+	case "gpt-5.6-sol":
+		model = "gpt-5.6"
+	case "deepseek", "deepseek-flash":
+		model = "deepseek-v4-flash"
+	case "deepseek-reasoner":
+		model = "deepseek-v4-pro"
+	case "claude-fable-5":
+		model = "claude-fable"
+	case "claude-opus-4-8":
+		model = "claude-opus"
+	}
 	p, ok := modelTokenPrices[model]
 	if !ok {
 		return 0, false
 	}
-	cost := (float64(promptTokens)*p.In + float64(completionTokens)*p.Out) / 1e6 * uptoSafetyMargin
+	inputPrice, outputPrice := p.In, p.Out
+	if p.LongContextAt > 0 && promptTokens > p.LongContextAt {
+		inputPrice, outputPrice = p.LongContextIn, p.LongContextOut
+	}
+	cost := (float64(promptTokens)*inputPrice + float64(completionTokens)*outputPrice) / 1e6 * uptoSafetyMargin
 	if cost < uptoMinPriceUSD {
 		cost = uptoMinPriceUSD
 	}
-	return cost, true
+	return math.Ceil((cost+uptoServiceFeeUSD)*1e6) / 1e6, true
 }
 
 // AIChargeStore handles AI charge records

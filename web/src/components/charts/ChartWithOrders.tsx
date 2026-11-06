@@ -250,21 +250,21 @@ export function ChartWithOrders({
         width: chartContainerRef.current.clientWidth,
         height: height,
         layout: {
-          background: { color: '#F1ECE2' },
-          textColor: '#1A1813',
+          background: { color: '#f6f8fc' },
+          textColor: '#192434',
         },
         grid: {
-          vertLines: { color: 'rgba(26, 24, 19, 0.08)' },
-          horzLines: { color: 'rgba(26, 24, 19, 0.08)' },
+          vertLines: { color: 'rgba(25,36,52, 0.08)' },
+          horzLines: { color: 'rgba(25,36,52, 0.08)' },
         },
         crosshair: {
           mode: 1, // Normal crosshair
         },
         rightPriceScale: {
-          borderColor: 'rgba(26, 24, 19, 0.14)',
+          borderColor: 'rgba(25,36,52, 0.14)',
         },
         timeScale: {
-          borderColor: 'rgba(26, 24, 19, 0.14)',
+          borderColor: 'rgba(25,36,52, 0.14)',
           timeVisible: true,
           secondsVisible: false,
         },
@@ -531,21 +531,21 @@ export function ChartWithOrders({
   return (
     <div
       className="relative"
-      style={{ background: '#F1ECE2', borderRadius: '8px', overflow: 'hidden' }}
+      style={{ background: '#f6f8fc', borderRadius: '8px', overflow: 'hidden' }}
     >
       {/* Title bar */}
       <div
         className="flex items-center justify-between p-4"
-        style={{ borderBottom: '1px solid rgba(26, 24, 19, 0.14)' }}
+        style={{ borderBottom: '1px solid rgba(25,36,52, 0.14)' }}
       >
         <div className="flex items-center gap-3">
           <span className="text-xl">📈</span>
-          <h3 className="text-lg font-bold" style={{ color: '#1A1813' }}>
+          <h3 className="text-lg font-bold" style={{ color: '#192434' }}>
             {symbol} {interval}
           </h3>
         </div>
         {loading && (
-          <div className="text-sm" style={{ color: '#8A8478' }}>
+          <div className="text-sm" style={{ color: '#707e92' }}>
             {t('chartWithOrders.loading', language)}
           </div>
         )}
@@ -564,28 +564,28 @@ export function ChartWithOrders({
               left: '10px',
               top: '10px',
               padding: '8px 12px',
-              background: 'rgba(247, 244, 236, 0.95)',
-              border: '1px solid rgba(224, 72, 59, 0.3)',
+              background: 'rgba(255,255,255, 0.95)',
+              border: '1px solid rgba(41,91,232, 0.3)',
               borderRadius: '6px',
-              color: '#1A1813',
+              color: '#192434',
               fontSize: '12px',
               fontFamily: 'monospace',
               pointerEvents: 'none',
               zIndex: 10,
               backdropFilter: 'blur(10px)',
-              boxShadow: '0 4px 12px rgba(26, 24, 19, 0.15)',
+              boxShadow: '0 4px 12px rgba(25,36,52, 0.15)',
             }}
           >
             <div
               style={{
                 marginBottom: '6px',
-                color: '#E0483B',
+                color: '#295be8',
                 fontWeight: 'bold',
                 fontSize: '11px',
               }}
             >
               {new Date((tooltipData.time as number) * 1000).toLocaleString(
-                'en-US',
+                language === 'zh' ? 'zh-CN' : 'en-US',
                 {
                   month: 'short',
                   day: 'numeric',
@@ -602,22 +602,22 @@ export function ChartWithOrders({
                 fontSize: '11px',
               }}
             >
-              <span style={{ color: '#8A8478' }}>O:</span>
-              <span style={{ color: '#1A1813', fontWeight: '500' }}>
+              <span style={{ color: '#707e92' }}>O:</span>
+              <span style={{ color: '#192434', fontWeight: '500' }}>
                 {tooltipData.open?.toFixed(2)}
               </span>
 
-              <span style={{ color: '#8A8478' }}>H:</span>
+              <span style={{ color: '#707e92' }}>H:</span>
               <span style={{ color: '#2E8B57', fontWeight: '500' }}>
                 {tooltipData.high?.toFixed(2)}
               </span>
 
-              <span style={{ color: '#8A8478' }}>L:</span>
+              <span style={{ color: '#707e92' }}>L:</span>
               <span style={{ color: '#D6433A', fontWeight: '500' }}>
                 {tooltipData.low?.toFixed(2)}
               </span>
 
-              <span style={{ color: '#8A8478' }}>C:</span>
+              <span style={{ color: '#707e92' }}>C:</span>
               <span
                 style={{
                   color:
@@ -651,8 +651,8 @@ export function ChartWithOrders({
       <div
         className="flex items-center gap-4 p-4 text-xs"
         style={{
-          borderTop: '1px solid rgba(26, 24, 19, 0.14)',
-          color: '#8A8478',
+          borderTop: '1px solid rgba(25,36,52, 0.14)',
+          color: '#707e92',
         }}
       >
         <div className="flex items-center gap-2">

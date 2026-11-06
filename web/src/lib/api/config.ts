@@ -14,7 +14,13 @@ export const configApi = {
   async getModelConfigs(): Promise<AIModel[]> {
     const result = await httpClient.get<AIModel[]>(`${API_BASE}/models`)
     if (!result.success) throw new Error('Failed to fetch model configs')
-    return Array.isArray(result.data) ? result.data : []
+    if (!Array.isArray(result.data)) return []
+    // Normalize the legacy provider label wherever saved models are displayed.
+    return result.data.map((model) =>
+      model.provider === 'claw402'
+        ? { ...model, name: model.name.replace(/^claw402\b/i, 'Claw402') }
+        : model
+    )
   },
 
   async getSupportedModels(): Promise<AIModel[]> {

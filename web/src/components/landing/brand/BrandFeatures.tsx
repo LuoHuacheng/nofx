@@ -57,7 +57,7 @@ export default function BrandFeatures() {
           {features.map((f, i) => (
             <motion.div
               key={i}
-              className="group relative bg-nofx-bg-lighter border border-[rgba(26,24,19,0.14)] p-8 hover:bg-nofx-bg-deeper transition-colors cursor-default overflow-hidden"
+              className="group relative bg-nofx-bg-lighter border border-[rgba(25,36,52,0.14)] p-8 hover:bg-nofx-bg-deeper transition-colors cursor-default overflow-hidden"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}

@@ -1,0 +1,69 @@
+.ai-wallet-backup {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #dee4da;
+  border-radius: 10px;
+  background: #fafbf8;
+  color: #33463b;
+}
+.ai-wallet-backup-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+}
+.ai-wallet-backup p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 13px;
+  color: #697366;
+}
+.ai-wallet-backup label {
+  display: block;
+  font-size: 12px;
+}
+.ai-wallet-backup input {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin: 6px 0 12px;
+  border: 1px solid #dce2d7;
+  border-radius: 7px;
+  background: white;
+  color: #253b2e;
+  font-family: monospace;
+  font-size: 12px;
+}
+.ai-wallet-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-wallet-backup button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid #d8dfd3;
+  border-radius: 7px;
+  background: white;
+  color: #344f3d;
+  cursor: pointer;
+  font-size: 13px;
+}
+.ai-wallet-backup button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.ai-wallet-backup small {
+  display: block;
+  margin-top: 10px;
+  color: #7d7868;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.ai-wallet-backup [role='alert'] {
+  color: #b33226;
+  margin-bottom: 0;
+}

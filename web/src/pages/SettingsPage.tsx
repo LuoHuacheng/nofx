@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   User,
   Cpu,
   Building2,
-  MessageCircle,
   Eye,
   EyeOff,
   ChevronRight,
@@ -15,11 +15,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { api } from '../lib/api'
 import { ExchangeConfigModal } from '../components/trader/ExchangeConfigModal'
-import { TelegramConfigModal } from '../components/trader/TelegramConfigModal'
 import { ModelConfigModal } from '../components/trader/ModelConfigModal'
 import type { Exchange, AIModel, ExchangeAccountState } from '../types'
 
-type Tab = 'account' | 'models' | 'exchanges' | 'telegram'
+type Tab = 'account' | 'models' | 'exchanges'
 
 function configBadge(label: string, active: boolean) {
   return (
@@ -36,9 +35,13 @@ function configBadge(label: string, active: boolean) {
 }
 
 export function SettingsPage() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const { language } = useLanguage()
-  const [activeTab, setActiveTab] = useState<Tab>('account')
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const tab = searchParams.get('tab')
+    return tab === 'models' || tab === 'exchanges' ? tab : 'account'
+  })
 
   // Account state
   const [newPassword, setNewPassword] = useState('')
@@ -59,9 +62,6 @@ export function SettingsPage() {
   const [exchangeStatesLoading, setExchangeStatesLoading] = useState(false)
   const [showExchangeModal, setShowExchangeModal] = useState(false)
   const [editingExchange, setEditingExchange] = useState<string | null>(null)
-
-  // Telegram state
-  const [showTelegramModal, setShowTelegramModal] = useState(false)
 
   const refreshModelConfigs = async () => {
     const [configs, supported] = await Promise.all([
@@ -125,8 +125,11 @@ export function SettingsPage() {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Failed to update password')
       }
-      toast.success('Password updated successfully')
+      toast.success(
+        'Password updated. Please sign in again; all previous sessions have expired.'
+      )
       setNewPassword('')
+      await logout()
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Failed to update password'
@@ -329,19 +332,18 @@ export function SettingsPage() {
     { key: 'account', label: 'Account', icon: <User size={16} /> },
     { key: 'models', label: 'AI Models', icon: <Cpu size={16} /> },
     { key: 'exchanges', label: 'Exchanges', icon: <Building2 size={16} /> },
-    { key: 'telegram', label: 'Telegram', icon: <MessageCircle size={16} /> },
   ]
 
   return (
     <div
-      className="min-h-screen pt-20 pb-12 px-4"
-      style={{ background: '#F1ECE2' }}
+      className="nofx-settings min-h-screen pt-20 pb-12 px-4"
+      style={{ background: '#f6f8fc' }}
     >
       <div className="max-w-2xl mx-auto">
         <h1 className="text-xl font-bold text-nofx-text mb-6">Settings</h1>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-nofx-bg-lighter border border-[rgba(26,24,19,0.14)] rounded-xl p-1">
+        <div className="flex gap-1 mb-6 bg-nofx-bg-lighter border border-[rgba(25,36,52,0.14)] rounded-xl p-1">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -360,7 +362,7 @@ export function SettingsPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="bg-nofx-bg-lighter backdrop-blur-xl border border-[rgba(26,24,19,0.14)] rounded-2xl p-6">
+        <div className="bg-nofx-bg-lighter backdrop-blur-xl border border-[rgba(25,36,52,0.14)] rounded-2xl p-6">
           {/* Account Tab */}
           {activeTab === 'account' && (
             <div className="space-y-6">
@@ -371,7 +373,7 @@ export function SettingsPage() {
                 </p>
               </div>
 
-              <div className="border-t border-[rgba(26,24,19,0.14)] pt-6">
+              <div className="border-t border-[rgba(25,36,52,0.14)] pt-6">
                 <h3 className="text-sm font-semibold text-nofx-text mb-4">
                   Change Password
                 </h3>
@@ -385,7 +387,7 @@ export function SettingsPage() {
                         type={showPassword ? 'text' : 'password'}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] rounded-xl px-4 py-3 pr-11 text-sm text-nofx-text placeholder-nofx-text-muted focus:outline-none focus:border-nofx-gold/60 focus:ring-1 focus:ring-nofx-gold/30 transition-all"
+                        className="w-full bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] rounded-xl px-4 py-3 pr-11 text-sm text-nofx-text placeholder-nofx-text-muted focus:outline-hidden focus:border-nofx-gold/60 focus:ring-1 focus:ring-nofx-gold/30 transition-all"
                         placeholder="At least 8 characters"
                         required
                       />
@@ -447,7 +449,7 @@ export function SettingsPage() {
                         setEditingModel(model.id)
                         setShowModelModal(true)
                       }}
-                      className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-nofx-bg-deeper hover:bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] transition-colors group"
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-nofx-bg-deeper hover:bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] transition-colors group"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-nofx-bg-deeper flex items-center justify-center">
@@ -533,7 +535,7 @@ export function SettingsPage() {
                           setEditingExchange(exchange.id)
                           setShowExchangeModal(true)
                         }}
-                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-nofx-bg-deeper hover:bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] transition-colors group"
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-nofx-bg-deeper hover:bg-nofx-bg-deeper border border-[rgba(25,36,52,0.14)] transition-colors group"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-lg bg-nofx-bg-deeper flex items-center justify-center">
@@ -605,39 +607,12 @@ export function SettingsPage() {
               )}
             </div>
           )}
-
-          {/* Telegram Tab */}
-          {activeTab === 'telegram' && (
-            <div className="space-y-4">
-              <p className="text-sm text-nofx-text-muted">
-                Connect a Telegram bot to receive trading notifications and
-                interact with your traders.
-              </p>
-              <button
-                onClick={() => setShowTelegramModal(true)}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-nofx-bg-deeper hover:bg-nofx-bg-deeper border border-[rgba(26,24,19,0.14)] transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#0088cc]/20 flex items-center justify-center">
-                    <MessageCircle size={14} className="text-[#0088cc]" />
-                  </div>
-                  <span className="text-sm font-medium text-nofx-text">
-                    Configure Telegram Bot
-                  </span>
-                </div>
-                <ChevronRight
-                  size={14}
-                  className="text-nofx-text-muted group-hover:text-nofx-text-muted transition-colors"
-                />
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
       {/* AI Model Modal */}
       {showModelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs px-4">
           <ModelConfigModal
             allModels={supportedModels}
             configuredModels={configuredModels}
@@ -655,7 +630,7 @@ export function SettingsPage() {
 
       {/* Exchange Modal */}
       {showExchangeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs px-4">
           <ExchangeConfigModal
             allExchanges={exchanges}
             editingExchangeId={editingExchange}
@@ -665,16 +640,6 @@ export function SettingsPage() {
               setShowExchangeModal(false)
               setEditingExchange(null)
             }}
-            language={language}
-          />
-        </div>
-      )}
-
-      {/* Telegram Modal */}
-      {showTelegramModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-          <TelegramConfigModal
-            onClose={() => setShowTelegramModal(false)}
             language={language}
           />
         </div>

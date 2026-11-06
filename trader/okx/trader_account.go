@@ -12,6 +12,9 @@ import (
 
 // GetBalance gets account balance
 func (t *OKXTrader) GetBalance() (map[string]interface{}, error) {
+	if t.accountOnly {
+		return t.frontierBalance()
+	}
 	// Check cache
 	t.balanceCacheMutex.RLock()
 	if t.cachedBalance != nil && time.Since(t.balanceCacheTime) < t.cacheDuration {

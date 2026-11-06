@@ -23,6 +23,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch private chart library
+        uses: ./.github/actions/charting
+        with:
+          ssh-key: ${{ secrets.CHARTING_LIBRARY_SSH_KEY }}
 
       - name: Create minimal .env for testing
         run: |

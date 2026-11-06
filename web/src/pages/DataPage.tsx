@@ -1,18 +1,6 @@
-import { useLanguage } from '../contexts/LanguageContext'
-import { t } from '../i18n/translations'
+import { StrategyMarketPage } from './StrategyMarketPage'
 
+// Open strategy discovery from Data using the same restricted Vergex embed.
 export function DataPage() {
-  const { language } = useLanguage()
-
-  return (
-    <div className="w-full h-[calc(100vh-64px)]">
-      <iframe
-        src="https://vergex.trade/trending"
-        title={t('dataCenter', language)}
-        className="w-full h-full border-0"
-        allow="fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
-      />
-    </div>
-  )
+  return <StrategyMarketPage />
 }

@@ -77,10 +77,10 @@ export default function LiveFeed() {
   }, [])
 
   return (
-    <section className="w-full bg-nofx-bg-lighter border-y border-[rgba(26,24,19,0.14)] py-1 overflow-hidden relative">
+    <section className="w-full bg-nofx-bg-lighter border-y border-[rgba(25,36,52,0.14)] py-1 overflow-hidden relative">
       <div className="max-w-[1920px] mx-auto px-4 flex flex-col md:flex-row gap-0 md:gap-8 items-stretch h-[240px] md:h-12 text-xs font-mono">
         {/* Left Status Bar (Static) */}
-        <div className="hidden md:flex items-center gap-6 text-nofx-text-muted border-r border-[rgba(26,24,19,0.14)] pr-6 shrink-0">
+        <div className="hidden md:flex items-center gap-6 text-nofx-text-muted border-r border-[rgba(25,36,52,0.14)] pr-6 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-nofx-success rounded-full animate-pulse"></div>
             <span className="font-bold text-nofx-text">WS_CONN: STABLE</span>
@@ -105,9 +105,9 @@ export default function LiveFeed() {
                 <span
                   className={`font-bold w-10 ${
                     log.type === 'RISK'
-                      ? 'text-nofx-danger bg-nofx-danger/10 px-1 rounded'
+                      ? 'text-nofx-danger bg-nofx-danger/10 px-1 rounded-sm'
                       : log.type === 'SIGNAL'
-                        ? 'text-nofx-gold bg-nofx-gold/10 px-1 rounded'
+                        ? 'text-nofx-gold bg-nofx-gold/10 px-1 rounded-sm'
                         : log.type === 'EXEC'
                           ? 'text-nofx-success'
                           : 'text-nofx-text-muted'
@@ -125,7 +125,7 @@ export default function LiveFeed() {
             {logs.map((log) => (
               <div
                 key={log.id}
-                className="flex gap-2 w-full truncate border-b border-[rgba(26,24,19,0.10)] pb-1 last:border-0"
+                className="flex gap-2 w-full truncate border-b border-[rgba(25,36,52,0.10)] pb-1 last:border-0"
               >
                 <span className="text-nofx-text-muted w-16 shrink-0">
                   {log.time.split('.')[0]}

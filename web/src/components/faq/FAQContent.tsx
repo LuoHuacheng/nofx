@@ -16,7 +16,7 @@ function InlineText({ text }: { text: string }) {
         part.startsWith('`') && part.endsWith('`') ? (
           <code
             key={i}
-            className="rounded bg-nofx-bg-deeper border border-[rgba(26,24,19,0.10)] px-1.5 py-0.5 font-mono text-[0.85em] text-nofx-text break-all"
+            className="rounded-sm bg-nofx-bg-deeper border border-[rgba(25,36,52,0.10)] px-1.5 py-0.5 font-mono text-[0.85em] text-nofx-text break-all"
           >
             {part.slice(1, -1)}
           </code>
@@ -60,7 +60,7 @@ function Block({ block }: { block: FAQBlock }) {
               key={i}
               className="flex gap-3 text-sm leading-6 text-nofx-text-muted"
             >
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-nofx-gold/30 bg-nofx-gold/10 font-mono text-[11px] font-bold text-nofx-gold">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-nofx-gold/30 bg-nofx-gold/10 font-sans text-[11px] font-bold text-nofx-gold">
                 {i + 1}
               </span>
               <span>
@@ -85,7 +85,7 @@ function Block({ block }: { block: FAQBlock }) {
               href={link.href}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded border border-nofx-gold/25 bg-nofx-bg-deeper px-2.5 py-1 font-mono text-xs font-semibold text-nofx-gold hover:border-nofx-gold/50 hover:bg-nofx-gold/10"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-nofx-gold/25 bg-nofx-bg-deeper px-2.5 py-1 font-sans text-xs font-semibold text-nofx-gold hover:border-nofx-gold/50 hover:bg-nofx-gold/10"
             >
               {link.label}
               <ExternalLink className="h-3 w-3" />
@@ -137,16 +137,16 @@ export function FAQContent({
           {/* category header — terminal small-caps strip */}
           <div className="flex items-center gap-2.5 border-b border-nofx-gold/20 bg-nofx-bg px-5 py-3 md:px-6">
             <category.icon className="h-4 w-4 text-nofx-gold" />
-            <h2 className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-nofx-text">
+            <h2 className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-nofx-text">
               {category.title}
             </h2>
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.12em] text-nofx-text-muted">
+            <span className="ml-auto font-sans text-[10px] tracking-normal text-nofx-text-muted">
               {category.items.length}{' '}
               {category.items.length === 1 ? 'entry' : 'entries'}
             </span>
           </div>
 
-          <div className="divide-y divide-[rgba(26,24,19,0.10)]">
+          <div className="divide-y divide-[rgba(25,36,52,0.10)]">
             {category.items.map((item) => (
               <section
                 key={item.id}

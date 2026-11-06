@@ -4,6 +4,10 @@ NOFX documentation is available in multiple languages.
 
 NOFX 文档提供多种语言版本。
 
+The six translated project READMEs follow the [English README](../../README.md): current branding, one-line installation, Frontier, Autopilot, first-use setup and upgrade instructions. Linked technical guides may still be in English.
+
+六个翻译版项目 README 与[英文 README](../../README.md)同步：包含新版品牌、一行安装、Frontier、Autopilot、首次配置和升级说明。链接到的技术指南可能仍为英文。
+
 ---
 
 ## 📚 Available Languages / 可用语言
@@ -29,8 +33,8 @@ NOFX 文档提供多种语言版本。
 
 ### 中文 🇨🇳
 - **主 README:** [zh-CN/README.md](zh-CN/README.md)
-- **贡献指南:** [../../CONTRIBUTING.md](../../CONTRIBUTING.md#中文)
-- **安全政策:** [../../SECURITY.md](../../SECURITY.md#中文)
+- **贡献指南:** [../../CONTRIBUTING.md](../../CONTRIBUTING.md)
+- **安全政策:** [../../SECURITY.md](../../SECURITY.md)
 - **常见问题:** [../guides/faq.zh-CN.md](../guides/faq.zh-CN.md)
 
 ### 日本語 🇯🇵
@@ -127,6 +131,10 @@ faq.zh-CN.md                 → Chinese FAQ
 - ✅ Preserved formatting (markdown)
 - ✅ Working internal links
 
+For project READMEs, keep the one-line installer near the top and outside collapsed sections. Preserve executable commands, partner URLs and product names. Keep the four Frontier entry types and the distinction between per-trade approval and Autopilot execution consistent with the English source.
+
+项目 README 的一行安装命令应保留在靠前位置，不放进折叠区域。保持可执行命令、合作链接和产品名称不变；四种 Frontier 入场方式，以及逐笔批准与 Autopilot 自动执行的区别，都应与英文版一致。
+
 **Avoid / 避免:**
 - ❌ Machine translation without review
 - ❌ Inconsistent terminology
@@ -171,8 +179,6 @@ faq.zh-CN.md                 → Chinese FAQ
 
 | Language | Status | Need Volunteers? |
 |----------|--------|------------------|
-| 🇯🇵 Japanese | 📋 Planned | ✅ Yes |
-| 🇰🇷 Korean | 📋 Planned | ✅ Yes |
 | 🇪🇸 Spanish | 📋 Planned | ✅ Yes |
 | 🇫🇷 French | 📋 Planned | ✅ Yes |
 | 🇩🇪 German | 📋 Planned | ✅ Yes |
