@@ -32,7 +32,10 @@ func (c *Controller) policySnapshot(v *View) (risk.Reservation, error) {
 	if err != nil {
 		return risk.Reservation{}, err
 	}
-	marginDec, err := execution.ExactDecimal(margin)
+	// Margin is a requirement, not a venue balance: rounding it up to the
+	// execution precision keeps the hold conservative and keeps 1/3, 1/5 etc.
+	// representable, which plain ExactDecimal rejects.
+	marginDec, err := ceilExact(margin)
 	if err != nil {
 		return risk.Reservation{}, err
 	}
@@ -141,4 +144,16 @@ func (c *Controller) checkPolicy(ctx context.Context, v *View) error {
 		return errors.New("automation policy version changed; re-authorize")
 	}
 	return nil
+}
+
+// ceilExact rounds a requirement up to 12 decimals. A hold that rounds up is
+// conservative; rounding down would let the venue margin exceed the reservation.
+func ceilExact(r *big.Rat) (execution.Decimal, error) {
+	units := new(big.Rat).Mul(r, new(big.Rat).SetInt64(1e12))
+	num, den := units.Num(), units.Denom()
+	q, m := new(big.Int).QuoRem(num, den, new(big.Int))
+	if m.Sign() > 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	return execution.ExactDecimal(new(big.Rat).SetFrac(q, big.NewInt(1e12)))
 }

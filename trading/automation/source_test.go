@@ -268,7 +268,7 @@ func TestModelSourceClosedBarsOnly(t *testing.T) {
 	if _, err := source.Next(context.Background(), testPolicy()); err != nil {
 		t.Fatal(err)
 	}
-	if feed.query.Interval != SignalInterval || feed.query.Limit != SignalBars+1 {
+	if feed.query.Interval != SignalBarInterval || feed.query.Limit != SignalBars+1 {
 		t.Fatalf("candle query = %s/%d", feed.query.Interval, feed.query.Limit)
 	}
 	var prompt []string

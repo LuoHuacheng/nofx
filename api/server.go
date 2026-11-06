@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"nofx/trading/automation"
 )
 
 // Server HTTP API server
@@ -29,6 +30,7 @@ type Server struct {
 	planningClosing           bool
 	planning                  *planningServices
 	planningError             error
+	managedRuntime            *automation.Runtime
 	managedTraderFactory      managedTraderFactory
 	router                    *gin.Engine
 	traderManager             *manager.TraderManager
@@ -801,6 +803,13 @@ func (s *Server) Shutdown() error {
 	s.planningClosing = true
 	planning := s.planning
 	s.planningMu.Unlock()
+	if rt := s.managedRuntimeHandle(); rt != nil {
+		stop, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := rt.Shutdown(stop); err != nil {
+			logger.Warnf("⚠️ Unattended runtime shutdown error: %v", err)
+		}
+		cancel()
+	}
 	if planning != nil {
 		planning.live.Shutdown()
 	}

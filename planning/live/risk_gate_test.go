@@ -2,10 +2,13 @@ package live
 
 import (
 	"context"
+	"fmt"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
 
+	"nofx/planning"
 	"nofx/planning/core"
 	"nofx/trader/execution"
 	"nofx/trading/risk"
@@ -306,5 +309,68 @@ func TestRiskReleaseOnSecondCompletionBranch(t *testing.T) {
 	}
 	if got.State != "completed" {
 		t.Fatalf("the second completion branch left the run in %q", got.State)
+	}
+}
+
+// TestRiskReservationMarginAtLeverage pins the margin hold at a leverage whose
+// quotient is not a finite decimal: notional/3 used to fail ExactDecimal, so
+// every managed run at 3x could not start at all.
+func TestRiskReservationMarginAtLeverage(t *testing.T) {
+	for _, lev := range []int{1, 3} {
+		t.Run(fmt.Sprint(lev), func(t *testing.T) {
+			notional, ok := new(big.Rat).SetString("100")
+			if !ok {
+				t.Fatal("bad fixture")
+			}
+			margin := new(big.Rat).Quo(notional, big.NewRat(int64(lev), 1))
+			held, e := ceilExact(margin)
+			if e != nil {
+				t.Fatalf("a %dx margin hold is not representable: %v", lev, e)
+			}
+			back, e := execution.Number(string(held))
+			if e != nil {
+				t.Fatal(e)
+			}
+			if back.Cmp(margin) < 0 {
+				t.Fatalf("the hold %s rounds below the venue margin %s", held, margin.FloatString(12))
+			}
+		})
+	}
+}
+
+// leveragedFixture is a managed trader that accepts any approved leverage.
+type leveragedFixture struct{ testNOFXTrader }
+
+func (leveragedFixture) PrepareExecutionLeverage(context.Context, string, int) error { return nil }
+
+// TestRiskReservationStartsAtLeverage drives the whole path: with a plain
+// ExactDecimal margin, Execute at 3x used to release the approval instead of
+// reserving, so no managed run could ever start at that leverage.
+func TestRiskReservationStartsAtLeverage(t *testing.T) {
+	c, b, m, p, store := riskSetupVenue(t, "limit", "binance")
+	// The plain fixture broker cannot set leverage; a managed account can.
+	c.Factory = func(context.Context, string, string) (Broker, string, error) {
+		return NOFXBroker{Trader: leveragedFixture{testNOFXTrader{b}}}, "account", nil
+	}
+	limits := p.Constraints
+	limits.Leverage = 3
+	plan, e := core.Compile(m.book, limits, core.Idea{Name: "lev", Side: "long", Entry: "100000", Stop: "99000", Target: "104000"}, time.Now().UTC())
+	if e != nil {
+		t.Fatal(e)
+	}
+	ds := planning.DraftStore{DB: c.DB, UserID: "alice", ExchangeID: "exchange", Venue: "binance"}
+	if e = ds.Add([]core.Plan{plan}); e != nil {
+		t.Fatal(e)
+	}
+	v := approved(t, c, plan)
+	if _, e = c.Execute(context.Background(), "alice", v.ID, v.ApprovalHash); e != nil {
+		t.Fatalf("a 3x managed run could not start: %v", e)
+	}
+	held, e := store.Reservation(context.Background(), v.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if held.State != risk.StateReserved {
+		t.Fatalf("run started without a hold: %q", held.State)
 	}
 }

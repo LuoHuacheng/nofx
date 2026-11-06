@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	SignalInterval       = "15m"
+	SignalBarInterval    = "15m"
 	SignalBarSeconds     = int64(900)
 	SignalBars           = 120
 	SignalExpiry         = 30 * time.Second
@@ -90,7 +90,7 @@ func (s *ModelSource) Next(ctx context.Context, policy risk.Policy) (Signal, err
 		return Signal{}, errors.New("automation: market snapshot is stale")
 	}
 	rows, err := s.feed.Candles(ctx, market.CandleQuery{
-		Venue: policy.Venue, Symbol: symbol, Interval: SignalInterval, Limit: SignalBars + 1,
+		Venue: policy.Venue, Symbol: symbol, Interval: SignalBarInterval, Limit: SignalBars + 1,
 	})
 	if err != nil {
 		return Signal{}, fmt.Errorf("automation: candles unavailable: %w", err)
