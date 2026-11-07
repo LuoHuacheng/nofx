@@ -881,6 +881,7 @@ type exchangeFixture struct {
 	clock  time.Time
 	fake   *fakeExchange
 	db     *gorm.DB
+	dbPath string
 	ctrl   *live.Controller
 	risks  *risk.Store
 	book   *fixtureMarket
@@ -912,7 +913,10 @@ func newExchangeFixture(t *testing.T, venue string) *exchangeFixture {
 
 	f.fake = newFakeExchange(t, venue, f.now)
 
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "certification.db")), &gorm.Config{
+	// The path is kept so a helper process can open the same file and prove
+	// recovery against state the kernel actually persisted.
+	dbPath := filepath.Join(t.TempDir(), "certification.db")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -925,6 +929,7 @@ func newExchangeFixture(t *testing.T, venue string) *exchangeFixture {
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	f.db = db
+	f.dbPath = dbPath
 
 	f.book = &fixtureMarket{base: fixtureSnapshot(venue)}
 	risks, err := risk.NewStore(db)
