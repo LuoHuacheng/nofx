@@ -406,8 +406,13 @@ type ManagedEndpoint struct {
 }
 
 // NewManagedAccountTraderWithEndpoint builds a managed account against a
-// supplied endpoint. It exists for certification fixtures only.
+// supplied endpoint. It exists for certification fixtures only: production
+// callers never supply one. A live account must never be pinned to a
+// caller-supplied host, so live+seam is rejected instead of trusting the URL.
 func NewManagedAccountTraderWithEndpoint(ctx context.Context, apiKey, secretKey, passphrase string, env execution.Environment, seam *ManagedEndpoint) (*OKXTrader, error) {
+	if env == execution.EnvironmentLive && seam != nil {
+		return nil, errors.New("a live managed trader cannot be pinned to a custom endpoint")
+	}
 	t, err := newManagedOKXTrader(apiKey, secretKey, passphrase, env)
 	if err != nil {
 		return nil, err

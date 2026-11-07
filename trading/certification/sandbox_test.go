@@ -362,6 +362,9 @@ func requireSandboxAccountMode(bindingID string, account execution.ManagedAccoun
 	if mode != "one_way" && mode != "net_mode" {
 		return fmt.Errorf("account %s is in position mode %q; unattended execution requires one-way (net) mode", bindingID, account.PositionMode)
 	}
+	// An empty MarginMode is treated as isolated deliberately: a flat sandbox
+	// account may report none. That is acceptable only because the entry point
+	// also requires a flat, order-free account.
 	if account.MarginMode != "" && !strings.EqualFold(account.MarginMode, "isolated") {
 		return fmt.Errorf("account %s is in margin mode %q; unattended execution requires isolated margin", bindingID, account.MarginMode)
 	}
@@ -414,7 +417,7 @@ func TestSandboxGateRejectsLive(t *testing.T) {
 					t.Fatalf("%s: sandbox gate rejected a sandbox account: %v", name, err)
 				}
 				if unsafePOSTs != 0 {
-					t.Fatalf("%s: gate sent %d venue requests", name, unsafePOSTs)
+					t.Fatalf("%s: gate sent %d venue writes", name, unsafePOSTs)
 				}
 			}
 
@@ -551,6 +554,36 @@ func TestSandboxRequireEndpointsRejectsLive(t *testing.T) {
 	}
 	if err := requireSandboxEndpoints(venueOKX, productionOKX); err == nil || !strings.Contains(err.Error(), "environment") {
 		t.Fatalf("okx live environment accepted: %v", err)
+	}
+}
+
+// offlineVenueClient fails the test if a construction path contacts a venue.
+func offlineVenueClient(t *testing.T) *http.Client {
+	t.Helper()
+	return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Errorf("a rejected live managed trader contacted a venue")
+		return nil, errors.New("offline")
+	})}
+}
+
+// TestSandboxManagedTraderRejectsLiveSeam proves the adapter itself refuses a
+// live account pinned to a caller-supplied endpoint, not only the gate.
+func TestSandboxManagedTraderRejectsLiveSeam(t *testing.T) {
+	const want = "a live managed trader cannot be pinned to a custom endpoint"
+	_, err := binance.NewManagedAccountTraderWithEndpoint(context.Background(), "key", "secret", "alice", execution.EnvironmentLive,
+		&binance.ManagedEndpoint{BaseURL: futures.BaseApiMainUrl, Client: offlineVenueClient(t)})
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("binance live+seam accepted: %v", err)
+	}
+}
+
+// TestSandboxManagedTraderRejectsLiveSeamOKX is the OKX half of the invariant.
+func TestSandboxManagedTraderRejectsLiveSeamOKX(t *testing.T) {
+	const want = "a live managed trader cannot be pinned to a custom endpoint"
+	_, err := okx.NewManagedAccountTraderWithEndpoint(context.Background(), "key", "secret", "passphrase", execution.EnvironmentLive,
+		&okx.ManagedEndpoint{BaseURL: "http://127.0.0.1:1", Client: offlineVenueClient(t)})
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("okx live+seam accepted: %v", err)
 	}
 }
 

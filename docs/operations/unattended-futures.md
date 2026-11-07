@@ -149,7 +149,7 @@ go test ./trading/certification -run '^TestSandboxManagedLifecycle$' -count=1 \
 
 OKX 单独跑一次，把 `-sandbox-venue` 换成 `okx`，并使用 OKX 账户自己的绑定与独立的数据库副本。**不得**两个 venue 共用同一个验收数据库或同一个主账户。
 
-不带这三个 flag 时该测试直接 skip，skip 文案会写明缺什么；其余离线测试矩阵（契约、故障、崩溃恢复、成本回放、gate）**不允许** skip。以下任一条件不满足，gate 在发出任何请求前返回错误：
+不带这三个 flag 时该测试直接 skip，skip 文案会写明缺什么；其余离线测试矩阵（契约、故障、崩溃恢复、成本回放、gate）**不允许** skip。下列拒绝分两个阶段：本地检查（flag 重复注册、venue、数据库路径、绑定/交易所的 owner 与 environment、配置与凭据）在任何请求之前返回错误；账户自身的判定（快照 `environment`、单向、逐仓，以及账户非空或仍有挂单）必须先完成一次带签名的只读请求才能做出，因此这类拒绝发生在那一次读取之后、任何写请求之前：
 
 - `-sandbox-venue` 只接受 `binance` / `okx`；
 - 绑定行在 `-sandbox-db` 中能解析，`environment=sandbox`、`enabled=1`、已核验（`verified_at` 非零）；
