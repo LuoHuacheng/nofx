@@ -110,3 +110,144 @@
 - 旧的 `backtest.Account` 使用零维持保证金的简化模型 `1/leverage`（多仓 `entry×(1-1/杠杆)`，空仓 `entry×(1+1/杠杆)`）。它只服务于旧回测，**不是**交易所清算价，不能用于托管交易的报告或风控判断。
 
 两者不可互相替代：不要用旧模型的数字回答「这笔仓位离清算还有多远」，也不要用 venue 的清算价去校验旧回测的 golden 结果。
+
+## 9. Sandbox 验收与人工介入
+
+本节只增加验收入口与操作规则，不改变第 1–8 节的任何结论。code-complete、sandbox-accepted、live-enabled 是三个独立状态：本节通过只说明 sandbox 已验收，**不**代表可以开实盘，也不代表策略有盈利能力。
+
+### 9.1 验收入口
+
+入口是一个测试，不是服务端接口：`trading/certification/sandbox_test.go` 的 `TestSandboxManagedLifecycle`。它复用正式托管运行时与正式交易所适配器，不新增任何下单代码。
+
+```bash
+# 只读副本 + 独立数据库，绝不指向 data/data.db
+mkdir -p "$HOME/nofx-acceptance"
+sqlite3 "$NOFX_DB" ".backup '$HOME/nofx-acceptance/binance-$(date +%Y%m%d).db'"
+
+export NOFX_SANDBOX_BINDING_ID='<binding id>'
+export NOFX_SANDBOX_DB_PATH="$HOME/nofx-acceptance/binance-$(date +%Y%m%d).db"
+# 凭据在库里是密文，验收进程必须持有与运行时相同的密钥
+export RSA_PRIVATE_KEY="$RUNTIME_RSA_PRIVATE_KEY"
+export DATA_ENCRYPTION_KEY="$RUNTIME_DATA_ENCRYPTION_KEY"
+
+go test ./trading/certification -run '^TestSandboxManagedLifecycle$' -count=1 \
+  -args -sandbox-venue=binance \
+        -sandbox-binding="$NOFX_SANDBOX_BINDING_ID" \
+        -sandbox-db="$NOFX_SANDBOX_DB_PATH"
+```
+
+OKX 单独跑一次，把 `-sandbox-venue` 换成 `okx`，并使用 OKX 账户自己的绑定与独立的数据库副本。**不得**两个 venue 共用同一个验收数据库或同一个主账户。
+
+不带这三个 flag 时该测试直接 skip，skip 文案会写明缺什么；其余离线测试矩阵（契约、故障、崩溃恢复、成本回放、gate）**不允许** skip。以下任一条件不满足，gate 在发出任何请求前返回错误：
+
+- `-sandbox-venue` 只接受 `binance` / `okx`；
+- 绑定行在 `-sandbox-db` 中能解析，`environment=sandbox`、`enabled=1`、已核验（`verified_at` 非零）；
+- 绑定与交易所配置属于同一 `user_id`，`exchange_type` 等于请求 venue，配置 `enabled=1`、`testnet=1`、凭据完整（OKX 还需 passphrase）；
+- 适配器实际钉住的 endpoint 是 sandbox：Binance HTTP = `https://testnet.binancefuture.com`、stream = `wss://stream.binancefuture.com/ws/`；OKX 的 demo 只由 `x-simulated-trading: 1` 头选择，所以以 demo 私有 stream `wss://wspap.okx.com:8443/ws/v5/private?brokerId=9999` 为证；
+- 账户自身快照报告 `environment=sandbox`、单向（`one_way` / `net_mode`），且上报的保证金模式为逐仓（平仓空账户不上报保证金模式，gate 接受空值；一旦上报必须是 `isolated`）。
+
+`-sandbox-db` 为空、位于 `data/` 下、等于 `data/astra_gateway.db`、或不是已存在的文件时一律拒绝。这是词法判断：把生产库复制到别处后无法再识别，所以必须复制到独立目录。
+
+离线对照测试 `TestSandboxGateRejectsLive` 用本地 venue 模拟器逐项证明上述拒绝发生在任何 POST 之前（入场/保护/退出/撤单计数全为 0），`TestSandboxLifecycleAssertions` 证明完整周期结束时仓位为 0、无遗留订单、风险预留已释放。
+
+### 9.2 绑定身份核验
+
+验收前逐行核对，不接受"看起来对"：
+
+```bash
+sqlite3 "$NOFX_SANDBOX_DB_PATH" \
+  "SELECT id,user_id,exchange_id,venue,environment,venue_account_id,verified_at,enabled
+     FROM managed_account_bindings WHERE id='$NOFX_SANDBOX_BINDING_ID';"
+sqlite3 "$NOFX_SANDBOX_DB_PATH" \
+  "SELECT id,user_id,exchange_type,testnet,enabled FROM exchanges WHERE id='<exchange_id>';"
+```
+
+判定规则：绑定必须恰好一行；`venue_account_id` 必须等于交易所页面上显示的该子账户原生 UID（Binance 为 futures UID，OKX 为 `uid`；两者都不等于 API Key）；`exchange_id` 的 `user_id` 必须与绑定一致；`testnet` 必须为 1。任一项不匹配就停止验收，不要"先跑起来再说"。
+
+### 9.3 模式与权限
+
+- 仓位模式必须是单向（OKX `net_mode`，Binance `dualSidePosition=false`）；逐仓；杠杆按策略上限（≤3x）。
+- API Key 权限：只勾选合约交易与只读，**不勾提现**，并绑定服务器出口 IP 白名单。
+- 验收账户必须没有持仓、没有挂单/策略委托；gate 发现的任何持仓或订单都会让验收中止。
+- 保护单确认延迟（从入场成交到 SL/TP 在交易所可见）按模板逐笔记录；超过 5s 保护宽限（`protectionGrace`）会被判为未保护，验收不通过。
+
+### 9.4 数据库备份与恢复
+
+- 备份：`sqlite3 "$NOFX_DB" ".backup '<path>'"`；`.backup` 在 WAL 下也是一致快照，不要在运行中用 `cp` 抓主库文件。
+- 恢复：先停进程（确认没有第二个实例持有锁），把当前库整体移走保留，再放回备份；启动前执行 `sqlite3 '<path>' "PRAGMA integrity_check;"`，结果必须是 `ok`。
+- 只有账户已 flat、所有订单已终结时才允许用备份回滚数据库；否则会与交易所真实状态分叉，之后只能人工对账。
+- 验收与演练都用副本；生产库只在 9.10 的升级流程里按上述规则备份。
+
+### 9.5 暂停与平仓
+
+```bash
+curl -sS -X POST "$NOFX_BASE/api/automation/$ACCOUNT_KEY/pause"  -H 'Content-Type: application/json' -d '{"reason":"manual pause"}'
+curl -sS -X POST "$NOFX_BASE/api/automation/$ACCOUNT_KEY/flatten" -H 'Content-Type: application/json' -d '{"reason":"manual flatten"}'
+curl -sS "$NOFX_BASE/api/automation/$ACCOUNT_KEY/status"
+```
+
+- 暂停只停新入场，**不动**已挂的保护单；盘面仍暴露时不要以为"暂停=安全"。
+- 平仓完成的判据同时满足才算完成：交易所侧仓位为 0、无未成交入场单与遗留保护单、`status` 中 `reserved_risk` 已归零、`state` 不再是 `needs_attention`/`frozen`。
+- 未知回执时平仓状态机会冻结等待，不会重发；此时按 9.6 处理。
+
+### 9.6 UNKNOWN 与人工介入
+
+回执未知（超时、断连、进程崩溃）时**一律不重发**，先用原始 client ID 去交易所查：
+
+```bash
+# Binance USDⓈ-M
+GET /fapi/v1/order?symbol=<symbol>&origClientOrderId=<clientID>
+# OKX
+GET /api/v5/trade/order?instId=<instId>&clOrdId=<clientID>
+```
+
+查到已成交 → 让控制器推进（或按状态机 flatten）；查到不存在 → 视为未下单，由控制器按规则重新决定；查到状态不明 → 保持冻结，人工处置。禁止为了"继续跑"去删订单行、改状态或重建绑定。
+
+**必须在交易所手工对账的一种情况（当前代码的已知边界）**：进程在"保护单行已持久化为 `submitting`"之后、"POST 保护单"之前崩溃，这一行会永远停在 `submitting`。`planning/live/protection.go` 的 client-ID 守卫会拒绝重发同一个 client ID（这是防重复下单的保护，不是缺陷），因此运行时无法自行恢复，只能：
+
+1. 保持自动化暂停，不要 reset；
+2. 用该 client ID 到交易所查（上面两条命令）；查到就按实际状态处置，没查到就**手工**在交易所补挂等价的止损/止盈，或直接手工平仓；
+3. 交易所侧处理完成后记录到验收/事故模板，并明确该账户需要人工收尾——继续自动运行前必须先让仓位与保护单回到运行时能对账的状态。
+
+不要手工把该行改成其它状态：目前没有受支持的"孤儿 `submitting` 行回收"命令，改库会让下一次对账建立在假设上。
+
+### 9.7 API 失效与账单缺口
+
+- 私有事件通道掉线：REST 每 10s 补偿，属正常降级；`last_ws` 长期不更新时检查告警，不需要人工。
+- `ledger_complete=false` 或出现 `funding_gap`：当日权益账本有缺口，新入场会被预算拒绝。保持只读、等待 REST 补偿补齐；单次对账超过 200 页（约 20 万条 Binance income / 2 万条 OKX 账单）时补偿追不上，按第 4 节人工补账。补账只补交易所已结算事件，**不要**估算资金费。
+- API 全部失效（签名错误、IP 变更、Key 被删）：入场与保护都会失败，保护失败会进入 `exit_required` → 人工 flatten；按 9.8 轮换凭据后再恢复。
+
+### 9.8 凭据轮换
+
+按第 5 节的五步执行。sandbox 验收期额外要求：轮换后重跑一次 `TestSandboxManagedLifecycle`（同一副本或新副本均可），确认 gate 仍能解析绑定并通过 endpoint 与模式检查，再恢复自动运行。任何"凭据变了但绑定没重建"的现象都按未核验处理。
+
+### 9.9 进程锁
+
+- SQLite 部署：`data/nofx-execution.lock` 上的文件锁保证单实例。第二个进程启动即失败，不会双写订单。
+- PostgreSQL 部署：使用 `pg_try_advisory_lock`。**认证测试只证明了 SQLite 文件锁分支**：`trading/certification/crash_recovery_test.go` 的崩溃恢复用例全部跑在 SQLite 上，Postgres advisory lock 分支没有被覆盖。使用 Postgres 时必须手工验证一次：在第一个实例运行时启动第二个实例，确认它拿不到锁并退出，再继续上线流程。
+- 容器/编排层不得把同一份数据目录挂给两个副本；滚动发布必须先停旧实例再起新实例。
+
+### 9.10 升级顺序与回滚边界
+
+升级顺序（每一步都不可省略）：
+
+1. `pause`，确认不再有新入场；
+2. 视情况 `flatten` 或确认现有仓位与保护单可被新版本接管（有未终结订单时不要升级）；
+3. 备份数据库（9.4）并记录当前可执行文件的指纹（`shasum -a 256`）；
+4. 停旧实例，确认锁已释放；
+5. 部署新版本，核对运行时指纹与构建产物一致；
+6. 启动后看 `status`：`ledger_complete=true`、无 `needs_attention`，再恢复 `start`。
+
+回滚边界：
+
+- 回滚二进制是允许的，但数据库迁移是单向的（启动时 `AutoMigrate` 只加不减）；旧版本能否读新库没有保证，必须先在副本上验证。
+- 用备份回滚数据库只在账户 flat、所有订单已终结时允许；否则先人工对账。
+- 不要用"回滚 + 重放"来掩盖未知回执；未知回执按 9.6 处理。
+
+### 9.11 验收门槛与三种状态
+
+sandbox-accepted 需要同时满足：两个 venue 都跑通完整周期；离线故障矩阵全过；连续 7 个 sandbox 日没有未解决的保护/账户真值事故；每个异常都有自动处置的证据（日志、`status`、告警记录）。逐项填写 `docs/operations/unattended-futures-acceptance-template.md`。
+
+- **code-complete**：代码与离线测试完成，未接触真实交易所。
+- **sandbox-accepted**：上述门槛全部满足，且模板已归档。live 仍默认关闭。
+- **live-enabled**：需要单独的用户授权与更小的实盘仓位/窗口；sandbox 结果不证明实盘盈利能力，也不免除第 7 节的限制。
