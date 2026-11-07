@@ -2,10 +2,10 @@ package certification
 
 import (
 	"encoding/json"
-	"math/big"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -39,12 +39,20 @@ var contractScenarios = []contractScenario{
 				t.Fatalf("execute: %v", f.executeErr)
 			}
 			f.Steps(3)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			if got := f.fake.byRole("entry"); len(got) != 1 {
 				t.Fatalf("venue holds %d entry orders, want 1", len(got))
 			}
 			if position := f.fake.positionNow(); position.Sign() <= 0 {
 				t.Fatalf("position is %s after a lost acknowledgement; the fill was not discovered", dec(position))
+			}
+			// The discovered fill must also be protected, without a resubmission.
+			stops := f.fake.byRole("sl")
+			if len(stops) != 1 {
+				t.Fatalf("venue holds %d protective stops after the reconcile, want 1", len(stops))
+			}
+			if !stops[0].live() || stops[0].quantity.Cmp(f.fake.positionNow()) != 0 {
+				t.Fatalf("stop protects %s in state %s, want the full %s", dec(stops[0].quantity), stops[0].status, dec(f.fake.positionNow()))
 			}
 			if err := f.Flatten(); err != nil {
 				t.Fatalf("flatten after reconcile: %v", err)
@@ -60,7 +68,7 @@ var contractScenarios = []contractScenario{
 				t.Fatalf("execute: %v", f.executeErr)
 			}
 			f.Steps(3)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			filled := f.fake.positionNow()
 			if filled.Sign() <= 0 {
 				t.Fatalf("position is %s after a partial fill", dec(filled))
@@ -69,6 +77,19 @@ var contractScenarios = []contractScenario{
 				if order.quantity.Cmp(filled) != 0 {
 					t.Fatalf("stop protects %s but the venue filled %s", dec(order.quantity), dec(filled))
 				}
+			}
+			// A restart must reconcile the existing run instead of replaying it.
+			before, _, _, _ := f.fake.countsNow()
+			f.Restart()
+			if got := f.run().State; got != "needs_attention" {
+				t.Fatalf("restarted run state is %q, want needs_attention", got)
+			}
+			f.Steps(2)
+			if after, _, _, _ := f.fake.countsNow(); after != before {
+				t.Fatalf("restart submitted %d further entry orders", after-before)
+			}
+			if state := f.ReservationState(); state != "reserved" && state != "exposed" {
+				t.Fatalf("risk reservation is %q after the restart, want it held", state)
 			}
 			if err := f.Flatten(); err != nil {
 				t.Fatalf("flatten: %v", err)
@@ -81,7 +102,7 @@ var contractScenarios = []contractScenario{
 		check: func(t *testing.T, f *exchangeFixture) {
 			f.Run()
 			f.Steps(4)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			if got := f.fake.byRole("sl"); len(got) != 1 {
 				t.Fatalf("venue holds %d protective stops, want 1 (no resubmission)", len(got))
 			}
@@ -104,10 +125,16 @@ var contractScenarios = []contractScenario{
 			if got := f.run().ProtectionState; got != "exit_required" {
 				t.Fatalf("protection state is %q, want exit_required after the deadline", got)
 			}
-			// The plan asks for a reduce-only exit once the deadline passes.
-			_ = f.Flatten()
+			// The plan asks for a reduce-only exit once the deadline passes. The
+			// controller freezes instead (protection.go: reducing belongs to the
+			// operator), so the exit is driven here and must report why it stops
+			// rather than fail silently.
+			err := f.Flatten()
+			if err == nil || !strings.Contains(err.Error(), "Check exchange orders") {
+				t.Fatalf("flatten error is %v, want the unconfirmed-protection halt", err)
+			}
 			f.AssertNoReversePosition(t)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			// The rejected stop was never acknowledged, so its state cannot be
 			// confirmed and the trade cannot be proven closed: the run halts on
 			// the venue record and keeps the lease, which blocks the next entry.
@@ -119,6 +146,9 @@ var contractScenarios = []contractScenario{
 		name: "tp_rejected",
 		check: func(t *testing.T, f *exchangeFixture) {
 			f.Run()
+			if f.executeErr != nil {
+				t.Fatalf("execute: %v", f.executeErr)
+			}
 			f.Steps(2)
 			stops := f.fake.byRole("sl")
 			if len(stops) != 1 {
@@ -139,7 +169,7 @@ var contractScenarios = []contractScenario{
 			}
 			_ = f.Flatten()
 			f.AssertNoReversePosition(t)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			f.AssertFlatAndNoRiskOrders(t)
 		},
 	},
@@ -155,7 +185,7 @@ var contractScenarios = []contractScenario{
 				t.Fatalf("stop: %v", err)
 			}
 			f.Steps(3)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			if position := f.fake.positionNow(); position.Sign() <= 0 {
 				t.Fatalf("position is %s; the fill that raced the cancel was lost", dec(position))
 			}
@@ -170,13 +200,19 @@ var contractScenarios = []contractScenario{
 			f.Run()
 			f.Steps(2)
 			// Someone closes the position outside this run while the stop is live.
-			f.fake.setPosition(new(big.Rat), new(big.Rat))
+			f.ClosePosition()
 			f.Steps(3)
 			f.AssertNoReversePosition(t)
-			f.AssertAtMostOneEntry(t, "signal-1")
+			f.AssertOneEntry(t, "signal-1")
 			if position := f.fake.positionNow(); position.Sign() != 0 {
 				t.Fatalf("position is %s after an external close", dec(position))
 			}
+			// The operator closes out of band; the exits must then be provably gone.
+			if err := f.FinishManualClose(); err != nil {
+				t.Fatalf("finish manual close: %v", err)
+			}
+			f.AssertNoOpenOrders(t)
+			f.AssertNoReversePosition(t)
 		},
 	},
 	{
@@ -188,6 +224,17 @@ var contractScenarios = []contractScenario{
 			}
 			if entry, _, _, _ := f.fake.countsNow(); entry != 0 {
 				t.Fatalf("%d entry orders were sent against a stale book", entry)
+			}
+			// A fresh read is the only thing that may release the entry again:
+			// this stands in for the REST snapshot a stream gap must await.
+			f.book.setStale(false)
+			f.Replan()
+			f.Steps(1)
+			if entry, _, _, _ := f.fake.countsNow(); entry != 1 {
+				t.Fatalf("%d entry orders after a fresh snapshot, want 1", entry)
+			}
+			if err := f.Flatten(); err != nil {
+				t.Fatalf("flatten: %v", err)
 			}
 			f.AssertFlatAndNoRiskOrders(t)
 		},
@@ -201,6 +248,23 @@ var contractScenarios = []contractScenario{
 			}
 			if entry, _, _, _ := f.fake.countsNow(); entry != 0 {
 				t.Fatalf("%d entry orders were sent while reads were failing", entry)
+			}
+			// Binance reports skew (-1021), OKX reports the limit; both must
+			// surface the venue reason and nothing may be written meanwhile.
+			message := f.executeErr.Error()
+			if !strings.Contains(message, "clock") && !strings.Contains(message, "50011") {
+				t.Fatalf("execute error %q does not name the venue read failure", message)
+			}
+			// Once the reads recover the same plan may run again: no write was
+			// attempted blindly and nothing is stuck.
+			f.ClearReads()
+			f.Replan()
+			f.Steps(1)
+			if entry, _, _, _ := f.fake.countsNow(); entry != 1 {
+				t.Fatalf("%d entry orders after the reads recovered, want 1", entry)
+			}
+			if err := f.Flatten(); err != nil {
+				t.Fatalf("flatten: %v", err)
 			}
 			f.AssertFlatAndNoRiskOrders(t)
 		},

@@ -54,6 +54,25 @@ func rat(s string) *big.Rat {
 
 func dec(r *big.Rat) string { return r.FloatString(8) }
 
+// requiredRat parses a request number. A malformed request is answered with the
+// venue's own bad-parameter error instead of crashing the test process.
+func (f *fakeExchange) requiredRat(w http.ResponseWriter, raw string) (*big.Rat, bool) {
+	r, ok := new(big.Rat).SetString(raw)
+	if !ok || raw == "" {
+		f.badParameter(w, raw)
+		return nil, false
+	}
+	return r, true
+}
+
+func (f *fakeExchange) badParameter(w http.ResponseWriter, raw string) {
+	if f.venue == venueOKX {
+		okxError(w, "51000", "Parameter sz or px error: "+raw)
+		return
+	}
+	binanceError(w, 400, -1102, "Illegal characters found in parameter '"+raw+"'.")
+}
+
 // nativeOrder is what the venue record holds, independent of adapter types.
 type nativeOrder struct {
 	clientID   string
@@ -99,10 +118,11 @@ type exchangeFaults struct {
 }
 
 type fakeExchange struct {
-	t   *testing.T
-	srv *httptest.Server
-	now func() time.Time
-	mu  sync.Mutex
+	t     *testing.T
+	venue string
+	srv   *httptest.Server
+	now   func() time.Time
+	mu    sync.Mutex
 
 	position *big.Rat
 	entry    *big.Rat
@@ -126,7 +146,7 @@ func newFakeExchange(t *testing.T, venue string, now func() time.Time) *fakeExch
 	if venue != venueBinance && venue != venueOKX {
 		t.Fatalf("unknown venue %q", venue)
 	}
-	f := &fakeExchange{t: t, now: now, position: new(big.Rat), entry: new(big.Rat), orders: map[string]*nativeOrder{}}
+	f := &fakeExchange{t: t, venue: venue, now: now, position: new(big.Rat), entry: new(big.Rat), orders: map[string]*nativeOrder{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -408,9 +428,13 @@ func (f *fakeExchange) binanceOrder(w http.ResponseWriter, r *http.Request) {
 		if raw := param(r, "price"); raw != "" {
 			price = rat(raw)
 		}
+		quantity, ok := f.requiredRat(w, param(r, "quantity"))
+		if !ok {
+			return
+		}
 		client := param(r, "newClientOrderId")
 		f.nextID++
-		o := newNativeOrder(client, role, strings.ToLower(param(r, "side")), kind, rat(param(r, "quantity")), price, reduceOnly)
+		o := newNativeOrder(client, role, strings.ToLower(param(r, "side")), kind, quantity, price, reduceOnly)
 		o.orderID = strconv.Itoa(f.nextID)
 		switch {
 		case role == "entry" && f.faults.entryResting:
@@ -469,10 +493,17 @@ func (f *fakeExchange) binanceAlgo(w http.ResponseWriter, r *http.Request) {
 			binanceError(w, 400, -2021, "Order would immediately trigger.")
 			return
 		}
+		quantity, ok := f.requiredRat(w, param(r, "quantity"))
+		if !ok {
+			return
+		}
+		trigger, ok := f.requiredRat(w, param(r, "triggerPrice"))
+		if !ok {
+			return
+		}
 		f.nextID++
 		o := newNativeOrder(client, role, strings.ToLower(param(r, "side")), "stop_market",
-			rat(param(r, "quantity")), rat(param(r, "triggerPrice")),
-			strings.EqualFold(param(r, "reduceOnly"), "true"))
+			quantity, trigger, strings.EqualFold(param(r, "reduceOnly"), "true"))
 		o.orderID = strconv.Itoa(100 + f.nextID)
 		f.orders[client] = o
 		if o.role == "sl" {
@@ -652,7 +683,11 @@ func (f *fakeExchange) okxOrder(w http.ResponseWriter, r *http.Request) {
 		} else {
 			f.exitPOSTs++
 		}
-		quantity := new(big.Rat).Mul(rat(stringOf(body["sz"])), rat(okxCtVal))
+		size, ok := f.requiredRat(w, stringOf(body["sz"]))
+		if !ok {
+			return
+		}
+		quantity := new(big.Rat).Mul(size, rat(okxCtVal))
 		price := new(big.Rat)
 		if raw := stringOf(body["px"]); raw != "" {
 			price = rat(raw)
@@ -701,9 +736,17 @@ func (f *fakeExchange) okxAlgo(w http.ResponseWriter, r *http.Request) {
 			f.json(w, 200, okxData(`[{"algoId":"","sCode":"51169","sMsg":"Order would immediately trigger."}]`))
 			return
 		}
-		quantity := new(big.Rat).Mul(rat(stringOf(body["sz"])), rat(okxCtVal))
+		size, ok := f.requiredRat(w, stringOf(body["sz"]))
+		if !ok {
+			return
+		}
+		quantity := new(big.Rat).Mul(size, rat(okxCtVal))
+		trigger, ok := f.requiredRat(w, price)
+		if !ok {
+			return
+		}
 		f.nextID++
-		o := newNativeOrder(client, role, stringOf(body["side"]), "stop_market", quantity, rat(price), true)
+		o := newNativeOrder(client, role, stringOf(body["side"]), "stop_market", quantity, trigger, true)
 		o.orderID = strconv.Itoa(100 + f.nextID)
 		f.orders[client] = o
 		if o.role == "sl" {
@@ -843,9 +886,13 @@ type exchangeFixture struct {
 	book   *fixtureMarket
 	venue2 execution.ManagedTrader
 
-	binding execution.Binding
-	policy  risk.Policy
-	plan    core.Plan
+	binding     execution.Binding
+	policy      risk.Policy
+	plan        core.Plan
+	constraints core.Constraints
+	idea        core.Idea
+	account     execution.ManagedAccount
+	drafts      planning.DraftStore
 
 	approved   live.View
 	executeErr error
@@ -944,6 +991,7 @@ func newExchangeFixture(t *testing.T, venue string) *exchangeFixture {
 		PositionMode: "one-way", MarginMode: "isolated",
 		Equity: "10000", Available: "10000", MarginUsed: "0", ObservedAt: f.clock,
 	}
+	f.account = account
 	dayStart := f.clock.Truncate(24 * time.Hour).Add(time.Second)
 	if err := f.risks.Observe(ctx, account, nil, dayStart); err != nil {
 		t.Fatalf("observe day start: %v", err)
@@ -952,6 +1000,7 @@ func newExchangeFixture(t *testing.T, venue string) *exchangeFixture {
 		t.Fatalf("observe now: %v", err)
 	}
 
+	f.drafts = planning.DraftStore{DB: db, UserID: "alice", ExchangeID: "exchange", Venue: venue}
 	snapshot := fixtureSnapshot(venue)
 	snapshot.Venue = venue
 	snapshot.Symbol = f.symbol
@@ -962,15 +1011,15 @@ func newExchangeFixture(t *testing.T, venue string) *exchangeFixture {
 		MaxRisk: "50", MaxNotional: "30000", MinRewardRisk: "2",
 		FeeBPS: "5", SlippageBPS: "10", FundingReserveBPS: "10",
 	}
-	idea := core.Idea{Name: "signal-1", Side: "long", Entry: "100000", Stop: "99000", Target: "104000"}
-	plan, err := core.Compile(snapshot, constraints, idea, time.Now().UTC())
+	f.constraints = constraints
+	f.idea = core.Idea{Name: "signal-1", Side: "long", Entry: "100000", Stop: "99000", Target: "104000"}
+	plan, err := core.Compile(snapshot, f.constraints, f.idea, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("compile plan: %v", err)
 	}
 	f.plan = plan
 
-	drafts := planning.DraftStore{DB: db, UserID: "alice", ExchangeID: "exchange", Venue: venue}
-	if err := drafts.Add([]core.Plan{plan}); err != nil {
+	if err := f.drafts.Add([]core.Plan{plan}); err != nil {
 		t.Fatalf("store draft: %v", err)
 	}
 
@@ -1128,6 +1177,90 @@ func (f *exchangeFixture) AssertAtMostOneEntry(t *testing.T, signalID string) {
 	entry, _, _, _ := f.fake.countsNow()
 	if entry > 1 {
 		t.Fatalf("%s signal %s submitted %d entry orders, want at most 1", f.venue, signalID, entry)
+	}
+}
+
+// ClosePosition flattens the venue record the way an operator would, keeping
+// the entry price the venue keeps for the closed trade.
+func (f *exchangeFixture) ClosePosition() {
+	f.fake.mu.Lock()
+	f.fake.position = new(big.Rat)
+	f.fake.mu.Unlock()
+}
+
+// Replan compiles a second plan and approves it. A retired approval cannot be
+// reused, so a scenario that retries needs a fresh draft.
+func (f *exchangeFixture) Replan() {
+	f.t.Helper()
+	f.clock = f.clock.Add(time.Minute)
+	// A live account reports fresh equity; without it the risk baseline is
+	// stale and every plan is refused.
+	f.account.ObservedAt = f.now()
+	if err := f.risks.Observe(context.Background(), f.account, nil, f.now()); err != nil {
+		f.t.Fatalf("observe replanned equity: %v", err)
+	}
+	snapshot, err := f.book.Snapshot(context.Background(), f.venue, f.symbol)
+	if err != nil {
+		f.t.Fatalf("replan snapshot: %v", err)
+	}
+	snapshot.Venue, snapshot.Symbol = f.venue, f.symbol
+	snapshot.Observed, snapshot.SourceTime = f.now(), f.now()
+	plan, err := core.Compile(snapshot, f.constraints, f.idea, f.now())
+	if err != nil {
+		f.t.Fatalf("recompile plan: %v", err)
+	}
+	if err := f.drafts.Add([]core.Plan{plan}); err != nil {
+		f.t.Fatalf("store replanned draft: %v", err)
+	}
+	f.plan = plan
+	f.Run()
+}
+
+// ClearReads lets signed reads through again after a rate-limit or clock fault.
+func (f *exchangeFixture) ClearReads() {
+	f.fake.mu.Lock()
+	f.fake.faults.readRejected = false
+	f.fake.mu.Unlock()
+}
+
+// Restart builds a second controller over the same database, the way a process
+// restart would, and keeps the fixture pointed at it.
+func (f *exchangeFixture) Restart() {
+	f.t.Helper()
+	c, err := live.New(f.db, f.factory(), f.book)
+	if err != nil {
+		f.t.Fatalf("restart controller: %v", err)
+	}
+	c.Now = f.now
+	c.Interval = -1
+	c.Risk = f.risks
+	f.ctrl = c
+	f.t.Cleanup(c.Shutdown)
+}
+
+// ReservationState reports the run's risk reservation, which must survive a
+// restart so the account stays inside its budget.
+func (f *exchangeFixture) ReservationState() string {
+	f.t.Helper()
+	r, err := f.risks.Reservation(context.Background(), f.approved.ID)
+	if err != nil {
+		f.t.Fatalf("reservation: %v", err)
+	}
+	return r.State
+}
+
+// FinishManualClose removes the exits after an operator closed the position.
+func (f *exchangeFixture) FinishManualClose() error {
+	_, err := f.ctrl.FinishManualClose(context.Background(), "alice", f.approved.ID)
+	return err
+}
+
+// AssertOneEntry fails unless the signal produced exactly one entry submission.
+func (f *exchangeFixture) AssertOneEntry(t *testing.T, signalID string) {
+	t.Helper()
+	entry, _, _, _ := f.fake.countsNow()
+	if entry != 1 {
+		t.Fatalf("%s signal %s submitted %d entry orders, want exactly 1", f.venue, signalID, entry)
 	}
 }
 
