@@ -159,7 +159,7 @@ OKX 单独跑一次，把 `-sandbox-venue` 换成 `okx`，并使用 OKX 账户�
 
 `-sandbox-db` 为空、是目录/非常规文件/不可写，或解析后落在仓库 `data/` 目录内时一律拒绝：绝对路径、`../../` 穿越、以及指向 `data/data.db` 的符号链接都算，错误信息会写明 runtime data directory。仓库根由测试文件向上查找 `go.mod` 得到，不依赖 go test 的工作目录；候选路径先做绝对化，存在时再做符号链接解析。这仍是路径判断：把生产库复制到别处后无法按内容识别，所以必须复制到独立目录。
 
-离线对照测试逐项证明上述拒绝都发生在任何 POST 之前：`TestSandboxGateRejectsLive` 用本地 venue 模拟器跑两个 venue 的 gate 正/反用例（入场/保护/退出/撤单计数全为 0，且反例必须给出对应理由），`TestSandboxRejectsRuntimeDatabase` 覆盖绝对路径、相对穿越和符号链接三种运行库写法，`TestSandboxRequireEndpointsRejectsLive` 直接证明 endpoint 校验会拒绝指向实盘主机的适配器，`TestSandboxLifecycleAssertions` 证明完整周期结束时仓位为 0、无遗留订单、风险预留已释放。这些离线用例两个 venue 都走真实适配器，不使用替身。
+离线对照测试逐项证明上述拒绝都发生在任何 POST 之前：`TestSandboxGateRejectsLive` 用本地 venue 模拟器跑两个 venue 的 gate 正/反用例（入场/保护/退出/撤单计数全为 0，且反例必须给出对应理由），`TestSandboxRejectsRuntimeDatabase` 覆盖绝对路径、相对穿越、符号链接、硬链接与大小写变体五种运行库写法（后两者依赖文件系统能力，unsupported 时记日志跳过），`TestSandboxRequireEndpointsRejectsLive` 直接证明 endpoint 校验会拒绝指向实盘主机的适配器，`TestSandboxLifecycleAssertions` 证明完整周期结束时仓位为 0、无遗留订单、风险预留已释放。这些离线用例两个 venue 都走真实适配器，不使用替身。
 
 ### 9.2 绑定身份核验
 
