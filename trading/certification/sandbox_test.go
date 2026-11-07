@@ -218,6 +218,8 @@ func isolatedSandboxDB(path string) (string, error) {
 		return "", err
 	}
 	runtimeDir := filepath.Join(repo, "data")
+	runtimeDB := filepath.Join(runtimeDir, "data.db")
+	runtimeInfo, runtimeErr := os.Stat(runtimeDB)
 	abs, err := filepath.Abs(clean)
 	if err != nil {
 		return "", fmt.Errorf("resolve -sandbox-db %q: %w", path, err)
@@ -230,10 +232,25 @@ func isolatedSandboxDB(path string) (string, error) {
 		if rel, err := filepath.Rel(runtimeDir, candidate); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return "", fmt.Errorf("-sandbox-db %s is inside the runtime data directory %s; copy it to an isolated directory first", candidate, runtimeDir)
 		}
+		// A case-insensitive filesystem reaches the runtime directory through
+		// <repo>/DATA/data.db, which the lexical comparison above cannot see.
+		for dir := filepath.Dir(candidate); ; dir = filepath.Dir(dir) {
+			if strings.EqualFold(dir, runtimeDir) {
+				return "", fmt.Errorf("-sandbox-db %s is inside the runtime data directory %s; copy it to an isolated directory first", candidate, runtimeDir)
+			}
+			if parent := filepath.Dir(dir); parent == dir {
+				break
+			}
+		}
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
 		return "", fmt.Errorf("-sandbox-db %s is not an existing database file: %w", resolved, err)
+	}
+	// A hard link is neither a symlink nor a path inside data/, so only the
+	// inode identifies it as the runtime database.
+	if runtimeErr == nil && os.SameFile(info, runtimeInfo) {
+		return "", fmt.Errorf("-sandbox-db %s is the runtime data directory database %s; copy it to an isolated directory first", resolved, runtimeDB)
 	}
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("-sandbox-db %s is not a regular database file", resolved)
@@ -456,12 +473,26 @@ func TestSandboxRejectsRuntimeDatabase(t *testing.T) {
 		{"absolute", runtimeDB},
 		{"traversal", filepath.Join("..", "..", "data", "data.db")},
 	}
-	if _, err := os.Stat(runtimeDB); err == nil {
+	if info, err := os.Stat(runtimeDB); err == nil {
 		link := filepath.Join(t.TempDir(), "runtime-copy.db")
 		if err := os.Symlink(runtimeDB, link); err != nil {
 			t.Fatalf("symlink the runtime database: %v", err)
 		}
 		cases = append(cases, struct{ name, path string }{"symlink", link})
+		hard := filepath.Join(t.TempDir(), "runtime-hardlink.db")
+		if err := os.Link(runtimeDB, hard); err != nil {
+			t.Logf("cannot hard-link the runtime database, skipping that case: %v", err)
+		} else {
+			cases = append(cases, struct{ name, path string }{"hardlink", hard})
+		}
+		// Only a case-insensitive filesystem resolves this spelling at all; on a
+		// case-sensitive one the path simply does not exist and the case is skipped.
+		upper := filepath.Join(repo, "DATA", "data.db")
+		if upperInfo, err := os.Stat(upper); err == nil && os.SameFile(info, upperInfo) {
+			cases = append(cases, struct{ name, path string }{"case variant", upper})
+		} else {
+			t.Logf("filesystem is case-sensitive; the case-variant case cannot be built")
+		}
 	} else {
 		t.Logf("runtime database %s is absent; the symlink case cannot be built", runtimeDB)
 	}

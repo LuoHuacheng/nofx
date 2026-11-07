@@ -121,11 +121,12 @@
 
 这条命令的实际流程（每一步都发生在真实 sandbox 账户上）：
 
-1. gate：从 `-sandbox-db` 副本解析绑定与交易所配置，核验 environment/testnet/凭据/endpoint/仓位与保证金模式，并读取一次账户快照；账户必须无持仓、无挂单/策略委托，否则在做任何下单前终止。
-2. 运行时：写入 `risk.DefaultPolicy` 策略（单笔风险 0.5% 权益、≤3x）、记录两次权益基线，用公开行情编译 `core.Plan`（限价入场、1% 止损、3% 目标），写入草稿，`live.New` 启动 `Controller` 并把 `Interval` 设为负值由测试逐 tick 驱动，再 `Approve`（口令 `APPROVE LIVE`）＋`Execute`。
-3. 订单周期：反复 `Controller.StepContext`，直到运行态 `position_open` 且 `protection_state=protected`；随后测试用 `ManagedSnapshot` 直接读交易所，要求 1 个持仓 + 2 张保护单。
-4. 部分减仓：测试在交易所用 reduce-only 市价单减半，再驱动运行时，要求保护状态不再为 `protected`（运行时发现持仓与计划成交不一致）。
-5. 收尾：`Flatten` 后再读一次交易所，要求持仓为 0、无遗留订单，且该 run 的风险预留为 `released`；任一步失败时测试会先尝试 `Flatten` 再报错，避免把账户留在敞口状态。
+1. gate：从 `-sandbox-db` 副本解析绑定与交易所配置，核验 environment/testnet/凭据/endpoint/仓位与保证金模式。
+2. 入口主体：`TestSandboxManagedLifecycle` 函数体检查账户快照，账户必须无持仓、无挂单/策略委托，否则在提交任何订单前终止。这项检查属于验收入口本身，不在 gate 的只读检查里。
+3. 运行时：写入 `risk.DefaultPolicy` 策略（单笔风险 0.5% 权益、≤3x）、记录两次权益基线，用公开行情编译 `core.Plan`（限价入场、1% 止损、3% 目标），写入草稿，`live.New` 启动 `Controller` 并把 `Interval` 设为负值由测试逐 tick 驱动，再 `Approve`（口令 `APPROVE LIVE`）＋`Execute`。
+4. 订单周期：反复 `Controller.StepContext`，直到运行态 `position_open` 且 `protection_state=protected`；随后测试用 `ManagedSnapshot` 直接读交易所，要求 1 个持仓 + 2 张保护单。
+5. 部分减仓：测试在交易所用 reduce-only 市价单减半，再驱动运行时，要求保护状态不再为 `protected`（运行时发现持仓与计划成交不一致）。
+6. 收尾：`Flatten` 后再读一次交易所，要求持仓为 0、无遗留订单，且该 run 的风险预留为 `released`；任一步失败时测试会先尝试 `Flatten` 再报错，避免把账户留在敞口状态。
 
 **证明**：正式运行时在 sandbox 账户上完成「入场 → 保护单确认 → 部分减仓 → 平仓 → 无残留 → 预留释放」，且每一步的交易所侧状态与运行时判断一致。**不证明**：策略盈利能力、连续 7 天稳定性、实盘行为、Postgres 进程锁分支、网络分区场景。
 
@@ -178,7 +179,7 @@ sqlite3 "$NOFX_SANDBOX_DB_PATH" \
 
 - 仓位模式必须是单向（OKX `net_mode`，Binance `dualSidePosition=false`）；逐仓；杠杆按策略上限（≤3x）。
 - API Key 权限：只勾选合约交易与只读，**不勾提现**，并绑定服务器出口 IP 白名单。
-- 验收账户必须没有持仓、没有挂单/策略委托；验收入口在提交任何订单前读取账户快照做这项检查，发现任一项即终止。该检查属于验收入口本身，不在 gate 的只读检查里，也不适用于其他命令。
+- 验收账户必须没有持仓、没有挂单/策略委托；这项检查由验收入口主体（`TestSandboxManagedLifecycle` 函数体）在提交任何订单前对账户快照完成，发现任一项即终止。它不在 gate 的只读检查里，也不适用于其他命令。
 - 保护单确认延迟（从入场成交到 SL/TP 在交易所可见）按模板逐笔记录；超过 5s 保护宽限（`protectionGrace`）会被判为未保护，验收不通过。
 
 ### 9.4 数据库备份与恢复
