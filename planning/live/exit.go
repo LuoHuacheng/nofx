@@ -209,6 +209,15 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 		if err = c.save(&v); err != nil {
 			return v, err
 		}
+		// A market exit is often acknowledged before it fills. Record the venue
+		// fill so the closed trade can be proven instead of halting on the ack.
+		if observed, er := broker.Lookup(ctx, v.Orders[index]); er == nil && validReceipt(v.Orders[index], observed) {
+			observed.Error = reason
+			v.Orders[index] = observed
+			if err = c.save(&v); err != nil {
+				return v, err
+			}
+		}
 		if position, err = readLivePosition(ctx, broker, symbol); err != nil {
 			return v, errors.New("Exit was sent, but the resulting position is unconfirmed. The account stays reserved; check the exchange.")
 		}

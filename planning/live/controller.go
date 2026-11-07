@@ -23,11 +23,15 @@ type Market interface {
 	Snapshot(context.Context, string, string) (core.Snapshot, error)
 }
 type Controller struct {
-	DB       *gorm.DB
-	Factory  Factory
-	Market   Market
-	Risk     *risk.Store      // nil keeps the manual, unreserved behaviour
-	Now      func() time.Time // nil means UTC wall clock; tests inject it
+	DB      *gorm.DB
+	Factory Factory
+	Market  Market
+	Risk    *risk.Store      // nil keeps the manual, unreserved behaviour
+	Now     func() time.Time // nil means UTC wall clock; tests inject it
+	// Interval paces the supervision worker. Zero keeps the two-second
+	// default; a negative value starts no worker, so a caller advances the run
+	// with StepContext instead. Only certification fixtures use the latter.
+	Interval time.Duration
 	mu       sync.Mutex
 	workers  map[string]context.CancelFunc
 	stopped  bool
@@ -355,11 +359,21 @@ func (c *Controller) Execute(ctx context.Context, user, id, hash string) (out Vi
 	c.launch(v.ID, user)
 	return v, nil
 }
+
+// StepContext advances one supervision tick. Automation paces itself with the
+// worker; a fixture drives a run cycle by cycle so timing stays deterministic.
+func (c *Controller) StepContext(ctx context.Context, user, id string) bool {
+	return c.step(ctx, user, id)
+}
 func (c *Controller) launch(id, user string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.stopped {
+	if c.stopped || c.Interval < 0 {
 		return
+	}
+	interval := c.Interval
+	if interval == 0 {
+		interval = 2 * time.Second
 	}
 	if _, ok := c.workers[id]; ok {
 		return
@@ -370,7 +384,7 @@ func (c *Controller) launch(id, user string) {
 	go func() {
 		defer c.workerWG.Done()
 		defer func() { c.mu.Lock(); delete(c.workers, id); c.mu.Unlock() }()
-		tick := time.NewTicker(2 * time.Second)
+		tick := time.NewTicker(interval)
 		defer tick.Stop()
 		for {
 			if ctx.Err() != nil {

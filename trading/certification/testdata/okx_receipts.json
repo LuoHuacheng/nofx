@@ -1,0 +1,30 @@
+{
+  "entry": {
+    "ordId": "1",
+    "clOrdId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "instId": "BTC-USDT-SWAP",
+    "side": "buy",
+    "posSide": "net",
+    "ordType": "limit",
+    "px": "100000.00000000",
+    "sz": "4.00",
+    "accFillSz": "4.00",
+    "avgPx": "100000.00000000",
+    "state": "filled",
+    "reduceOnly": false
+  },
+  "protection": {
+    "algoId": "101",
+    "algoClOrdId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "instId": "BTC-USDT-SWAP",
+    "side": "sell",
+    "posSide": "net",
+    "ordType": "conditional",
+    "sz": "4.00",
+    "slTriggerPx": "99000.00000000",
+    "slTriggerPxType": "mark",
+    "slOrdPx": "-1",
+    "state": "live",
+    "reduceOnly": true
+  }
+}
