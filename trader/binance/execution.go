@@ -392,6 +392,26 @@ func NewManagedAccountTrader(ctx context.Context, key, secret, userID string, en
 	return newManagedAccountTrader(ctx, key, secret, userID, env, nil)
 }
 
+// ManagedEndpoint is the exported form of the test seam below: a certification
+// fixture points a managed account at a local venue. No production caller
+// supplies one, so a sandbox account cannot be redirected at production or
+// vice versa. Nil means the pinned production endpoint.
+type ManagedEndpoint struct {
+	BaseURL   string
+	Client    *http.Client
+	StreamURL string
+}
+
+// NewManagedAccountTraderWithEndpoint builds a managed account against a
+// supplied endpoint. It exists for certification fixtures only.
+func NewManagedAccountTraderWithEndpoint(ctx context.Context, key, secret, userID string, env execution.Environment, seam *ManagedEndpoint) (*FuturesTrader, error) {
+	var internal *managedEndpoint
+	if seam != nil {
+		internal = &managedEndpoint{baseURL: seam.BaseURL, client: seam.Client, streamURL: seam.StreamURL}
+	}
+	return newManagedAccountTrader(ctx, key, secret, userID, env, internal)
+}
+
 func newManagedAccountTrader(ctx context.Context, key, secret, userID string, env execution.Environment, seam *managedEndpoint) (*FuturesTrader, error) {
 	endpoint, err := managedBinanceEndpoint(env)
 	if err != nil {

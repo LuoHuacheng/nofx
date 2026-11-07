@@ -56,6 +56,11 @@ type OKXTrader struct {
 	// live endpoint behaviour for existing callers.
 	environment execution.Environment
 
+	// baseURL is empty for legacy traders, which use the pinned live host. A
+	// managed trader pins it per environment so a sandbox account can never
+	// reach production.
+	baseURL string
+
 	// managedStreamURL is the private socket pinned by the environment. Empty for
 	// legacy traders, which never stream.
 	managedStreamURL string
@@ -235,7 +240,7 @@ func (t *OKXTrader) doRequestContext(ctx context.Context, method, path string, b
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	signature := t.sign(timestamp, method, path, string(bodyBytes))
 
-	req, err := http.NewRequestWithContext(ctx, method, okxBaseURL+path, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, method, t.endpoint()+path, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -369,6 +374,14 @@ func NewIdentityClient(apiKey, secretKey, passphrase string) execution.AccountId
 // NewManagedAccountTrader builds an account reader pinned to one environment.
 // It never changes position mode, leverage or orders.
 func NewManagedAccountTrader(ctx context.Context, apiKey, secretKey, passphrase string, env execution.Environment) (*OKXTrader, error) {
+	t, err := newManagedOKXTrader(apiKey, secretKey, passphrase, env)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func newManagedOKXTrader(apiKey, secretKey, passphrase string, env execution.Environment) (*OKXTrader, error) {
 	if !env.Valid() {
 		return nil, errors.New("managed OKX environment must be sandbox or live")
 	}
@@ -379,5 +392,44 @@ func NewManagedAccountTrader(ctx context.Context, apiKey, secretKey, passphrase 
 		return nil, err
 	}
 	t.managedStreamURL = url
+	t.baseURL = okxBaseURL
 	return t, nil
+}
+
+// ManagedEndpoint is the exported form of the certification seam: a fixture
+// points a managed account at a local venue. Production callers never supply
+// one, so a sandbox account cannot be redirected at production.
+type ManagedEndpoint struct {
+	BaseURL   string
+	Client    *http.Client
+	StreamURL string
+}
+
+// NewManagedAccountTraderWithEndpoint builds a managed account against a
+// supplied endpoint. It exists for certification fixtures only.
+func NewManagedAccountTraderWithEndpoint(ctx context.Context, apiKey, secretKey, passphrase string, env execution.Environment, seam *ManagedEndpoint) (*OKXTrader, error) {
+	t, err := newManagedOKXTrader(apiKey, secretKey, passphrase, env)
+	if err != nil {
+		return nil, err
+	}
+	if seam != nil {
+		if seam.BaseURL != "" {
+			t.baseURL = seam.BaseURL
+		}
+		if seam.Client != nil {
+			t.httpClient = seam.Client
+		}
+		if seam.StreamURL != "" {
+			t.managedStreamURL = seam.StreamURL
+		}
+	}
+	return t, nil
+}
+
+// endpoint is the signed-request host. Legacy traders keep the pinned live host.
+func (t *OKXTrader) endpoint() string {
+	if t.baseURL == "" {
+		return okxBaseURL
+	}
+	return t.baseURL
 }
