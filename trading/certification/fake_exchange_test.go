@@ -143,7 +143,26 @@ type fakeExchange struct {
 	entryRecord   string // last rendered entry receipt
 	protectRecord string // rendered protective-stop receipt
 
+	// positionMode and marginMode are the account settings the venue reports;
+	// empty keeps one-way and isolated, the modes unattended execution requires.
+	positionMode string
+	marginMode   string
+
 	faults exchangeFaults
+}
+
+// setPositionMode makes the venue report hedge mode; the gate must reject it.
+func (f *fakeExchange) setPositionMode(mode string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.positionMode = mode
+}
+
+// setMarginMode makes the venue report that margin mode for open positions.
+func (f *fakeExchange) setMarginMode(mode string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.marginMode = mode
 }
 
 func newFakeExchange(t *testing.T, venue string, now func() time.Time) *fakeExchange {
@@ -316,7 +335,11 @@ func (f *fakeExchange) serveBinance(w http.ResponseWriter, r *http.Request) {
 	case "/fapi/v1/time":
 		f.json(w, 200, fmt.Sprintf(`{"serverTime":%d}`, f.now().UnixMilli()))
 	case "/fapi/v1/positionSide/dual":
-		f.json(w, 200, `{"dualSidePosition":false}`)
+		dual := `{"dualSidePosition":false}`
+		if f.positionMode == "hedge" {
+			dual = `{"dualSidePosition":true}`
+		}
+		f.json(w, 200, dual)
 	case "/fapi/v2/account":
 		f.json(w, 200, f.binanceAccount())
 	case "/fapi/v2/positionRisk":
@@ -360,11 +383,15 @@ func (f *fakeExchange) binanceAccount() string {
 }
 
 func (f *fakeExchange) binanceRisk() string {
+	margin := "isolated"
+	if f.marginMode != "" {
+		margin = f.marginMode
+	}
 	return fmt.Sprintf(`{"symbol":%q,"positionAmt":%q,"entryPrice":%q,"markPrice":%q,`+
 		`"unRealizedProfit":"0","liquidationPrice":"0","leverage":"3","maxNotionalValue":"1000000",`+
-		`"marginType":"isolated","isolatedMargin":"0","isAutoAddMargin":"false","positionSide":"BOTH",`+
+		`"marginType":%q,"isolatedMargin":"0","isAutoAddMargin":"false","positionSide":"BOTH",`+
 		`"notional":"0","isolatedWallet":"0","updateTime":%d}`,
-		binanceSymbol, dec(f.position), dec(f.entry), dec(f.entry), f.now().UnixMilli())
+		binanceSymbol, dec(f.position), dec(f.entry), dec(f.entry), margin, f.now().UnixMilli())
 }
 
 func (f *fakeExchange) binanceOrderJSON(o *nativeOrder) string {
@@ -569,9 +596,15 @@ func (f *fakeExchange) serveOKX(w http.ResponseWriter, r *http.Request) {
 	case "/api/v5/public/instruments":
 		f.json(w, 200, okxData(`[{"instId":"BTC-USDT-SWAP","instFamily":"BTC-USDT","groupId":"","instType":"SWAP","state":"live","ctType":"linear","settleCcy":"USDT","ctValCcy":"BTC","ctVal":"0.01","ctMult":"1","lotSz":"0.01","minSz":"0.01","tickSz":"0.1","maxMktSz":"10000","maxLmtSz":"10000"}]`))
 	case "/api/v5/account/config":
-		f.json(w, 200, okxData(`[{"posMode":"net_mode","acctLv":"2","uid":"venue-1"}]`))
+		mode := "net_mode"
+		if f.positionMode == "hedge" {
+			mode = "long_short_mode"
+		}
+		f.json(w, 200, okxData(`[{"posMode":"`+mode+`","acctLv":"2","uid":"venue-1"}]`))
 	case "/api/v5/account/balance":
-		f.json(w, 200, okxData(`[{"details":[{"ccy":"USDT","eq":"10000","availEq":"10000","availBal":"10000"}]}]`))
+		// The adapter refuses a balance without imr ("OKX margin used is
+		// unavailable"), so the simulated account reports it.
+		f.json(w, 200, okxData(`[{"details":[{"ccy":"USDT","eq":"10000","availEq":"10000","availBal":"10000","imr":"0"}]}]`))
 	case "/api/v5/account/trade-fee":
 		f.json(w, 200, okxData(`[{"takerU":"-`+venueTakerRate+`"}]`))
 	case "/api/v5/account/positions":
@@ -604,9 +637,13 @@ func (f *fakeExchange) okxPositions() string {
 	if f.position.Sign() == 0 {
 		return "[]"
 	}
-	return fmt.Sprintf(`[{"instId":"BTC-USDT-SWAP","pos":%q,"posSide":"net","mgnMode":"cross","avgPx":%q,`+
+	margin := "cross"
+	if f.marginMode != "" {
+		margin = f.marginMode
+	}
+	return fmt.Sprintf(`[{"instId":"BTC-USDT-SWAP","pos":%q,"posSide":"net","mgnMode":%q,"avgPx":%q,`+
 		`"markPx":%q,"upl":"0","lever":"3","liqPx":"0","imr":"0"}]`,
-		f.okxContracts(f.position), dec(f.entry), dec(f.entry))
+		f.okxContracts(f.position), margin, dec(f.entry), dec(f.entry))
 }
 
 func (f *fakeExchange) okxPendingOrders() string {

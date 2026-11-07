@@ -5,22 +5,31 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"nofx/crypto"
+	"nofx/planning"
+	"nofx/planning/core"
+	"nofx/planning/live"
+	"nofx/planning/market"
 	"nofx/store"
 	"nofx/trader/binance"
 	"nofx/trader/execution"
 	"nofx/trader/okx"
+	"nofx/trading/risk"
 )
 
 // The sandbox acceptance entry point is a test, not a server route: it may
@@ -34,15 +43,17 @@ var (
 )
 
 func init() {
-	if flag.Lookup("sandbox-venue") == nil {
-		flag.StringVar(&sandboxVenue, "sandbox-venue", "", "sandbox venue to certify: binance or okx")
+	// A name already taken by another package would leave these variables empty
+	// and turn every run into the same silent skip as an operator who forgot the
+	// flags, so the collision is fatal instead.
+	for _, name := range []string{"sandbox-venue", "sandbox-binding", "sandbox-db"} {
+		if flag.Lookup(name) != nil {
+			panic("certification: flag -" + name + " is already registered; the sandbox entry point cannot read it")
+		}
 	}
-	if flag.Lookup("sandbox-binding") == nil {
-		flag.StringVar(&sandboxBinding, "sandbox-binding", "", "verified sandbox account binding ID")
-	}
-	if flag.Lookup("sandbox-db") == nil {
-		flag.StringVar(&sandboxDB, "sandbox-db", "", "path to a copied, isolated sandbox database")
-	}
+	flag.StringVar(&sandboxVenue, "sandbox-venue", "", "sandbox venue to certify: binance or okx")
+	flag.StringVar(&sandboxBinding, "sandbox-binding", "", "verified sandbox account binding ID")
+	flag.StringVar(&sandboxDB, "sandbox-db", "", "path to a copied, isolated sandbox database")
 }
 
 // sandboxGate is every check that must pass before the acceptance run may talk
@@ -166,9 +177,33 @@ func (g sandboxGate) open(ctx context.Context) (*sandboxSetup, error) {
 	return setup, nil
 }
 
-// isolatedSandboxDB rejects paths that address the runtime database. The check
-// is lexical on purpose: a copy of the runtime database outside data/ cannot be
-// detected, so the operator must copy it into an isolated directory.
+// sandboxRepoRoot locates the repository from this source file, so the guard
+// names the runtime database independently of the cwd go test chose (the
+// package directory, where "data/data.db" means nothing).
+func sandboxRepoRoot() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", errors.New("cannot locate the certification test source")
+	}
+	dir := filepath.Dir(file)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("no go.mod above the certification test source")
+		}
+		dir = parent
+	}
+}
+
+// isolatedSandboxDB rejects every path that resolves to the runtime database.
+// The candidate is made absolute and, when it exists, symlink-resolved before
+// the comparison, because a relative or symlinked path into <repo>/data would
+// otherwise open the production file for writing. A copy outside data/ is still
+// undetectable by content, so the operator must copy it into an isolated
+// directory.
 func isolatedSandboxDB(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -176,29 +211,42 @@ func isolatedSandboxDB(path string) (string, error) {
 	}
 	clean := filepath.Clean(path)
 	if clean == "data" || strings.HasPrefix(clean, "data"+string(filepath.Separator)) {
-		return "", fmt.Errorf("-sandbox-db %q is the production runtime database directory; copy it elsewhere first", path)
+		return "", fmt.Errorf("-sandbox-db %q is the runtime data directory; copy it elsewhere first", path)
 	}
+	repo, err := sandboxRepoRoot()
+	if err != nil {
+		return "", err
+	}
+	runtimeDir := filepath.Join(repo, "data")
 	abs, err := filepath.Abs(clean)
 	if err != nil {
 		return "", fmt.Errorf("resolve -sandbox-db %q: %w", path, err)
 	}
-	if cwd, err := os.Getwd(); err == nil {
-		prodDir := filepath.Join(cwd, "data")
-		if rel, err := filepath.Rel(prodDir, abs); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("-sandbox-db %s is under the runtime data directory %s", abs, prodDir)
+	resolved := abs
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		resolved = real
+	}
+	for _, candidate := range []string{abs, resolved} {
+		if rel, err := filepath.Rel(runtimeDir, candidate); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("-sandbox-db %s is inside the runtime data directory %s; copy it to an isolated directory first", candidate, runtimeDir)
 		}
 	}
-	if filepath.Base(abs) == "astra_gateway.db" {
-		return "", fmt.Errorf("-sandbox-db %s is the production gateway database; copy it elsewhere first", abs)
-	}
-	info, err := os.Stat(abs)
+	info, err := os.Stat(resolved)
 	if err != nil {
-		return "", fmt.Errorf("-sandbox-db %s is not an existing database file: %w", abs, err)
+		return "", fmt.Errorf("-sandbox-db %s is not an existing database file: %w", resolved, err)
 	}
-	if info.IsDir() {
-		return "", fmt.Errorf("-sandbox-db %s is a directory, not a database file", abs)
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("-sandbox-db %s is not a regular database file", resolved)
 	}
-	return abs, nil
+	probe, err := os.OpenFile(resolved, os.O_WRONLY, 0)
+	if err != nil {
+		return "", fmt.Errorf("-sandbox-db %s is not writable: %w", resolved, err)
+	}
+	probe.Close()
+	if filepath.Base(resolved) == "astra_gateway.db" {
+		return "", fmt.Errorf("-sandbox-db %s is the production gateway database; copy it elsewhere first", resolved)
+	}
+	return resolved, nil
 }
 
 func sandboxTrader(ctx context.Context, venue string, ex *store.Exchange) (execution.ManagedTrader, error) {
@@ -311,13 +359,18 @@ func TestSandboxGateRejectsLive(t *testing.T) {
 	for _, venue := range []string{venueBinance, venueOKX} {
 		venue := venue
 		t.Run(venue, func(t *testing.T) {
-			run := func(name string, wantErr bool, mutate func(*testing.T, *exchangeFixture), path func(*exchangeFixture) string, trader func(*exchangeFixture) execution.ManagedTrader) {
+			repo, err := sandboxRepoRoot()
+			if err != nil {
+				t.Fatalf("locate the repository: %v", err)
+			}
+			runtimeDB := filepath.Join(repo, "data", "data.db")
+			run := func(name string, wantErr bool, wantReason string, mutate func(*testing.T, *exchangeFixture), path func(*exchangeFixture) string, trader func(*exchangeFixture) execution.ManagedTrader) {
 				t.Helper()
 				f := sandboxGateAccount(t, venue)
 				if mutate != nil {
 					mutate(t, f)
 				}
-				gate := sandboxGate{Venue: venue, BindingID: f.binding.ID, DBPath: f.dbPath}
+				gate := sandboxGate{Venue: venue, BindingID: f.binding.ID, DBPath: f.dbPath, Trader: f.venue2}
 				if path != nil {
 					gate.DBPath = path(f)
 				}
@@ -334,6 +387,9 @@ func TestSandboxGateRejectsLive(t *testing.T) {
 					if err == nil || unsafePOSTs != 0 {
 						t.Fatal("sandbox gate accepted unsafe account")
 					}
+					if wantReason != "" && !strings.Contains(err.Error(), wantReason) {
+						t.Fatalf("%s rejected for the wrong reason, want %q: %v", name, wantReason, err)
+					}
 					t.Logf("%s rejected: %v", name, err)
 					return
 				}
@@ -345,76 +401,126 @@ func TestSandboxGateRejectsLive(t *testing.T) {
 				}
 			}
 
-			run("pinned sandbox account", false, nil, nil, func(f *exchangeFixture) execution.ManagedTrader {
-				if venue == venueBinance {
-					return f.venue2
-				}
-				// The OKX simulator omits the imr field the adapter requires from
-				// its balance payload, so the control case supplies the account the
-				// venue would return. Every rejection case runs on the adapter.
-				return fixtureAccountTrader{ManagedTrader: f.venue2, account: execution.ManagedAccount{
-					Venue: venue, Environment: execution.EnvironmentSandbox, PositionMode: "one_way", MarginMode: "isolated",
-				}}
+			run("pinned sandbox account", false, "", nil, nil, func(f *exchangeFixture) execution.ManagedTrader {
+				// Both venues run the real adapter: the local simulator now reports
+				// the fields the gate reads, so no fixture may stand in for it.
+				return f.venue2
 			})
-			run("live binding", true, func(t *testing.T, f *exchangeFixture) {
+			run("live binding", true, "sandbox", func(t *testing.T, f *exchangeFixture) {
 				if err := f.db.Model(&execution.Binding{}).Where("id = ?", f.binding.ID).Update("environment", execution.EnvironmentLive).Error; err != nil {
 					t.Fatalf("move binding to live: %v", err)
 				}
 			}, nil, nil)
-			run("live HTTP environment", true, func(t *testing.T, f *exchangeFixture) {
+			run("live HTTP environment", true, "", func(t *testing.T, f *exchangeFixture) {
 				if err := f.db.Model(&store.Exchange{}).Where("id = ?", f.binding.ExchangeID).Update("testnet", false).Error; err != nil {
 					t.Fatalf("flip exchange config to live: %v", err)
 				}
 			}, nil, nil)
-			run("runtime database", true, nil, func(*exchangeFixture) string {
-				return filepath.Join("data", "data.db")
+			run("runtime database", true, "runtime data directory", nil, func(*exchangeFixture) string {
+				return runtimeDB
 			}, nil)
-			run("empty database path", true, nil, func(*exchangeFixture) string { return "" }, nil)
-			run("owner mismatch", true, func(t *testing.T, f *exchangeFixture) {
+			run("empty database path", true, "", nil, func(*exchangeFixture) string { return "" }, nil)
+			run("owner mismatch", true, "", func(t *testing.T, f *exchangeFixture) {
 				if err := f.db.Model(&store.Exchange{}).Where("id = ?", f.binding.ExchangeID).Update("user_id", "mallory").Error; err != nil {
 					t.Fatalf("change exchange owner: %v", err)
 				}
 			}, nil, nil)
-			run("hedge mode", true, nil, nil, func(f *exchangeFixture) execution.ManagedTrader {
-				return snapshotTrader{ManagedTrader: f.venue2, mode: "hedge", margin: "isolated"}
-			})
-			run("cross margin", true, nil, nil, func(f *exchangeFixture) execution.ManagedTrader {
-				return snapshotTrader{ManagedTrader: f.venue2, mode: "one_way", margin: "cross"}
-			})
+			run("hedge mode", true, "position mode", func(t *testing.T, f *exchangeFixture) {
+				f.fake.setPositionMode("hedge")
+			}, nil, nil)
+			run("cross margin", true, "margin mode", func(t *testing.T, f *exchangeFixture) {
+				// Both adapters report a margin mode only for an open position.
+				f.fake.setMarginMode("cross")
+				f.fake.setPosition(rat("0.01"), rat("100000"))
+			}, nil, nil)
 		})
 	}
 }
 
-// snapshotTrader overrides only the account read, so a gate rejection can be
-// proven offline for settings the local venue fixture does not simulate.
-type snapshotTrader struct {
-	execution.ManagedTrader
-	mode   string
-	margin string
-}
+// roundTripFunc answers adapter construction calls without a network: the
+// Binance adapter calibrates its clock through the injected transport.
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
-func (s snapshotTrader) ManagedSnapshot(ctx context.Context) (execution.ManagedAccount, error) {
-	account, err := s.ManagedTrader.ManagedSnapshot(ctx)
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestSandboxRejectsRuntimeDatabase proves the guard rejects every spelling of
+// the runtime database, not only the relative one. go test runs with the
+// package directory as cwd, so the lexical check alone missed the real file.
+func TestSandboxRejectsRuntimeDatabase(t *testing.T) {
+	repo, err := sandboxRepoRoot()
 	if err != nil {
-		return account, err
+		t.Fatalf("locate the repository: %v", err)
 	}
-	if s.mode != "" {
-		account.PositionMode = s.mode
+	runtimeDB := filepath.Join(repo, "data", "data.db")
+	cases := []struct{ name, path string }{
+		{"absolute", runtimeDB},
+		{"traversal", filepath.Join("..", "..", "data", "data.db")},
 	}
-	if s.margin != "" {
-		account.MarginMode = s.margin
+	if _, err := os.Stat(runtimeDB); err == nil {
+		link := filepath.Join(t.TempDir(), "runtime-copy.db")
+		if err := os.Symlink(runtimeDB, link); err != nil {
+			t.Fatalf("symlink the runtime database: %v", err)
+		}
+		cases = append(cases, struct{ name, path string }{"symlink", link})
+	} else {
+		t.Logf("runtime database %s is absent; the symlink case cannot be built", runtimeDB)
 	}
-	return account, nil
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resolved, err := isolatedSandboxDB(c.path)
+			if err == nil {
+				t.Fatalf("-sandbox-db %s was accepted as %s", c.path, resolved)
+			}
+			if !strings.Contains(err.Error(), "runtime data directory") {
+				t.Fatalf("-sandbox-db %s rejected for an unrelated reason: %v", c.path, err)
+			}
+		})
+	}
 }
 
-// fixtureAccountTrader replaces the account read for the control case only.
-type fixtureAccountTrader struct {
-	execution.ManagedTrader
-	account execution.ManagedAccount
-}
-
-func (f fixtureAccountTrader) ManagedSnapshot(context.Context) (execution.ManagedAccount, error) {
-	return f.account, nil
+// TestSandboxRequireEndpointsRejectsLive exercises the endpoint check directly:
+// it is the only defense against an adapter that reports sandbox but kept a
+// live host. Adapter construction stays offline because the Binance clock
+// calibration is answered by the injected transport.
+func TestSandboxRequireEndpointsRejectsLive(t *testing.T) {
+	ctx := context.Background()
+	offline := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader(`{"serverTime":1700000000000}`)),
+		}, nil
+	})}
+	production, err := binance.NewManagedAccountTraderWithEndpoint(ctx, "key", "secret", "alice", execution.EnvironmentSandbox,
+		&binance.ManagedEndpoint{BaseURL: futures.BaseApiMainUrl, StreamURL: "wss://stream.binancefuture.com/ws/", Client: offline})
+	if err != nil {
+		t.Fatalf("build the binance adapter: %v", err)
+	}
+	if err := requireSandboxEndpoints(venueBinance, production); err == nil || !strings.Contains(err.Error(), "HTTP endpoint") {
+		t.Fatalf("binance live HTTP endpoint accepted: %v", err)
+	}
+	pinned, err := binance.NewManagedAccountTraderWithEndpoint(ctx, "key", "secret", "alice", execution.EnvironmentSandbox,
+		&binance.ManagedEndpoint{BaseURL: futures.BaseApiTestnetUrl, StreamURL: "wss://stream.binancefuture.com/ws/", Client: offline})
+	if err != nil {
+		t.Fatalf("build the binance sandbox adapter: %v", err)
+	}
+	if err := requireSandboxEndpoints(venueBinance, pinned); err != nil {
+		t.Fatalf("binance sandbox endpoint rejected: %v", err)
+	}
+	simulated, err := okx.NewManagedAccountTraderWithEndpoint(ctx, "key", "secret", "passphrase", execution.EnvironmentSandbox, nil)
+	if err != nil {
+		t.Fatalf("build the okx sandbox adapter: %v", err)
+	}
+	if err := requireSandboxEndpoints(venueOKX, simulated); err != nil {
+		t.Fatalf("okx sandbox endpoint rejected: %v", err)
+	}
+	productionOKX, err := okx.NewManagedAccountTraderWithEndpoint(ctx, "key", "secret", "passphrase", execution.EnvironmentLive, nil)
+	if err != nil {
+		t.Fatalf("build the okx live adapter: %v", err)
+	}
+	if err := requireSandboxEndpoints(venueOKX, productionOKX); err == nil || !strings.Contains(err.Error(), "environment") {
+		t.Fatalf("okx live environment accepted: %v", err)
+	}
 }
 
 func sandboxGateAccount(t *testing.T, venue string) *exchangeFixture {
@@ -476,6 +582,15 @@ func TestSandboxLifecycleAssertions(t *testing.T) {
 			if state := f.run().ProtectionState; state == "protected" {
 				t.Fatalf("%s still reports protected after a partial reduce", venue)
 			}
+			for _, role := range []string{"sl", "tp"} {
+				orders := f.fake.byRole(role)
+				if len(orders) != 1 || !orders[0].live() {
+					t.Fatalf("%s venue holds %d %s orders after the partial reduce, want the confirmed protection untouched", venue, len(orders), role)
+				}
+			}
+			if state := f.ReservationState(); state != risk.StateReserved && state != risk.StateExposed {
+				t.Fatalf("%s risk reservation is %q while the position is still open, want it held", venue, state)
+			}
 
 			if err := f.Flatten(); err != nil {
 				t.Fatalf("%s flatten the remaining position: %v", venue, err)
@@ -495,8 +610,10 @@ func TestSandboxLifecycleAssertions(t *testing.T) {
 // TestSandboxManagedLifecycle is the sandbox acceptance entry point. It never
 // runs without the three flags and the same encryption keys the runtime uses:
 // without them the encrypted credentials in the isolated database are
-// unreadable. It proves the account is safe to certify; the order cycle itself
-// is driven by the runtime and recorded in the acceptance template.
+// unreadable. With them it drives the production runtime — automation policy,
+// compiled plan, approval, execution and supervision — against the authorized
+// sandbox account, reads the venue back after every phase and flattens before
+// failing, so a broken run never leaves the account exposed.
 func TestSandboxManagedLifecycle(t *testing.T) {
 	if sandboxVenue == "" || sandboxBinding == "" || sandboxDB == "" {
 		t.Skip("sandbox acceptance needs -sandbox-venue, -sandbox-binding and -sandbox-db for an authorized isolated sandbox account; no venue was contacted")
@@ -520,7 +637,213 @@ func TestSandboxManagedLifecycle(t *testing.T) {
 		t.Fatalf("sandbox account %s is not empty: %d positions, %d orders; acceptance needs a flat, order-free account",
 			setup.binding.ID, len(account.Positions), len(account.Orders))
 	}
-	t.Logf("sandbox account %s verified: venue=%s environment=%s binding=%s equity=%s available=%s position_mode=%s margin_mode=%s observed=%s",
-		setup.binding.ID, setup.binding.Venue, setup.binding.Environment, setup.exchange.ID,
-		account.Equity, account.Available, account.PositionMode, account.MarginMode, account.ObservedAt.Format("2006-01-02T15:04:05Z07:00"))
+	user, venue := setup.binding.UserID, setup.binding.Venue
+	symbol := binanceSymbol
+	if venue == venueOKX {
+		symbol = okxSymbol
+	}
+	broker := live.NOFXBroker{Trader: setup.trader}
+	acct, err := broker.Account(ctx, symbol)
+	if err != nil {
+		t.Fatalf("read the sandbox account: %v", err)
+	}
+	book, err := market.New().Snapshot(ctx, venue, symbol)
+	if err != nil {
+		t.Fatalf("read the %s %s book: %v", venue, symbol, err)
+	}
+	equity, ok := new(big.Rat).SetString(string(acct.Equity))
+	if !ok || equity.Sign() <= 0 {
+		t.Fatalf("sandbox account equity %q is unusable", acct.Equity)
+	}
+	available := acct.Available
+	if avail, ok := new(big.Rat).SetString(string(acct.Available)); ok && avail.Cmp(equity) > 0 {
+		available = acct.Equity
+	}
+	fee := acct.FeeBPS
+	if !core.Positive(fee) {
+		fee = "5"
+	}
+	// 0.5% of equity is risk.DefaultPolicy's default per-trade budget.
+	const leverage, stopBPS, targetBPS = 3, 100, 300
+	entry := book.Ask
+	constraints := core.Constraints{
+		Leverage:          leverage,
+		AvailableMargin:   available,
+		Equity:            acct.Equity,
+		MaxRisk:           core.Decimal(new(big.Rat).Mul(equity, big.NewRat(50, 10000)).FloatString(8)),
+		MaxNotional:       core.Decimal(new(big.Rat).Mul(equity, big.NewRat(leverage, 1)).FloatString(8)),
+		MinRewardRisk:     "1.5",
+		FeeBPS:            fee,
+		SlippageBPS:       "10",
+		FundingReserveBPS: "10",
+	}
+	plan, err := core.Compile(book, constraints, core.Idea{
+		Name:   "sandbox-certification-" + venue,
+		Side:   "long",
+		Entry:  entry,
+		Stop:   core.Price(entry, 1-float64(stopBPS)/10000, book.Tick),
+		Target: core.Price(entry, 1+float64(targetBPS)/10000, book.Tick),
+	}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("compile the certification plan: %v", err)
+	}
+
+	risks, err := risk.NewStore(setup.db)
+	if err != nil {
+		t.Fatalf("open the risk store: %v", err)
+	}
+	policy := risk.DefaultPolicy(user, setup.binding.ID, "sandbox-certification", venue, execution.EnvironmentSandbox)
+	policy.Symbols = []string{symbol}
+	policy.Enabled = true
+	if policy, err = risks.PutPolicy(ctx, policy); err != nil {
+		t.Fatalf("store the sandbox certification policy: %v", err)
+	}
+	observed := setup.account
+	observed.AccountKey = setup.binding.ID
+	midnight := time.Now().UTC().Truncate(24 * time.Hour).Add(time.Second)
+	for _, at := range []time.Time{midnight, time.Now().UTC()} {
+		if err := risks.Observe(ctx, observed, nil, at); err != nil {
+			t.Fatalf("record the sandbox equity baseline: %v", err)
+		}
+	}
+	drafts := planning.DraftStore{DB: setup.db, UserID: user, ExchangeID: setup.binding.ExchangeID, Venue: venue}
+	if err := drafts.Add([]core.Plan{plan}); err != nil {
+		t.Fatalf("store the draft plan: %v", err)
+	}
+	ctrl, err := live.New(setup.db, func(context.Context, string, string) (live.Broker, string, error) {
+		return broker, setup.binding.ID, nil
+	}, market.New())
+	if err != nil {
+		t.Fatalf("start the runtime: %v", err)
+	}
+	ctrl.Interval = -1 // the test drives every tick explicitly
+	ctrl.Risk = risks
+	defer ctrl.Shutdown()
+
+	view, err := ctrl.Approve(ctx, user, plan.ID, plan.Hash, "APPROVE LIVE")
+	if err != nil {
+		t.Fatalf("approve the certification plan: %v", err)
+	}
+	run, err := ctrl.Execute(ctx, user, view.ID, view.ApprovalHash)
+	if err != nil {
+		t.Fatalf("execute the approved plan: %v", err)
+	}
+	t.Logf("%s run %s started: state=%s", venue, run.ID, run.State)
+
+	current := func() live.View {
+		t.Helper()
+		v, err := ctrl.Get(user, run.ID)
+		if err != nil {
+			t.Fatalf("read run %s: %v", run.ID, err)
+		}
+		return v
+	}
+	terminal := func(v live.View) bool {
+		switch v.State {
+		case "needs_attention", "completed", "cancelled", "failed", "rejected":
+			return true
+		}
+		return false
+	}
+	drive := func(until func(live.View) bool) live.View {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Minute)
+		for {
+			ctrl.StepContext(ctx, user, run.ID)
+			v := current()
+			if until(v) || time.Now().After(deadline) {
+				return v
+			}
+			time.Sleep(300 * time.Millisecond)
+		}
+	}
+	// venueState reads the account back from the venue, never from the runtime.
+	venueState := func() (*big.Rat, int) {
+		t.Helper()
+		snapshot, err := setup.trader.ManagedSnapshot(ctx)
+		if err != nil {
+			t.Fatalf("read the sandbox venue: %v", err)
+		}
+		position := new(big.Rat)
+		for _, p := range snapshot.Positions {
+			if p.Symbol != symbol {
+				continue
+			}
+			q, ok := new(big.Rat).SetString(string(p.Quantity))
+			if !ok {
+				t.Fatalf("venue position quantity %q is unusable", p.Quantity)
+			}
+			if strings.EqualFold(p.Side, "short") {
+				t.Fatalf("venue reports a short %s position during a long acceptance run", symbol)
+			}
+			position.Add(position, q)
+		}
+		return position, len(snapshot.Orders)
+	}
+
+	v := drive(func(v live.View) bool { return v.ProtectionState == "protected" || terminal(v) })
+	if v.ProtectionState != "protected" {
+		_, _ = ctrl.Flatten(ctx, user, run.ID, "sandbox acceptance aborted before protection")
+		t.Fatalf("sandbox entry was not protected: state=%s protection=%s error=%s", v.State, v.ProtectionState, v.Error)
+	}
+	position, orders := venueState()
+	if position.Sign() <= 0 || orders != 2 {
+		_, _ = ctrl.Flatten(ctx, user, run.ID, "sandbox acceptance aborted on an unexpected venue state")
+		t.Fatalf("venue shows position %s and %d orders after protection, want a long position and 2 protective orders", position.RatString(), orders)
+	}
+	t.Logf("%s entry filled and protected: position=%s orders=%d", venue, position.RatString(), orders)
+
+	step, ok := new(big.Rat).SetString(string(book.Step))
+	if !ok || step.Sign() <= 0 {
+		t.Fatalf("venue quantity step %q is unusable", book.Step)
+	}
+	half := new(big.Rat).Quo(position, big.NewRat(2, 1))
+	units := new(big.Rat).Quo(half, step)
+	quantity := new(big.Rat).SetInt(new(big.Int).Quo(units.Num(), units.Denom()))
+	quantity.Mul(quantity, step)
+	clientID, err := execution.NewClientID()
+	if err != nil {
+		t.Fatalf("mint a reduce client order ID: %v", err)
+	}
+	route, err := broker.RouteClientID(clientID)
+	if err != nil {
+		t.Fatalf("route the reduce client order ID: %v", err)
+	}
+	if _, err := broker.Place(ctx, execution.Order{
+		ClientID: clientID, VenueClientID: route, Symbol: symbol, Side: "sell", Type: "market",
+		Quantity: execution.Decimal(quantity.FloatString(12)), Price: entry,
+		ReduceOnly: true, Role: "exit", Status: "submitting",
+	}); err != nil {
+		t.Fatalf("reduce half the position at the venue: %v", err)
+	}
+	v = drive(func(v live.View) bool { return v.ProtectionState != "protected" || terminal(v) })
+	if v.ProtectionState == "protected" {
+		t.Fatalf("runtime still reports protected after a partial reduce: state=%s", v.State)
+	}
+	position, orders = venueState()
+	t.Logf("%s after the partial reduce: position=%s orders=%d state=%s protection=%s", venue, position.RatString(), orders, v.State, v.ProtectionState)
+
+	if _, err := ctrl.Flatten(ctx, user, run.ID, "sandbox certification"); err != nil {
+		t.Fatalf("flatten the sandbox position: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		position, orders = venueState()
+		if (position.Sign() == 0 && orders == 0) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if position.Sign() != 0 || orders != 0 {
+		t.Fatalf("sandbox account is not settled: position=%s orders=%d", position.RatString(), orders)
+	}
+	record, err := risks.Reservation(ctx, run.ID)
+	if err != nil {
+		t.Fatalf("read the risk reservation of run %s: %v", run.ID, err)
+	}
+	if record.State != risk.StateReleased {
+		t.Fatalf("risk reservation is %q on a flat account, want %q", record.State, risk.StateReleased)
+	}
+	t.Logf("sandbox acceptance complete for %s binding %s: entry, protection, partial reduce, flatten, no venue orders, reservation released",
+		venue, setup.binding.ID)
 }

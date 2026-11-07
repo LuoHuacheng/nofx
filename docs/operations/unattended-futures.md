@@ -119,6 +119,16 @@
 
 入口是一个测试，不是服务端接口：`trading/certification/sandbox_test.go` 的 `TestSandboxManagedLifecycle`。它复用正式托管运行时与正式交易所适配器，不新增任何下单代码。
 
+这条命令的实际流程（每一步都发生在真实 sandbox 账户上）：
+
+1. gate：从 `-sandbox-db` 副本解析绑定与交易所配置，核验 environment/testnet/凭据/endpoint/仓位与保证金模式，并读取一次账户快照；账户必须无持仓、无挂单/策略委托，否则在做任何下单前终止。
+2. 运行时：写入 `risk.DefaultPolicy` 策略（单笔风险 0.5% 权益、≤3x）、记录两次权益基线，用公开行情编译 `core.Plan`（限价入场、1% 止损、3% 目标），写入草稿，`live.New` 启动 `Controller` 并把 `Interval` 设为负值由测试逐 tick 驱动，再 `Approve`（口令 `APPROVE LIVE`）＋`Execute`。
+3. 订单周期：反复 `Controller.StepContext`，直到运行态 `position_open` 且 `protection_state=protected`；随后测试用 `ManagedSnapshot` 直接读交易所，要求 1 个持仓 + 2 张保护单。
+4. 部分减仓：测试在交易所用 reduce-only 市价单减半，再驱动运行时，要求保护状态不再为 `protected`（运行时发现持仓与计划成交不一致）。
+5. 收尾：`Flatten` 后再读一次交易所，要求持仓为 0、无遗留订单，且该 run 的风险预留为 `released`；任一步失败时测试会先尝试 `Flatten` 再报错，避免把账户留在敞口状态。
+
+**证明**：正式运行时在 sandbox 账户上完成「入场 → 保护单确认 → 部分减仓 → 平仓 → 无残留 → 预留释放」，且每一步的交易所侧状态与运行时判断一致。**不证明**：策略盈利能力、连续 7 天稳定性、实盘行为、Postgres 进程锁分支、网络分区场景。
+
 ```bash
 # 只读副本 + 独立数据库，绝不指向 data/data.db
 mkdir -p "$HOME/nofx-acceptance"
@@ -146,9 +156,9 @@ OKX 单独跑一次，把 `-sandbox-venue` 换成 `okx`，并使用 OKX 账户�
 - 适配器实际钉住的 endpoint 是 sandbox：Binance HTTP = `https://testnet.binancefuture.com`、stream = `wss://stream.binancefuture.com/ws/`；OKX 的 demo 只由 `x-simulated-trading: 1` 头选择，所以以 demo 私有 stream `wss://wspap.okx.com:8443/ws/v5/private?brokerId=9999` 为证；
 - 账户自身快照报告 `environment=sandbox`、单向（`one_way` / `net_mode`），且上报的保证金模式为逐仓（平仓空账户不上报保证金模式，gate 接受空值；一旦上报必须是 `isolated`）。
 
-`-sandbox-db` 为空、位于 `data/` 下、等于 `data/astra_gateway.db`、或不是已存在的文件时一律拒绝。这是词法判断：把生产库复制到别处后无法再识别，所以必须复制到独立目录。
+`-sandbox-db` 为空、是目录/非常规文件/不可写，或解析后落在仓库 `data/` 目录内时一律拒绝：绝对路径、`../../` 穿越、以及指向 `data/data.db` 的符号链接都算，错误信息会写明 runtime data directory。仓库根由测试文件向上查找 `go.mod` 得到，不依赖 go test 的工作目录；候选路径先做绝对化，存在时再做符号链接解析。这仍是路径判断：把生产库复制到别处后无法按内容识别，所以必须复制到独立目录。
 
-离线对照测试 `TestSandboxGateRejectsLive` 用本地 venue 模拟器逐项证明上述拒绝发生在任何 POST 之前（入场/保护/退出/撤单计数全为 0），`TestSandboxLifecycleAssertions` 证明完整周期结束时仓位为 0、无遗留订单、风险预留已释放。
+离线对照测试逐项证明上述拒绝都发生在任何 POST 之前：`TestSandboxGateRejectsLive` 用本地 venue 模拟器跑两个 venue 的 gate 正/反用例（入场/保护/退出/撤单计数全为 0，且反例必须给出对应理由），`TestSandboxRejectsRuntimeDatabase` 覆盖绝对路径、相对穿越和符号链接三种运行库写法，`TestSandboxRequireEndpointsRejectsLive` 直接证明 endpoint 校验会拒绝指向实盘主机的适配器，`TestSandboxLifecycleAssertions` 证明完整周期结束时仓位为 0、无遗留订单、风险预留已释放。这些离线用例两个 venue 都走真实适配器，不使用替身。
 
 ### 9.2 绑定身份核验
 
@@ -162,13 +172,13 @@ sqlite3 "$NOFX_SANDBOX_DB_PATH" \
   "SELECT id,user_id,exchange_type,testnet,enabled FROM exchanges WHERE id='<exchange_id>';"
 ```
 
-判定规则：绑定必须恰好一行；`venue_account_id` 必须等于交易所页面上显示的该子账户原生 UID（Binance 为 futures UID，OKX 为 `uid`；两者都不等于 API Key）；`exchange_id` 的 `user_id` 必须与绑定一致；`testnet` 必须为 1。任一项不匹配就停止验收，不要"先跑起来再说"。
+判定规则：绑定必须恰好一行（表名 `managed_account_bindings`，见 `trader/execution/binding.go:33` 的 `TableName`）；`venue_account_id` 必须等于交易所页面上显示的该子账户原生 UID（Binance 为 futures UID，OKX 为 `uid`；两者都不等于 API Key）；`exchange_id` 的 `user_id` 必须与绑定一致；`testnet` 必须为 1。任一项不匹配就停止验收，不要"先跑起来再说"。
 
 ### 9.3 模式与权限
 
 - 仓位模式必须是单向（OKX `net_mode`，Binance `dualSidePosition=false`）；逐仓；杠杆按策略上限（≤3x）。
 - API Key 权限：只勾选合约交易与只读，**不勾提现**，并绑定服务器出口 IP 白名单。
-- 验收账户必须没有持仓、没有挂单/策略委托；gate 发现的任何持仓或订单都会让验收中止。
+- 验收账户必须没有持仓、没有挂单/策略委托；验收入口在提交任何订单前读取账户快照做这项检查，发现任一项即终止。该检查属于验收入口本身，不在 gate 的只读检查里，也不适用于其他命令。
 - 保护单确认延迟（从入场成交到 SL/TP 在交易所可见）按模板逐笔记录；超过 5s 保护宽限（`protectionGrace`）会被判为未保护，验收不通过。
 
 ### 9.4 数据库备份与恢复
@@ -223,7 +233,7 @@ GET /api/v5/trade/order?instId=<instId>&clOrdId=<clientID>
 
 ### 9.9 进程锁
 
-- SQLite 部署：`data/nofx-execution.lock` 上的文件锁保证单实例。第二个进程启动即失败，不会双写订单。
+- SQLite 部署：锁文件是 `filepath.Dir(DBPath)` 下的 `nofx-execution.lock`；默认库路径 `data/data.db` 时即 `data/nofx-execution.lock`（`main.go:95`）。第二个进程启动即失败，不会双写订单。
 - PostgreSQL 部署：使用 `pg_try_advisory_lock`。**认证测试只证明了 SQLite 文件锁分支**：`trading/certification/crash_recovery_test.go` 的崩溃恢复用例全部跑在 SQLite 上，Postgres advisory lock 分支没有被覆盖。使用 Postgres 时必须手工验证一次：在第一个实例运行时启动第二个实例，确认它拿不到锁并退出，再继续上线流程。
 - 容器/编排层不得把同一份数据目录挂给两个副本；滚动发布必须先停旧实例再起新实例。
 
