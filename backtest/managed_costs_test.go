@@ -47,6 +47,54 @@ func TestManagedCostsExact(t *testing.T) {
 		t.Fatal("a USDT funding payment was reported incomplete")
 	}
 
+	// The short mirror must book the same profit: a sign inversion in the short
+	// gross would show up here as -10.
+	short, err := CalculateManagedCosts(ManagedCostInput{
+		Side: "short", Quantity: "1", Entry: "110", Exit: "100",
+		FeeBPS: "5", SlippageBPS: "0",
+		Funding: []execution.AccountEvent{managedFunding("fund-1", "-0.01", "USDT", t0)},
+	})
+	if err != nil {
+		t.Fatalf("calculate short: %v", err)
+	}
+	for _, want := range []struct {
+		name  string
+		value execution.Decimal
+		want  string
+	}{
+		{"short gross", short.Gross, "10"},
+		{"short fees", short.Fees, "0.105"},
+		{"short funding", short.Funding, "-0.01"},
+		{"short net", short.Net, "9.885"},
+	} {
+		if !execution.Equal(string(want.value), want.want) {
+			t.Fatalf("%s is %s, want %s", want.name, want.value, want.want)
+		}
+	}
+	if !short.Complete {
+		t.Fatal("the short trade's USDT funding payment was reported incomplete")
+	}
+
+	// A venue record reusing an ID under a different kind is a different event:
+	// it must surface as an unmodelled movement, not be deduped away.
+	reused, err := CalculateManagedCosts(ManagedCostInput{
+		Side: "long", Quantity: "1", Entry: "100", Exit: "110",
+		FeeBPS: "5", SlippageBPS: "0",
+		Funding: []execution.AccountEvent{
+			managedFunding("shared-1", "-0.01", "USDT", t0),
+			{ID: "shared-1", Kind: risk.KindFee, Amount: "-0.02", Currency: "USDT", OccurredAt: t0},
+		},
+	})
+	if err != nil {
+		t.Fatalf("calculate reused ID: %v", err)
+	}
+	if reused.Complete {
+		t.Fatal("a reused event ID under another kind was reported complete")
+	}
+	if !execution.Equal(string(reused.Funding), "-0.01") {
+		t.Fatalf("reused ID kind was priced as funding: %s", reused.Funding)
+	}
+
 	// A re-read of the same venue event must not charge the trade twice.
 	duplicated, err := CalculateManagedCosts(ManagedCostInput{
 		Side: "long", Quantity: "1", Entry: "100", Exit: "110",

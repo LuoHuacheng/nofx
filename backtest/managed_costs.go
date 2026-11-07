@@ -113,10 +113,6 @@ func fundingCost(events []execution.AccountEvent) (*big.Rat, bool, error) {
 			complete = false
 			continue
 		}
-		if _, duplicate := seen[event.ID]; duplicate {
-			continue
-		}
-		seen[event.ID] = struct{}{}
 		if event.Kind != risk.KindFunding {
 			// A gap or any other movement still touched equity; this cost split
 			// has no field for it, so the report must stay incomplete.
@@ -130,6 +126,10 @@ func fundingCost(events []execution.AccountEvent) (*big.Rat, bool, error) {
 			complete = false
 			continue
 		}
+		if _, duplicate := seen[event.ID]; duplicate {
+			continue
+		}
+		seen[event.ID] = struct{}{}
 		amount, err := execution.Number(string(event.Amount))
 		if err != nil {
 			return nil, false, errors.New("managed cost: invalid funding amount")

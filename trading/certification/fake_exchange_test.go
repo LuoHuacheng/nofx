@@ -42,6 +42,11 @@ const (
 	binanceSymbol = "BTCUSDT"
 	okxSymbol     = "BTC-USDT-SWAP"
 	okxCtVal      = "0.01"
+
+	// venueTakerRate is the taker rate both venues publish. The cost replay is
+	// priced from it, so a changed venue rate breaks the assertion instead of
+	// shifting both sides of the comparison together.
+	venueTakerRate = "0.0005"
 )
 
 func rat(s string) *big.Rat {
@@ -154,6 +159,16 @@ func newFakeExchange(t *testing.T, venue string, now func() time.Time) *fakeExch
 
 func (f *fakeExchange) url() string          { return f.srv.URL }
 func (f *fakeExchange) client() *http.Client { return f.srv.Client() }
+
+// takerBPS is the taker rate the venue publishes, in basis points.
+func (f *fakeExchange) takerBPS() execution.Decimal {
+	bps := new(big.Rat).Mul(rat(venueTakerRate), big.NewRat(10_000, 1))
+	value, err := execution.ExactDecimal(bps)
+	if err != nil {
+		panic("certification: taker rate is not exact: " + err.Error())
+	}
+	return value
+}
 
 func (f *fakeExchange) setFaults(plan exchangeFaults) {
 	f.mu.Lock()
@@ -311,7 +326,7 @@ func (f *fakeExchange) serveBinance(w http.ResponseWriter, r *http.Request) {
 	case "/fapi/v1/openAlgoOrders":
 		f.json(w, 200, f.binanceOpenAlgos())
 	case "/fapi/v1/commissionRate":
-		f.json(w, 200, `{"symbol":"BTCUSDT","makerCommissionRate":"0.0002","takerCommissionRate":"0.0005"}`)
+		f.json(w, 200, `{"symbol":"BTCUSDT","makerCommissionRate":"0.0002","takerCommissionRate":"`+venueTakerRate+`"}`)
 	case "/fapi/v1/leverage":
 		f.json(w, 200, fmt.Sprintf(`{"symbol":%q,"leverage":3,"maxNotionalValue":"1000000"}`, binanceSymbol))
 	case "/fapi/v1/order":
@@ -558,7 +573,7 @@ func (f *fakeExchange) serveOKX(w http.ResponseWriter, r *http.Request) {
 	case "/api/v5/account/balance":
 		f.json(w, 200, okxData(`[{"details":[{"ccy":"USDT","eq":"10000","availEq":"10000","availBal":"10000"}]}]`))
 	case "/api/v5/account/trade-fee":
-		f.json(w, 200, okxData(`[{"takerU":"-0.0005"}]`))
+		f.json(w, 200, okxData(`[{"takerU":"-`+venueTakerRate+`"}]`))
 	case "/api/v5/account/positions":
 		f.json(w, 200, okxData(f.okxPositions()))
 	case "/api/v5/trade/orders-pending":

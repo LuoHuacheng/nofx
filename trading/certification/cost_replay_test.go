@@ -54,7 +54,8 @@ func certDecimalSubtract(t *testing.T, a, b execution.Decimal) execution.Decimal
 // certVenueEquityChange aggregates the venue's confirmed bill the way its own
 // statement does: realised fill PnL minus the taker fee on both legs. The
 // simulator reports fill prices and a commission rate, not a wallet balance, so
-// this is the venue-side record available to reconcile against.
+// this is the venue-side record available to reconcile against. It is derived
+// from the same confirmed fills, not read from a wallet endpoint.
 func certVenueEquityChange(t *testing.T, in backtest.ManagedCostInput) execution.Decimal {
 	t.Helper()
 	quantity, err := execution.Number(string(in.Quantity))
@@ -105,12 +106,18 @@ func confirmedBill(t *testing.T, f *exchangeFixture) backtest.ManagedCostInput {
 	if !execution.Positive(exit.Average) {
 		t.Fatalf("%s: the confirmed exit carries no venue average fill price", f.venue)
 	}
+	// Price the bill at the venue's own published taker rate: a hardcoded copy
+	// would let a changed venue rate shift both sides together.
+	feeBPS := f.fake.takerBPS()
+	if !execution.Equal(string(feeBPS), "5") {
+		t.Fatalf("%s: venue publishes a taker rate of %s bps, want 5", f.venue, feeBPS)
+	}
 	return backtest.ManagedCostInput{
 		Side:        "long",
 		Quantity:    execution.Decimal(dec(entries[0].filled)),
 		Entry:       execution.Decimal(dec(entries[0].price)),
 		Exit:        exit.Average,
-		FeeBPS:      "5", // both fixtures publish a 5 bps taker rate
+		FeeBPS:      feeBPS,
 		SlippageBPS: "0",
 	}
 }
