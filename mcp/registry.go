@@ -1,7 +1,9 @@
 package mcp
 
 // providerRegistry maps provider names to factory functions.
-var providerRegistry = map[string]func(...ClientOption) AIClient{}
+var providerRegistry = map[string]func(...ClientOption) AIClient{
+	ProviderCustom: NewClient,
+}
 
 // RegisterProvider registers a provider factory function.
 // Called by provider/payment sub-packages in their init() functions.

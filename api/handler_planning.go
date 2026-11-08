@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"net/http"
 	"nofx/mcp"
 	"nofx/planning"
@@ -86,6 +87,18 @@ func accountKey(e *store.Exchange) string {
 }
 
 func (s *Server) planningBroker(ctx context.Context, user, id string) (live.Broker, string, error) {
+	if _, err := execution.ResolveBinding(ctx, s.store.GormDB(), user, id); err == nil {
+		if err := s.assertLegacyStoppedForManagedBinding(user, id); err != nil {
+			return nil, "", err
+		}
+		trader, binding, err := s.managedTrader(ctx, user, id)
+		if err != nil {
+			return nil, "", err
+		}
+		return live.NOFXBroker{Trader: trader}, binding.ID, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", err
+	}
 	ex, e := s.planningAccount(user, id)
 	if e != nil {
 		return nil, "", e
@@ -110,14 +123,8 @@ func (s *Server) planningBroker(ctx context.Context, user, id string) (live.Brok
 			return nil, "", errors.New("Automatic trading is running on this account. Stop it before using an approved one-time plan.")
 		}
 	}
-	// A verified managed binding owns the durable account identity; unbound
-	// (historical) accounts keep the legacy credential-derived key.
+	// Unbound historical accounts keep the legacy credential-derived key.
 	key := accountKey(ex)
-	if env, e := managedEnvironment(ex); e == nil {
-		if b, e := execution.ResolveBinding(ctx, s.store.GormDB(), user, id); e == nil && b.Enabled && !b.VerifiedAt.IsZero() && b.Venue == ex.ExchangeType && b.Environment == env {
-			key = b.ID
-		}
-	}
 	stampBytes, _ := json.Marshal([]any{ex.UpdatedAt, string(ex.APIKey), string(ex.SecretKey), string(ex.Passphrase), ex.HyperliquidWalletAddr, ex.HyperliquidBuilderApproved, ex.Testnet, ex.HyperliquidUnifiedAcct, key})
 	stampHash := sha256.Sum256(stampBytes)
 	stamp := hex.EncodeToString(stampHash[:])

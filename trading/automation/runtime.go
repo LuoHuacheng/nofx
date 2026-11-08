@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	ReconcileInterval = 10 * time.Second
-	SignalInterval    = 60 * time.Second
-	EntryFillWindow   = 30 * time.Second
-	MaxHold           = 24 * time.Hour
+	ReconcileInterval = 2 * time.Second
+	SignalInterval    = time.Duration(SignalBarSeconds) * time.Second
+	EntryFillWindow   = live.PolicyEntryWindow
+	MaxHold           = live.PolicyMaxHold
 	// SignalFailureTolerance is how many consecutive source failures only
 	// pause new signals, per the plan's global constraints.
 	SignalFailureTolerance = 3
@@ -39,7 +39,9 @@ type accountState struct {
 	user           string
 	lastReconcile  time.Time
 	lastSignal     time.Time
+	signalIndex    int
 	signalFailures int
+	signalPending  bool
 }
 
 // Runtime supervises unattended execution: it reconciles what the venue shows,
@@ -78,7 +80,7 @@ func NewRuntime(db *gorm.DB, controller *live.Controller, risks *risk.Store, fac
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	if err := db.AutoMigrate(&execution.Binding{}, &EventCursor{}, &Alert{}); err != nil {
+	if err := db.AutoMigrate(&execution.Binding{}, &EventCursor{}, &Alert{}, &alertTarget{}, &signalScan{}); err != nil {
 		return nil, err
 	}
 	return &Runtime{db: db, controller: controller, risks: risks, factory: factory, source: source, now: now, accounts: map[string]*accountState{}, locks: map[string]*sync.Mutex{}, frozen: map[string]freezeState{}, reconcile: map[string]string{}, streams: map[string]bool{}, pending: map[string][]execution.AccountEvent{}, lastEvent: map[string]time.Time{}}, nil
@@ -98,11 +100,19 @@ func (r *Runtime) Start(ctx context.Context) error {
 	r.started = true
 	r.ctx, r.cancel = context.WithCancel(ctx)
 	run := r.ctx
-	r.mu.Unlock()
 	r.wg.Add(1)
+	r.mu.Unlock()
+	recovered := map[string]bool{}
+	for _, account := range r.managedAccounts(run) {
+		if err := r.Recover(run, account.user, account.key); err != nil {
+			logger.Warnf("automation: %s startup recovery failed: %v", account.key, err)
+			continue
+		}
+		recovered[account.key] = true
+	}
 	go func() {
 		defer r.wg.Done()
-		r.supervise(run)
+		r.supervise(run, recovered)
 	}()
 	return nil
 }
@@ -134,14 +144,21 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (r *Runtime) supervise(ctx context.Context) {
+func (r *Runtime) supervise(ctx context.Context, recovered map[string]bool) {
 	for {
 		for _, account := range r.managedAccounts(ctx) {
 			if ctx.Err() != nil {
 				return
 			}
+			if !recovered[account.key] {
+				if err := r.Recover(ctx, account.user, account.key); err != nil {
+					logger.Warnf("automation: %s startup recovery failed: %v", account.key, err)
+					continue
+				}
+				recovered[account.key] = true
+			}
 			r.startStream(ctx, account)
-			if err := r.Tick(ctx, account.user, account.key); err != nil {
+			if err := r.tick(ctx, account.user, account.key, true); err != nil {
 				logger.Warnf("automation: %s supervision failed: %v", account.key, err)
 			}
 		}
@@ -365,6 +382,10 @@ func (r *Runtime) reconciling(accountKey string) bool {
 // Tick advances one account: protection and reconciliation first, then a
 // snapshot for the risk ledger, and only then a possible new signal.
 func (r *Runtime) Tick(ctx context.Context, user, accountKey string) error {
+	return r.tick(ctx, user, accountKey, false)
+}
+
+func (r *Runtime) tick(ctx context.Context, user, accountKey string, asynchronous bool) error {
 	if accountKey == "" || user == "" {
 		return errors.New("automation: tick requires a user and an account")
 	}
@@ -397,27 +418,56 @@ func (r *Runtime) Tick(ctx context.Context, user, accountKey string) error {
 	if kind, frozen := r.frozenKind(accountKey); frozen && kind != freezeSignal {
 		return nil
 	}
-	if state.lastSignal.IsZero() || now.Sub(state.lastSignal) >= SignalInterval {
-		state.lastSignal = now
-		if err := r.signal(ctx, user, accountKey); err != nil {
-			if errors.Is(err, ErrNoSignal) {
-				// The source answered, it simply has no idea: that is a healthy
-				// read and must lift a source freeze like any other success.
-				state.signalFailures = 0
-				r.thaw(accountKey, freezeSignal)
-				return nil
-			}
-			// A failing source pauses new signals after SignalFailureTolerance
-			// consecutive rounds; a single bad reply must not cost a whole day.
-			state.signalFailures++
-			if state.signalFailures >= SignalFailureTolerance {
-				r.freeze(accountKey, err.Error(), freezeSignal)
-			}
+	if !state.signalPending {
+		symbol, err := r.nextSignalSymbol(ctx, user, accountKey, state, now)
+		if err != nil {
 			return err
 		}
-		state.signalFailures = 0
-		r.thaw(accountKey, freezeSignal)
+		if symbol == "" {
+			return nil
+		}
+		signalCtx := context.WithValue(ctx, signalBarCloseKey{}, state.lastSignal)
+		if asynchronous {
+			state.signalPending = true
+			r.wg.Add(1)
+			go func() {
+				defer r.wg.Done()
+				policy, signal, err := r.collectSignal(signalCtx, user, accountKey, symbol)
+				lock.Lock()
+				defer lock.Unlock()
+				state.signalPending = false
+				if ctx.Err() != nil {
+					return
+				}
+				// Re-check freezes after model latency, before any authorization.
+				if kind, frozen := r.frozenKind(accountKey); frozen && kind != freezeSignal {
+					return
+				}
+				if err == nil {
+					err = r.applySignal(ctx, user, accountKey, policy, signal)
+				}
+				if err := r.signalOutcome(accountKey, state, err); err != nil {
+					logger.Warnf("automation: %s supervision failed: %v", accountKey, err)
+				}
+			}()
+			return nil
+		}
+		return r.signalOutcome(accountKey, state, r.signal(signalCtx, user, accountKey, symbol))
 	}
+	return nil
+}
+
+func (r *Runtime) signalOutcome(accountKey string, state *accountState, err error) error {
+	if err != nil && !errors.Is(err, ErrNoSignal) {
+		state.signalFailures++
+		if state.signalFailures >= SignalFailureTolerance {
+			r.freeze(accountKey, err.Error(), freezeSignal)
+		}
+		return err
+	}
+	// An empty candidate set is a healthy source response.
+	state.signalFailures = 0
+	r.thaw(accountKey, freezeSignal)
 	return nil
 }
 
@@ -543,19 +593,50 @@ func (r *Runtime) trader(ctx context.Context, user, exchangeID string) (executio
 
 // signal runs the model to authorization pipeline. Nothing reaches the venue
 // before AuthorizePolicy has bound the run to this policy version and signal.
-func (r *Runtime) signal(ctx context.Context, user, accountKey string) error {
+func (r *Runtime) collectSignal(ctx context.Context, user, accountKey, symbol string) (risk.Policy, Signal, error) {
 	policy, err := r.risks.Policy(ctx, user, accountKey)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("automation: managed account has no risk policy")
+			return policy, Signal{}, errors.New("automation: managed account has no risk policy")
 		}
+		return policy, Signal{}, err
+	}
+	if !policy.Enabled {
+		return policy, Signal{}, nil
+	}
+	allowed := false
+	for _, candidate := range policy.Symbols {
+		if candidate == symbol {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return policy, Signal{}, errors.New("automation: scheduled symbol is no longer allowed")
+	}
+	// Scope only generation; authorization retains the full versioned policy.
+	sourcePolicy := policy
+	sourcePolicy.Symbols = []string{symbol}
+	signal, err := r.source.Next(ctx, sourcePolicy)
+	if err == nil && signal.Symbol != symbol {
+		return policy, Signal{}, errors.New("automation: source returned another symbol")
+	}
+	return policy, signal, err
+}
+
+func (r *Runtime) signal(ctx context.Context, user, accountKey, symbol string) error {
+	policy, signal, err := r.collectSignal(ctx, user, accountKey, symbol)
+	if err != nil {
 		return err
 	}
+	return r.applySignal(ctx, user, accountKey, policy, signal)
+}
+
+func (r *Runtime) applySignal(ctx context.Context, user, accountKey string, policy risk.Policy, signal Signal) error {
 	if !policy.Enabled {
 		return nil
 	}
-	signal, err := r.source.Next(ctx, policy)
-	if err != nil {
+	if err := signal.Validate(r.clock()); err != nil {
 		return err
 	}
 	binding, err := r.binding(ctx, accountKey)
@@ -575,7 +656,7 @@ func (r *Runtime) signal(ctx context.Context, user, accountKey string) error {
 	if err != nil {
 		return err
 	}
-	plan, err := r.compileIdea(ctx, policy, limits, signal.Idea, now)
+	plan, err := r.compileIdea(ctx, policy, limits, signal)
 	if err != nil {
 		return err
 	}
@@ -583,7 +664,14 @@ func (r *Runtime) signal(ctx context.Context, user, accountKey string) error {
 	if err := store.Add([]core.Plan{plan}); err != nil {
 		return err
 	}
-	authorized, err := r.controller.AuthorizePolicy(ctx, user, plan.ID, plan.Hash, policy.Version, signal.ID)
+	if err := signal.Validate(r.clock()); err != nil {
+		return err
+	}
+	// Model latency can outlive the equity baseline; reconcile history and balances before reserving risk.
+	if err := r.reconcileAccount(ctx, user, accountKey); err != nil {
+		return err
+	}
+	authorized, err := r.controller.AuthorizePolicy(ctx, user, plan.ID, plan.Hash, policy.Version, signal.ID, signal.ExpiresAt)
 	if err != nil {
 		return err
 	}
@@ -593,40 +681,36 @@ func (r *Runtime) signal(ctx context.Context, user, accountKey string) error {
 	return nil
 }
 
-// compileIdea binds the idea to the one whitelisted instrument whose book the
-// idea's absolute prices actually fit. The signal carries no symbol, so trying
-// the whitelist in order is what keeps a mismatched instrument from compiling.
-func (r *Runtime) compileIdea(ctx context.Context, policy risk.Policy, limits core.Constraints, idea core.Idea, now time.Time) (core.Plan, error) {
+// compileIdea preserves the server-selected instrument instead of guessing from prices.
+func (r *Runtime) compileIdea(ctx context.Context, policy risk.Policy, limits core.Constraints, signal Signal) (core.Plan, error) {
+	allowed := false
+	for _, symbol := range policy.Symbols {
+		if symbol == signal.Symbol && symbol != "" {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return core.Plan{}, errors.New("automation: signal instrument is missing or not whitelisted")
+	}
 	if r.controller.Market == nil {
 		return core.Plan{}, errors.New("automation: the controller has no market source for sizing")
 	}
-	var lastErr error
-	for _, symbol := range policy.Symbols {
-		book, err := r.controller.Market.Snapshot(ctx, policy.Venue, symbol)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		plan, err := core.Compile(book, limits, idea, now)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if err := live.VerifyManagedBudget(plan, policy); err != nil {
-			return core.Plan{}, err
-		}
-		return plan, nil
+	book, err := r.controller.Market.Snapshot(ctx, policy.Venue, signal.Symbol)
+	if err != nil {
+		return core.Plan{}, fmt.Errorf("automation: %s market snapshot unavailable: %w", signal.Symbol, err)
 	}
-	if lastErr == nil {
-		lastErr = errors.New("automation: the policy whitelist is empty")
+	if book.Symbol != signal.Symbol || book.Venue != policy.Venue {
+		return core.Plan{}, errors.New("automation: market snapshot does not match the signal instrument")
 	}
-	return core.Plan{}, fmt.Errorf("automation: no whitelisted instrument accepts the signal: %w", lastErr)
-}
-
-// holdExpired reports whether a started run has outlived the unattended limits.
-// The controller keeps its own entry deadline; this only refuses to extend it.
-func holdExpired(startedAt *time.Time, now time.Time) bool {
-	return startedAt != nil && now.Sub(*startedAt) >= MaxHold
+	plan, err := core.Compile(book, limits, signal.Idea, r.clock())
+	if err != nil {
+		return core.Plan{}, fmt.Errorf("automation: %s signal rejected: %w", signal.Symbol, err)
+	}
+	if err := live.VerifyManagedBudget(plan, policy); err != nil {
+		return core.Plan{}, err
+	}
+	return plan, nil
 }
 
 // StartAccount enables unattended entries for one account, but only for the
@@ -654,6 +738,10 @@ func (r *Runtime) StartAccount(ctx context.Context, user, accountKey, version st
 	if !policy.Enabled {
 		return errors.New("automation: the risk policy is not enabled")
 	}
+	// Activation must read fresh equity; the REST polling window exceeds its maximum age.
+	if err := r.Recover(ctx, user, accountKey); err != nil {
+		return err
+	}
 	decision, err := r.risks.Evaluate(ctx, user, accountKey, r.clock())
 	if err != nil {
 		return fmt.Errorf("automation: could not evaluate the risk breaker: %w", err)
@@ -661,7 +749,7 @@ func (r *Runtime) StartAccount(ctx context.Context, user, accountKey, version st
 	if decision.Action != risk.ActionAllow {
 		return fmt.Errorf("automation: the risk breaker holds this account: %s", decision.Reason)
 	}
-	return r.Recover(ctx, user, accountKey)
+	return nil
 }
 
 // PauseAccount latches new entries. Unfilled entries are refused by the same
@@ -754,7 +842,7 @@ func (r *Runtime) AccountStatus(ctx context.Context, user, accountKey string) (S
 		out.State = "frozen"
 		out.Reason = reason
 	} else if decision, err := r.risks.Evaluate(ctx, user, accountKey, r.clock()); err != nil {
-		out.Reason = err.Error()
+		return Status{}, fmt.Errorf("automation: evaluate account status: %w", err)
 	} else if decision.Action != risk.ActionAllow {
 		out.State = "paused"
 		out.Reason = decision.Reason
@@ -769,11 +857,13 @@ func (r *Runtime) AccountStatus(ctx context.Context, user, accountKey string) (S
 	out.LastWS = r.lastWS(accountKey)
 	if equity, err := r.risks.EquityState(ctx, accountKey, r.clock().Format("2006-01-02")); err == nil {
 		out.LedgerComplete = equity.Complete
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return Status{}, fmt.Errorf("automation: read status equity: %w", err)
 	}
 	out.ProtectionState = "unknown"
 	views, err := r.controller.ListContext(ctx, user)
 	if err != nil {
-		return out, nil
+		return Status{}, fmt.Errorf("automation: read status runs: %w", err)
 	}
 	for _, v := range views {
 		if v.AccountKey != accountKey {
@@ -782,7 +872,11 @@ func (r *Runtime) AccountStatus(ctx context.Context, user, accountKey string) (S
 		if v.ProtectionState != "" {
 			out.ProtectionState = v.ProtectionState
 		}
-		if rec, err := r.risks.Reservation(ctx, v.ID); err == nil && rec.State != risk.StateReleased {
+		rec, err := r.risks.Reservation(ctx, v.ID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return Status{}, fmt.Errorf("automation: read status reservation: %w", err)
+		}
+		if err == nil && rec.State != risk.StateReleased {
 			out.ReservedRisk = rec.Risk
 		}
 	}

@@ -398,7 +398,7 @@ func TestRuntimeStartsWithoutHTTP(t *testing.T) {
 // and proves no order exists before the authorization binding.
 func TestRuntimePolicyPipeline(t *testing.T) {
 	rig := rig(t, nil)
-	signal := Signal{ID: "signal-1", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}
+	signal := Signal{ID: "signal-1", Symbol: "BTCUSDT", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}
 	rig.source.signals = []Signal{signal}
 	rt := rig.runtime(t, rig.source)
 	if err := rt.Tick(context.Background(), "alice", "account"); err != nil {
@@ -449,7 +449,7 @@ func TestRuntimePauseSurvivesRestart(t *testing.T) {
 	}
 
 	restarted := rig.runtime(t, nil)
-	rig.source.signals = []Signal{{ID: "signal-after-restart", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
+	rig.source.signals = []Signal{{ID: "signal-after-restart", Symbol: "BTCUSDT", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
 	restarted.source = rig.source
 	if err := restarted.Tick(context.Background(), "alice", "account"); err != nil {
 		t.Fatal(err)
@@ -479,7 +479,7 @@ func TestRecoveryNoEntryReplay(t *testing.T) {
 	if err := store.Add([]core.Plan{plan}); err != nil {
 		t.Fatal(err)
 	}
-	view, err := rig.ctrl.AuthorizePolicy(context.Background(), "alice", plan.ID, plan.Hash, rig.policy.Version, "recovered-signal")
+	view, err := rig.ctrl.AuthorizePolicy(context.Background(), "alice", plan.ID, plan.Hash, rig.policy.Version, "recovered-signal", rig.now.Add(SignalExpiry))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -771,7 +771,7 @@ func TestRecoveryLiftsSafetyFreezeWhenFlat(t *testing.T) {
 // submitted on the same tick or the next one.
 func TestRecoveryHaltedUnknownStaysFrozen(t *testing.T) {
 	rig := rig(t, nil)
-	rig.source.signals = []Signal{{ID: "signal-1", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
+	rig.source.signals = []Signal{{ID: "signal-1", Symbol: "BTCUSDT", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
 	rt := rig.runtime(t, rig.source)
 	if err := rt.Tick(context.Background(), "alice", "account"); err != nil {
 		t.Fatal(err)
@@ -787,7 +787,7 @@ func TestRecoveryHaltedUnknownStaysFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := rig.venue.placeCount()
-	rig.source.signals = []Signal{{ID: "signal-2", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
+	rig.source.signals = []Signal{{ID: "signal-2", Symbol: "BTCUSDT", Idea: rig.idea(), CreatedAt: rig.now, ExpiresAt: rig.now.Add(SignalExpiry)}}
 	if err := rt.Recover(context.Background(), "alice", "account"); err != nil {
 		t.Fatal(err)
 	}

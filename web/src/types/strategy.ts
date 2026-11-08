@@ -117,6 +117,7 @@ export interface CoinSourceConfig {
   static_coins?: string[]
   excluded_coins?: string[] // List of excluded coins
   use_ai500: boolean
+  use_local_pool_fallback?: boolean // Explicit opt-in; omitted means disabled.
   ai500_limit?: number
   use_oi_top: boolean
   oi_top_limit?: number

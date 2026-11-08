@@ -139,7 +139,7 @@ func TestManagedEventsReconnect(t *testing.T) {
 	if _, frozen := rt.frozenReason("account"); !frozen {
 		t.Fatal("a failed history read left the account enabled for new entries")
 	}
-	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Idea: r.idea()})
+	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Symbol: "BTCUSDT", Idea: r.idea(), CreatedAt: r.now, ExpiresAt: r.now.Add(SignalExpiry)})
 	if err := rt.Tick(ctx, "alice", "account"); err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestManagedReplayMatchesTheFullFixture(t *testing.T) {
 func TestManagedEventsStreamReachesProtection(t *testing.T) {
 	r := rig(t, &automationSource{})
 	r.venue.stream = make(chan execution.AccountEvent)
-	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Idea: r.idea(), CreatedAt: r.now, ExpiresAt: r.now.Add(SignalExpiry)})
+	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Symbol: "BTCUSDT", Idea: r.idea(), CreatedAt: r.now, ExpiresAt: r.now.Add(SignalExpiry)})
 	rt := r.runtime(t, r.source)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -285,7 +285,7 @@ func TestManagedEventsPartialFillWakeup(t *testing.T) {
 	r := rig(t, &automationSource{})
 	rt := r.runtime(t, r.source)
 	ctx := context.Background()
-	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Idea: r.idea()})
+	r.source.signals = append(r.source.signals, Signal{ID: "signal-1", Symbol: "BTCUSDT", Idea: r.idea(), CreatedAt: r.now, ExpiresAt: r.now.Add(SignalExpiry)})
 	if err := rt.Tick(ctx, "alice", "account"); err != nil {
 		t.Fatal(err)
 	}

@@ -29,7 +29,13 @@ func policyDigest(p core.Plan, user, exchange, account, policyVersion, signalID 
 // caller input: a historical row (empty mode) keeps its manual digest.
 func (r Run) approvalDigest(p core.Plan) string {
 	if r.AuthorizationMode == "policy" {
-		return policyDigest(p, r.UserID, r.ExchangeID, r.AccountKey, r.PolicyVersion, r.SignalID)
+		base := policyDigest(p, r.UserID, r.ExchangeID, r.AccountKey, r.PolicyVersion, r.SignalID)
+		if r.SignalExpiresAt == nil {
+			return base // historical approvals retain their digest, but cannot start new entries
+		}
+		raw, _ := json.Marshal([]any{base, r.SignalExpiresAt.UTC()})
+		h := sha256.Sum256(raw)
+		return hex.EncodeToString(h[:])
 	}
 	return digest(p, r.UserID, r.ExchangeID, r.AccountKey)
 }
@@ -40,14 +46,16 @@ type approvalRequest struct {
 	ReplaceID, ReplaceHash  string
 	Mode                    string // "" is manual, "policy" is automatic
 	SignalID, PolicyVersion string
+	SignalExpiresAt         *time.Time
 }
 
 // AuthorizePolicy lets the server approve a plan for one signal without a
 // human phrase. The policy and binding are read here, so the caller supplies
 // only the version it saw; an authorization reserves no budget, because the
 // hold commits when Execute starts the run.
-func (c *Controller) AuthorizePolicy(ctx context.Context, user, planID, planHash, policyVersion, signalID string) (View, error) {
-	return c.approve(ctx, approvalRequest{User: user, PlanID: planID, Hash: planHash, Mode: "policy", SignalID: signalID, PolicyVersion: policyVersion})
+func (c *Controller) AuthorizePolicy(ctx context.Context, user, planID, planHash, policyVersion, signalID string, signalExpires time.Time) (View, error) {
+	signalExpires = signalExpires.UTC()
+	return c.approve(ctx, approvalRequest{User: user, PlanID: planID, Hash: planHash, Mode: "policy", SignalID: signalID, PolicyVersion: policyVersion, SignalExpiresAt: &signalExpires})
 }
 
 func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, error) {
@@ -58,6 +66,9 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 	}
 	if req.Mode == "policy" && (req.SignalID == "" || len(req.SignalID) > 128) {
 		return View{}, errors.New("automatic authorization requires a signal id of at most 128 bytes")
+	}
+	if req.Mode == "policy" && (req.SignalExpiresAt == nil || !c.now().Before(*req.SignalExpiresAt) || req.SignalExpiresAt.After(c.now().Add(30*time.Second))) {
+		return View{}, errors.New("automatic authorization requires an unexpired signal within 30 seconds")
 	}
 	var d planning.Draft
 	if e := c.DB.Where("user_id = ? AND id = ?", req.User, req.PlanID).First(&d).Error; e != nil {
@@ -159,6 +170,7 @@ func (c *Controller) approve(ctx context.Context, req approvalRequest) (View, er
 	}
 	now := time.Now().UTC()
 	r := Run{ID: uuid.NewString(), UserID: req.User, ExchangeID: d.ExchangeID, AccountKey: account, PlanID: p.ID, PlanHash: p.Hash, State: "approved", PlanJSON: d.Body, OrdersJSON: "[]", ApprovedAt: now, UpdatedAt: now, Managed: managed, AuthorizationMode: req.Mode, SignalID: req.SignalID}
+	r.SignalExpiresAt = req.SignalExpiresAt
 	if managed {
 		r.PolicyID, r.PolicyVersion, r.PortfolioID = policy.ID, policy.Version, policy.PortfolioID
 	}

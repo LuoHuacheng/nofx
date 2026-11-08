@@ -846,6 +846,8 @@ type CoinSourceConfig struct {
 	ExcludedCoins []string `json:"excluded_coins,omitempty"`
 	// whether to use AI500 coin pool
 	UseAI500 bool `json:"use_ai500"`
+	// Explicit opt-in: use public Binance scores when the AI500 provider fails.
+	UseLocalPoolFallback bool `json:"use_local_pool_fallback,omitempty"`
 	// AI500 coin pool maximum count
 	AI500Limit int `json:"ai500_limit,omitempty"`
 	// whether to use OI Top (OI increase ranking, suitable for long positions)

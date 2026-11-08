@@ -189,7 +189,7 @@ func approved(t *testing.T, c *Controller, p core.Plan) View {
 // Tests drive durable ticks explicitly, without real orders or timers.
 func started(t *testing.T, c *Controller, p core.Plan) View {
 	v := approved(t, c, p)
-	now := time.Now().UTC()
+	now := c.now()
 	deadline := now.Add(time.Hour)
 	v.StartedAt = &now
 	v.Deadline = &deadline

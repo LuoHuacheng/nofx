@@ -38,6 +38,34 @@ func (p *stubPlanner) Chat(_ context.Context, messages []model.Message, tools []
 	return p.reply, p.err
 }
 
+type delayedPlanner struct {
+	stubPlanner
+	clock *time.Time
+}
+
+func (p *delayedPlanner) Chat(ctx context.Context, messages []model.Message, tools []model.Tool) (model.Message, error) {
+	reply, err := p.stubPlanner.Chat(ctx, messages, tools)
+	*p.clock = p.clock.Add(45 * time.Second)
+	return reply, err
+}
+
+func TestModelSourceStampsCompletedGeneration(t *testing.T) {
+	clock := signalTestNow
+	planner := &delayedPlanner{clock: &clock, stubPlanner: stubPlanner{reply: model.Message{Content: `{"ideas":[{` + testIdeaJSON + `}]}`}}}
+	feed := &stubMarket{book: testBook(clock), rows: testCandles(clock.Unix()-SignalBarSeconds, SignalBars)}
+	source := NewModelSource(planner, feed, func() time.Time { return clock })
+	signal, err := source.Next(context.Background(), testPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := signal.Validate(clock); err != nil {
+		t.Fatalf("newly generated signal is already expired: %v", err)
+	}
+	if signal.CreatedAt != clock || signal.ExpiresAt != clock.Add(30*time.Second) {
+		t.Fatal("signal validity must start when generation finishes")
+	}
+}
+
 type stubMarket struct {
 	book   core.Snapshot
 	rows   []market.Candle
@@ -249,7 +277,7 @@ func TestModelSourceStableID(t *testing.T) {
 		t.Fatal("signal id does not bind account, policy, symbol, bar and idea")
 	}
 	typ := reflect.TypeOf(Signal{})
-	want := []string{"ID", "Idea", "CreatedAt", "ExpiresAt"}
+	want := []string{"ID", "Symbol", "Idea", "CreatedAt", "ExpiresAt"}
 	if typ.NumField() != len(want) {
 		t.Fatalf("Signal carries %d fields", typ.NumField())
 	}

@@ -40,6 +40,30 @@ func (b *FuturesTrader) nativeClientID(o execution.Order) (string, error) {
 
 func (b *FuturesTrader) Venue() string { return "binance" }
 
+// VenueAccountID reads Binance's native futures account code, independent of API credentials.
+func (b *FuturesTrader) VenueAccountID(ctx context.Context) (string, error) {
+	balances, err := b.client.NewGetBalanceService().Do(ctx)
+	if err != nil {
+		return "", binanceReadError("verify the Binance futures account identity", err)
+	}
+	id := ""
+	for _, balance := range balances {
+		if balance == nil || strings.TrimSpace(balance.AccountAlias) == "" {
+			return "", errors.New("Binance did not return a complete futures account identity")
+		}
+		if id != "" && id != balance.AccountAlias {
+			return "", errors.New("Binance returned conflicting futures account identities")
+		}
+		id = balance.AccountAlias
+	}
+	if id == "" {
+		return "", errors.New("Binance did not return a futures account identity")
+	}
+	return id, nil
+}
+
+var _ execution.AccountIdentity = (*FuturesTrader)(nil)
+
 // NewExecutionTrader initializes NOFX without changing exchange account settings.
 func NewExecutionTrader(key, secret, userID string) *FuturesTrader {
 	c := futures.NewClient(key, secret)

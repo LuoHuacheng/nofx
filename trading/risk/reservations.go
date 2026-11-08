@@ -73,6 +73,9 @@ func (s *Store) ReserveTx(ctx context.Context, tx *gorm.DB, r Reservation, now t
 		}
 		return err
 	}
+	if r.PolicyID != policy.ID || r.PortfolioID != policy.PortfolioID {
+		return errors.New("risk: reservation does not belong to the account policy")
+	}
 	if policy.Version != r.PolicyVersion {
 		return errors.New("risk: policy version changed; re-authorize")
 	}
@@ -91,7 +94,7 @@ func (s *Store) ReserveTx(ctx context.Context, tx *gorm.DB, r Reservation, now t
 		return fmt.Errorf("risk: equity baseline of %s is stale: observed %s ago", r.AccountKey, age)
 	}
 
-	if err := lockPortfolio(tx, r.PortfolioID); err != nil {
+	if err := lockPortfolio(tx, portfolioScope(policy)); err != nil {
 		return err
 	}
 
@@ -99,7 +102,7 @@ func (s *Store) ReserveTx(ctx context.Context, tx *gorm.DB, r Reservation, now t
 	if err != nil {
 		return fmt.Errorf("risk: stored adjusted equity of %s is invalid: %w", r.AccountKey, err)
 	}
-	portfolioEquity, err := portfolioEquityTx(tx, r.PortfolioID, day, now)
+	portfolioEquity, portfolioAccounts, err := portfolioEquityTx(tx, policy, day, now)
 	if err != nil {
 		return err
 	}
@@ -145,8 +148,8 @@ func (s *Store) ReserveTx(ctx context.Context, tx *gorm.DB, r Reservation, now t
 	}
 
 	var portfolioHeld []ReservationRecord
-	if err := tx.Where("portfolio_id = ? AND state IN ? AND run_id <> ?", r.PortfolioID,
-		[]string{StateReserved, StateExposed}, r.RunID).Find(&portfolioHeld).Error; err != nil {
+	if err := tx.Where("user_id = ? AND portfolio_id = ? AND account_key IN ? AND state IN ? AND run_id <> ?",
+		policy.UserID, policy.PortfolioID, portfolioAccounts, []string{StateReserved, StateExposed}, r.RunID).Find(&portfolioHeld).Error; err != nil {
 		return fmt.Errorf("risk: load portfolio reservations: %w", err)
 	}
 	portfolioRisk, _, portfolioGross, portfolioDirectional, err := sums(portfolioHeld, r.Side)
@@ -271,29 +274,29 @@ func lockPortfolio(tx *gorm.DB, portfolioID string) error {
 
 // portfolioEquityTx sums the adjusted equity of every fresh, complete account
 // whose stored policy belongs to the same portfolio.
-func portfolioEquityTx(tx *gorm.DB, portfolioID, day string, now time.Time) (*big.Rat, error) {
+func portfolioEquityTx(tx *gorm.DB, policy Policy, day string, now time.Time) (*big.Rat, []string, error) {
 	var policies []policyRecord
-	if err := tx.Find(&policies).Error; err != nil {
-		return nil, fmt.Errorf("risk: load portfolio policies: %w", err)
+	if err := tx.Where("user_id = ?", policy.UserID).Find(&policies).Error; err != nil {
+		return nil, nil, fmt.Errorf("risk: load portfolio policies: %w", err)
 	}
 	var keys []string
 	for _, record := range policies {
 		var p Policy
 		if err := json.Unmarshal([]byte(record.Body), &p); err != nil {
-			return nil, fmt.Errorf("risk: decode stored policy: %w", err)
+			return nil, nil, fmt.Errorf("risk: decode stored policy: %w", err)
 		}
-		if p.PortfolioID == portfolioID {
+		if p.UserID == policy.UserID && p.Environment == policy.Environment && p.PortfolioID == policy.PortfolioID {
 			keys = append(keys, record.AccountKey)
 		}
 	}
 	total := new(big.Rat)
 	if len(keys) == 0 {
-		return total, nil
+		return total, keys, nil
 	}
 	var states []EquityState
 	if err := tx.Where("account_key IN ? AND day = ? AND complete = ?", keys, day, true).
 		Find(&states).Error; err != nil {
-		return nil, fmt.Errorf("risk: load portfolio equity: %w", err)
+		return nil, nil, fmt.Errorf("risk: load portfolio equity: %w", err)
 	}
 	for _, state := range states {
 		if now.Sub(state.ObservedAt.UTC()) > PortfolioSnapshotMaxAge {
@@ -301,11 +304,11 @@ func portfolioEquityTx(tx *gorm.DB, portfolioID, day string, now time.Time) (*bi
 		}
 		n, err := execution.Number(string(state.AdjustedEquity))
 		if err != nil {
-			return nil, fmt.Errorf("risk: stored adjusted equity of %s is invalid: %w", state.AccountKey, err)
+			return nil, nil, fmt.Errorf("risk: stored adjusted equity of %s is invalid: %w", state.AccountKey, err)
 		}
 		total.Add(total, n)
 	}
-	return total, nil
+	return total, keys, nil
 }
 
 // sums totals the holds of one set of rows. Only the requested side counts

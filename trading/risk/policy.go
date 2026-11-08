@@ -29,6 +29,13 @@ const (
 	MaxPolicyLeverage           = 3
 )
 
+// portfolioScope is internal: identical client labels never join different owners or environments.
+func portfolioScope(p Policy) string {
+	b, _ := json.Marshal([]string{p.UserID, string(p.Environment), p.PortfolioID})
+	h := sha256.Sum256(b)
+	return "portfolio:" + hex.EncodeToString(h[:])
+}
+
 var supportedVenues = map[string]bool{"binance": true, "okx": true, "bitget": true, "hyperliquid": true}
 
 // DefaultPolicy builds the baseline for one managed account. Symbols are

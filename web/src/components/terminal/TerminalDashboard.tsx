@@ -6,6 +6,7 @@ import { api } from '../../lib/api'
 import { confirmToast, notify } from '../../lib/notify'
 import { isVergexUIEnabled } from '../../lib/config'
 import { useSystemConfig } from '../../hooks/useSystemConfig'
+import { useAuth } from '../../contexts/AuthContext'
 import type {
   SystemStatus,
   AccountInfo,
@@ -154,11 +155,12 @@ function fmtHold(entry?: number, exit?: number): string {
 }
 
 function useTick(ms = 1000) {
-  const [, set] = useState(0)
+  const [now, set] = useState(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => set((n) => n + 1), ms)
+    const id = setInterval(() => set(Date.now()), ms)
     return () => clearInterval(id)
   }, [ms])
+  return now
 }
 
 export function TerminalDashboard({
@@ -173,11 +175,27 @@ export function TerminalDashboard({
 }: TerminalDashboardProps) {
   const traderId = selectedTrader?.trader_id || selectedTraderId
   const { config: systemConfig } = useSystemConfig()
-  // null config means /api/config hasn't resolved yet — treat Vergex as
-  // disabled until the flags land so the paid SWR fetches never fire early.
-  const vergexUI = systemConfig != null && isVergexUIEnabled(systemConfig)
-  useTick(1000)
-  const clock = new Date().toLocaleTimeString('en-GB', { hour12: false })
+  const { user } = useAuth()
+  const vergexEnabled = systemConfig != null && isVergexUIEnabled(systemConfig)
+  const {
+    data: models,
+    error: walletError,
+    isLoading: walletLoading,
+  } = useSWR(
+    user && vergexEnabled ? ['terminal-data-wallet', user.id] : null,
+    () => api.getModelConfigs(),
+    { shouldRetryOnError: false }
+  )
+  // A saved fee wallet can fund data even when its AI model is disabled.
+  const paidDataEnabled =
+    vergexEnabled &&
+    !walletError &&
+    !!models?.some(
+      (model) =>
+        model.provider === 'claw402' && model.has_api_key && model.walletAddress
+    )
+  const now = useTick(1000)
+  const clock = new Date(now).toLocaleTimeString('en-GB', { hour12: false })
   const [closing, setClosing] = useState<string | null>(null)
 
   async function closePositionRow(symbol: string, side: 'LONG' | 'SHORT') {
@@ -246,7 +264,7 @@ export function TerminalDashboard({
     { refreshInterval: 120000, shouldRetryOnError: false }
   )
   const { data: realFlow } = useSWR(
-    traderId && vergexUI ? ['flow-markets', traderId] : null,
+    traderId && paidDataEnabled ? ['flow-markets', traderId] : null,
     () =>
       api.getFlowMarkets(selectedTrader?.ai_model, 'mainnet', '1h', 50, true),
     // paid x402 endpoint — poll slowly (5m) to conserve claw402 funds; the
@@ -254,7 +272,7 @@ export function TerminalDashboard({
     { refreshInterval: 300000, shouldRetryOnError: false }
   )
   const { data: realSignalRank } = useSWR(
-    traderId && vergexUI ? ['signal-rank', traderId] : null,
+    traderId && paidDataEnabled ? ['signal-rank', traderId] : null,
     () => api.getDirectionChangeLeaderboard(30, true),
     // paid x402 endpoint — poll slowly (5m) to conserve claw402 funds
     { refreshInterval: 300000, shouldRetryOnError: false }
@@ -278,6 +296,7 @@ export function TerminalDashboard({
   }, [])
   const sim = useDemoEngine(demo)
   const on = demo && !!sim
+  const vergexUI = vergexEnabled && (on || paidDataEnabled)
 
   const status = on ? sim!.status : propStatus
   const account = on ? sim!.account : propAccount
@@ -408,7 +427,7 @@ export function TerminalDashboard({
   }, [latest?.timestamp, scanMin])
   let countdown = '—'
   if (nextCycleMs) {
-    const ms = nextCycleMs - Date.now()
+    const ms = nextCycleMs - now
     if (ms <= 0) countdown = 'due now'
     else {
       const s = Math.floor(ms / 1000)
@@ -910,11 +929,21 @@ export function TerminalDashboard({
               Full-width panel under row 1; long/short grids side by side with
               click-to-drill address lists. ── */}
         <div style={sc}>
-          <WinrateMatrix
-            symbol={activeSym}
-            demo={on}
-            marketType={activeMarketType}
-          />
+          {vergexUI ? (
+            <WinrateMatrix
+              symbol={activeSym}
+              demo={on}
+              marketType={activeMarketType}
+            />
+          ) : (
+            <div role="status" className="tm-sc">
+              {walletError
+                ? '付费数据配置暂不可用；已暂停相关查询。'
+                : systemConfig == null || walletLoading
+                  ? '正在检查付费数据配置…'
+                  : '未启用付费数据（Heatmap / Matrix）。行情与自动交易可继续使用。'}
+            </div>
+          )}
         </div>
         <div className="tm-rule" />
 

@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"nofx/planning/core"
@@ -121,10 +122,6 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 	if err = c.save(&v); err != nil {
 		return v, err
 	}
-	position, err := readLivePosition(ctx, broker, symbol)
-	if err != nil {
-		return v, err
-	}
 	// A resting entry can fill after this call, and a halted run has no
 	// supervisor left to cancel it: entries are always cancelled first, flat or
 	// not, before any exit decision is taken.
@@ -163,6 +160,10 @@ func (c *Controller) flatten(ctx context.Context, user, runID, reason string) (v
 	}
 	if pendingExit {
 		return c.halt(&v, "An earlier exit is still open at the exchange. Reconcile it before another exit is sent; protection orders are still live.")
+	}
+	position, err := readLivePosition(ctx, broker, symbol)
+	if err != nil {
+		return v, fmt.Errorf("read position after cancelling entries: %w", err)
 	}
 	if cmp(position, "0") > 0 {
 		if c.isStopped() {

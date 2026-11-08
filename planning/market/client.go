@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"golang.org/x/sync/singleflight"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -40,22 +41,39 @@ func (c *Client) request(ctx context.Context, method, u string, body any, out an
 			return err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, bytes.NewReader(b))
-	if err != nil {
-		return err
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, method, u, bytes.NewReader(b))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Cache-Control", "no-cache")
+		resp, err := c.HTTP.Do(req)
+		retry := false
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				defer resp.Body.Close()
+				return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
+			}
+			err = fmt.Errorf("market HTTP %d", resp.StatusCode)
+			retry = resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+			resp.Body.Close()
+		} else {
+			var networkError net.Error
+			retry = (errors.As(err, &networkError) && (networkError.Timeout() || networkError.Temporary())) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+		}
+		if method != http.MethodGet || attempt == 1 || !retry {
+			return err
+		}
+		// Retry one transient public GET, never model calls or order submissions.
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cache-Control", "no-cache")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("market HTTP %d", resp.StatusCode)
-	}
-	dec := json.NewDecoder(io.LimitReader(resp.Body, 4<<20))
-	return dec.Decode(out)
 }
 func symbolOK(s string) bool { return instrument.ValidSymbol(s) }
 

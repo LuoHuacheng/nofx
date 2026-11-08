@@ -66,8 +66,9 @@ type Run struct {
 	PortfolioID   string `json:"-"`
 	// AuthorizationMode "policy" marks an automatic authorization bound to a
 	// policy version and a signal; empty is a historical human approval.
-	AuthorizationMode string `json:"-"`
-	SignalID          string `gorm:"uniqueIndex:managed_policy_signal,where:authorization_mode = 'policy' AND signal_id <> ''" json:"-"`
+	AuthorizationMode string     `json:"-"`
+	SignalExpiresAt   *time.Time `json:"-"`
+	SignalID          string     `gorm:"uniqueIndex:managed_policy_signal,where:authorization_mode = 'policy' AND signal_id <> ''" json:"-"`
 }
 
 func (Run) TableName() string { return "planning_live_runs" }

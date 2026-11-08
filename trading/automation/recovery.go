@@ -66,6 +66,12 @@ func (r *Runtime) Recover(ctx context.Context, user, accountKey string) error {
 			continue
 		}
 		switch v.State {
+		case "approved":
+			if v.AuthorizationMode == "policy" && (v.SignalExpiresAt == nil || !r.clock().Before(*v.SignalExpiresAt)) {
+				if _, err := r.controller.StopContext(ctx, user, v.ID, v.ApprovalHash); err != nil {
+					return fmt.Errorf("automation: could not retire expired approval %s: %w", v.ID, err)
+				}
+			}
 		case "halted_unknown":
 			// Keep the freeze: the unresolved exit may only be settled by the
 			// original client ID, and re-submitting would double the position.

@@ -12,9 +12,11 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"nofx/planning/core"
+	"nofx/planning/live"
 	"nofx/planning/market"
 	"nofx/planning/model"
 	"nofx/trader/execution"
@@ -36,9 +38,17 @@ var ErrNoSignal = errors.New("no trade signal")
 
 type Signal struct {
 	ID        string
+	Symbol    string
 	Idea      core.Idea
 	CreatedAt time.Time
 	ExpiresAt time.Time
+}
+
+func (s Signal) Validate(now time.Time) error {
+	if s.CreatedAt.IsZero() || s.ExpiresAt.IsZero() || s.CreatedAt.After(now.Add(time.Second)) || now.Sub(s.CreatedAt) > SignalExpiry || !now.Before(s.ExpiresAt) || !s.ExpiresAt.After(s.CreatedAt) || s.ExpiresAt.After(s.CreatedAt.Add(SignalExpiry)) {
+		return errors.New("automation: signal is expired or has invalid timestamps")
+	}
+	return nil
 }
 
 type IdeaSource interface {
@@ -53,6 +63,7 @@ type SourceMarket interface {
 // ModelSource asks a model for at most one limit-entry idea on one whitelisted
 // symbol per call, using closed bars only.
 type ModelSource struct {
+	mu      sync.Mutex
 	planner model.ChatPlanner
 	feed    SourceMarket
 	now     func() time.Time
@@ -60,10 +71,19 @@ type ModelSource struct {
 }
 
 func NewModelSource(planner model.ChatPlanner, feed SourceMarket, now func() time.Time) *ModelSource {
+	if now == nil {
+		now = time.Now
+	}
 	return &ModelSource{planner: planner, feed: feed, now: now}
 }
 
 func (s *ModelSource) Next(ctx context.Context, policy risk.Policy) (Signal, error) {
+	// Accounts of one user share the model client and symbol cursor.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return Signal{}, err
+	}
 	if len(policy.Symbols) == 0 {
 		return Signal{}, errors.New("automation: policy requires a non-empty symbol whitelist")
 	}
@@ -99,8 +119,12 @@ func (s *ModelSource) Next(ctx context.Context, policy risk.Policy) (Signal, err
 	if err != nil {
 		return Signal{}, err
 	}
+	// Fetches can cross a boundary; never pay for a bar outside the checkpoint.
+	if expected, ok := ctx.Value(signalBarCloseKey{}).(time.Time); ok && bars[len(bars)-1].Time+SignalBarSeconds != expected.Unix() {
+		return Signal{}, errors.New("automation: scheduled candle changed before generation")
+	}
 
-	reply, err := s.planner.Chat(ctx, signalPrompt(policy.Venue, symbol, bars), []model.Tool{})
+	reply, err := s.planner.Chat(ctx, signalPrompt(policy, symbol, book, bars), []model.Tool{})
 	if err != nil {
 		return Signal{}, fmt.Errorf("automation: model chat failed: %w", err)
 	}
@@ -130,11 +154,13 @@ func (s *ModelSource) Next(ctx context.Context, policy risk.Policy) (Signal, err
 	if err != nil {
 		return Signal{}, errors.New("automation: idea is not encodable")
 	}
+	generatedAt := s.now()
 	return Signal{
 		ID:        signalID(policy.AccountKey, policy.Version, symbol, bars[len(bars)-1].Time, string(raw)),
+		Symbol:    symbol,
 		Idea:      idea,
-		CreatedAt: now,
-		ExpiresAt: now.Add(SignalExpiry),
+		CreatedAt: generatedAt,
+		ExpiresAt: generatedAt.Add(SignalExpiry),
 	}, nil
 }
 
@@ -156,8 +182,12 @@ func closedBars(rows []market.Candle, now time.Time) ([]market.Candle, error) {
 		return nil, errors.New("automation: insufficient closed 15m candles")
 	}
 	closed = closed[len(closed)-SignalBars:]
-	if last := closed[len(closed)-1]; now.Unix()-(last.Time+SignalBarSeconds) > 2*SignalBarSeconds {
+	lastClose := closed[len(closed)-1].Time + SignalBarSeconds
+	if now.Unix()-lastClose > 2*SignalBarSeconds {
 		return nil, errors.New("automation: candles are stale")
+	}
+	if lastClose != now.Unix()/SignalBarSeconds*SignalBarSeconds {
+		return nil, errors.New("automation: latest closed 15m candle is not available")
 	}
 	return closed, nil
 }
@@ -215,11 +245,16 @@ func signalID(accountKey, policyVersion, symbol string, barTime int64, idea stri
 	return hex.EncodeToString(sum[:])
 }
 
-func signalPrompt(venue, symbol string, bars []market.Candle) []model.Message {
+func signalPrompt(policy risk.Policy, symbol string, book core.Snapshot, bars []market.Candle) []model.Message {
 	var b strings.Builder
 	b.WriteString("You are a restricted signal generator. You cannot choose size, leverage, account or risk limits.\n")
-	fmt.Fprintf(&b, "Venue: %s\nSymbol: %s\n", venue, symbol)
+	fmt.Fprintf(&b, "Venue: %s\nSymbol: %s\n", policy.Venue, symbol)
 	b.WriteString("This turn covers exactly this symbol; no other symbol may be signalled.\n")
+	fmt.Fprintf(&b, "Current book: bid=%s ask=%s tick_size=%s. Prices must be multiples of tick_size.\n", book.Bid, book.Ask, book.Tick)
+	fmt.Fprintf(&b, "Server cost assumptions: fee_bps=%s per leg, slippage_bps=%s per leg, funding_reserve_bps=%d, min_reward_risk=%s.\n", live.ManagedFeeBPS, live.ManagedSlippageBPS, policy.FundingReserveBPS, policy.MinRewardRisk)
+	b.WriteString("Net costs: cost=(fee_bps+slippage_bps)/10000; funding=entry*funding_reserve_bps/10000; loss=abs(entry-stop)+(entry+stop)*cost+funding; reward=abs(target-entry)-(entry+target)*cost-funding. Require reward>0 and reward/loss>=min_reward_risk after all costs, not gross price distance.\n")
+	fmt.Fprintf(&b, "Limit entries expire after %d seconds; maximum holding time is %d hours.\n", int(EntryFillWindow/time.Second), int(MaxHold/time.Hour))
+	b.WriteString("Only propose chart-supported entry, stop and target levels compatible with the current book. Do not invent or move targets farther away just to pass a constraint. If no such setup is supported, return {\"ideas\":[]}; no trade is a healthy outcome.\n")
 	b.WriteString("Closed 15m candles (time,open,high,low,close,volume), oldest first:\n")
 	for _, bar := range bars {
 		fmt.Fprintf(&b, "%d,%s,%s,%s,%s,%s\n", bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)

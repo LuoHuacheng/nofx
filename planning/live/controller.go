@@ -22,6 +22,12 @@ import (
 type Market interface {
 	Snapshot(context.Context, string, string) (core.Snapshot, error)
 }
+
+const (
+	PolicyEntryWindow = 30 * time.Second
+	PolicyMaxHold     = 24 * time.Hour
+)
+
 type Controller struct {
 	DB      *gorm.DB
 	Factory Factory
@@ -265,7 +271,10 @@ func (c *Controller) Execute(ctx context.Context, user, id, hash string) (out Vi
 	if c.isStopped() {
 		return v, errors.New("server is shutting down")
 	}
-	if e = v.Plan.Verify(time.Now().UTC()); e != nil {
+	if v.AuthorizationMode == "policy" && (v.SignalExpiresAt == nil || !c.now().Before(*v.SignalExpiresAt)) {
+		return v, errors.New("automatic signal expired; request a new signal")
+	}
+	if e = v.Plan.Verify(c.now()); e != nil {
 		return v, e
 	}
 	b, key, e := c.Factory(ctx, user, v.ExchangeID)
@@ -312,11 +321,20 @@ func (c *Controller) Execute(ctx context.Context, user, id, hash string) (out Vi
 	if e != nil {
 		return v, e
 	}
-	now := time.Now().UTC()
+	now := c.now()
+	if v.AuthorizationMode == "policy" && (v.SignalExpiresAt == nil || !now.Before(*v.SignalExpiresAt)) {
+		return v, errors.New("automatic signal expired during execution checks")
+	}
 	deadline := now.Add(15 * time.Minute)
 	if v.Plan.Idea.Execution != nil && v.Plan.Idea.Execution.Kind == "twap" {
 		last := v.Plan.Orders[len(v.Plan.Orders)-1].OffsetSeconds
 		deadline = now.Add(time.Duration(last+120) * time.Second)
+	}
+	if v.AuthorizationMode == "policy" {
+		deadline = now.Add(PolicyEntryWindow)
+		if v.SignalExpiresAt.Before(deadline) {
+			deadline = *v.SignalExpiresAt
+		}
 	}
 	v.StartedAt = &now
 	v.Deadline = &deadline
@@ -524,18 +542,33 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 	// latched account may still reduce, never add. Flatten runs through the
 	// lock-free variant because this tick already holds the run lock.
 	decision, er := c.riskDecision(ctx, &v)
+	holdExpired := v.AuthorizationMode == "policy" && !c.now().Before(v.StartedAt.Add(PolicyMaxHold))
+	if holdExpired {
+		decision, er = risk.Decision{Action: risk.ActionFlatten, Reason: "Maximum automatic holding period reached"}, nil
+	}
 	switch {
 	case er != nil:
 		attention("Risk breaker could not be evaluated; further entries stopped: " + er.Error())
 	case decision.Action == risk.ActionFlatten && cmp(filledExposure(v.Orders), "0") > 0:
-		_, _ = c.flatten(ctx, v.UserID, v.ID, decision.Reason) // it persists its own state and error
-		return true
+		exiting, err := c.flatten(ctx, v.UserID, v.ID, decision.Reason)
+		done := exiting.State == "completed" || exiting.State == "cancelled" || exiting.State == runHaltedUnknown
+		if err != nil && !done {
+			exiting.State, exiting.Error = "needs_attention", decision.Reason+": "+err.Error()
+			if saveErr := c.save(&exiting); saveErr != nil {
+				return false
+			}
+		}
+		return err == nil || done
 	case decision.Action != risk.ActionAllow:
 		// No exposure to flatten (or only a pause): stop entries and let the
 		// rest of this tick cancel them and prove the run flat.
 		v.State, v.Error = "needs_attention", decision.Reason
 	}
-	if v.Deadline != nil && time.Now().After(*v.Deadline) && v.State == "running" {
+	entryExpired := v.Deadline != nil && !c.now().Before(*v.Deadline)
+	if v.AuthorizationMode == "policy" && (v.SignalExpiresAt == nil || !c.now().Before(*v.SignalExpiresAt)) {
+		entryExpired = true
+	}
+	if entryExpired && v.State == "running" {
 		v.State = "stopping"
 	}
 	for i := range v.Orders {
@@ -609,7 +642,7 @@ func (c *Controller) step(ctx context.Context, user, id string) bool {
 				offset = v.Plan.Orders[i].OffsetSeconds
 			}
 			release := v.StartedAt.Add(time.Duration(offset) * time.Second)
-			if time.Now().Before(release) {
+			if c.now().Before(release) {
 				continue
 			}
 			if offset > 0 && time.Since(release) > 10*time.Second {

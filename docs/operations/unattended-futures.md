@@ -7,8 +7,8 @@
 ## 1. 上线前置
 
 1. 专用子账户：不得与手工交易、网格或旧 AutoTrader 共用。账户上存在任何人工持仓都会让主动启动拒绝接管（`external position not owned by this runtime`）。
-2. 绑定物理账户：`POST /api/managed-accounts/bind` 提交 `exchange_id`、`venue_account_id`（交易所原生 UID）、`environment`、`confirm_dedicated_account`。
-   - 绑定只在服务端通过签名只读查询核验后才置 `Enabled`；核验失败、UID 为空、venue 不支持时一律 `Enabled=false`，且没有"手工批准"绕过。
+2. 绑定物理账户：`POST /api/managed-accounts/bindings` 提交 `exchange_id`、`venue_account_id`（Binance 合约余额接口的 `accountAlias`，OKX 的 `uid`）、`environment`、`confirm_dedicated_account`。
+   - 绑定只在服务端通过签名只读查询核验后才置 `Enabled`；核验失败、账户标识为空或冲突、venue 不支持时一律 `Enabled=false`，且没有"手工批准"绕过。
    - 凭据、testnet 标志或物理账户变更会**重建**绑定（新 ID、重新核验）；环境在 sandbox/live 之间翻转会移动同一行并重新核验。
 3. 确认单实例：进程在 `data/` 下持有 `nofx-execution.lock`（SQLite）或 Postgres advisory lock。第二个实例启动即失败，不会双写订单。
 
@@ -18,6 +18,7 @@
 - 服务端会强制：单笔风险 ≤ 50bps、账户/组合在险 ≤ 100bps、日亏 ≤ 200bps、回撤 ≤ 500bps、保证金 ≤ 3000bps、总名义 ≤ 15000bps、方向名义 ≤ 10000bps、杠杆 ≤ 3、最小盈亏比 ≥ 2、资金费预留 10bps。
 - 已有策略只能**收紧**（`tightenOnly`），放宽需要新建策略对象。
 - 版本 CAS：请求里的 `version` 必须是当前版本（或用当前内容重新推导出的版本），否则 409。
+- 信号按 UTC 每根 15 分钟 K 线收盘调度，白名单各币依次评估一次；首次启动只评估最新已收盘周期，不补跑历史周期。每账户/币种的检查点持久化在 `managed_signal_scans`，重启或请求失败不会重复评估同一收盘周期。每账户最多一个模型任务，账户、订单与风控仍约每 2 秒对账。
 
 ## 3. 启动、暂停、退出、恢复
 
@@ -35,7 +36,7 @@
 - `protection_state`：来自最近一个 run 的保护判定（`pending` / `protected` / `exit_required` / `unknown`）。
 - `ledger_complete`：当日权益账本是否完整。不完整时新的入场会被预算拒绝。
 - `reserved_risk`：该账户未释放的预留风险额度。
-- `last_rest` / `last_ws`：最近一次 REST 对账与私有事件时间。事件通道不可用时退回每 10s REST 补偿，不等于"账户不可读"。
+- `last_rest` / `last_ws`：最近一次 REST 对账与私有事件时间。事件通道不可用时退回约每 2s REST 补偿，不等于"账户不可读"。
 
 ## 4. 故障处置
 
@@ -66,7 +67,7 @@
 ## 7. 不得声称的事
 
 - sandbox 完整周期（signal → entry → SL/TP → exit）尚未验证前，不得把"模型可以自动下单"当作上线资格。
-- 交易所侧未取证的事实：OKX `acctLv=2` 的 `imr` 字段、OKX `amend-algos`、Binance 物理账户 UID。这些目前只有 HTTP fixture 证据。
+- 交易所侧未取证的事实：OKX `acctLv=2` 的 `imr` 字段、OKX `amend-algos`。这些目前只有 HTTP fixture 证据。Binance 身份采用签名余额接口返回的 `accountAlias`，不把它声称为数字 UID；空值或多个不一致的标识会拒绝绑定。
 
 ## 8. 成本、资金费与清算口径
 
@@ -173,7 +174,7 @@ sqlite3 "$NOFX_SANDBOX_DB_PATH" \
   "SELECT id,user_id,exchange_type,testnet,enabled FROM exchanges WHERE id='<exchange_id>';"
 ```
 
-判定规则：绑定必须恰好一行（表名 `managed_account_bindings`，见 `trader/execution/binding.go:33` 的 `TableName`）；`venue_account_id` 必须等于交易所页面上显示的该子账户原生 UID（Binance 为 futures UID，OKX 为 `uid`；两者都不等于 API Key）；`exchange_id` 的 `user_id` 必须与绑定一致；`testnet` 必须为 1。任一项不匹配就停止验收，不要"先跑起来再说"。
+判定规则：绑定必须恰好一行（表名 `managed_account_bindings`，见 `trader/execution/binding.go:33` 的 `TableName`）；`venue_account_id` 必须等于签名只读接口返回的原生账户标识（Binance 为 `/fapi/v3/balance` 各资产一致的 `accountAlias`，OKX 为账户配置的 `uid`；两者都不等于 API Key）。核验只绑定该交易环境中的账户，不能用网页显示的数字 UID 替代 Binance `accountAlias`；`exchange_id` 的 `user_id` 必须与绑定一致；`testnet` 必须为 1。任一项不匹配就停止验收，不要"先跑起来再说"。
 
 ### 9.3 模式与权限
 

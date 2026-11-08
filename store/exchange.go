@@ -122,12 +122,6 @@ func (s *ExchangeStore) cleanupIncompleteExchangeConfigs() error {
 			logger.Infof("🧹 Removed incomplete exchange config during migration: id=%s user=%s missing=%s", exchange.ID, exchange.UserID, strings.Join(missing, ","))
 			continue
 		}
-		if !exchange.Enabled {
-			if err := s.db.Model(&Exchange{}).Where("id = ? AND user_id = ?", exchange.ID, exchange.UserID).Update("enabled", true).Error; err != nil {
-				return err
-			}
-			logger.Infof("🧹 Enabled complete exchange config during migration: id=%s user=%s", exchange.ID, exchange.UserID)
-		}
 	}
 	return nil
 }

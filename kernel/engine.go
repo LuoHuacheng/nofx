@@ -10,6 +10,7 @@ import (
 	"nofx/logger"
 	"nofx/market"
 	"nofx/provider/hyperliquid"
+	"nofx/provider/localpool"
 	"nofx/provider/nofxos"
 	"nofx/provider/vergex"
 	"nofx/security"
@@ -191,6 +192,7 @@ type OIDeltaData struct {
 // StrategyEngine strategy execution engine
 type StrategyEngine struct {
 	config             *store.StrategyConfig
+	localPool          *localpool.PoolProvider
 	nofxosClient       *nofxos.Client
 	vergexClient       *vergex.Client
 	vergexRankingCache map[string]*vergex.DirectionChangeItem
@@ -229,6 +231,7 @@ func NewStrategyEngine(config *store.StrategyConfig, claw402WalletKey ...string)
 		}
 		return &StrategyEngine{
 			config:             config,
+			localPool:          localpool.NewPoolProvider(nil, ""),
 			nofxosClient:       client,
 			vergexClient:       vergexClient,
 			vergexRankingCache: make(map[string]*vergex.DirectionChangeItem),
@@ -237,6 +240,7 @@ func NewStrategyEngine(config *store.StrategyConfig, claw402WalletKey ...string)
 
 	return &StrategyEngine{
 		config:             config,
+		localPool:          localpool.NewPoolProvider(nil, ""),
 		nofxosClient:       client,
 		vergexRankingCache: make(map[string]*vergex.DirectionChangeItem),
 	}
@@ -430,7 +434,7 @@ func (e *StrategyEngine) GetCandidateCoins() ([]CandidateCoin, error) {
 				logger.Infof("⚠️  Failed to get AI500 coins: %v", err)
 			} else {
 				for _, coin := range poolCoins {
-					symbolSources[coin.Symbol] = append(symbolSources[coin.Symbol], "ai500")
+					symbolSources[coin.Symbol] = append(symbolSources[coin.Symbol], coin.Sources...)
 				}
 			}
 		}
@@ -532,16 +536,26 @@ func (e *StrategyEngine) getAI500Coins(limit int) ([]CandidateCoin, error) {
 		limit = 30
 	}
 
+	var symbols []string
 	symbols, err := e.nofxosClient.GetTopRatedCoins(limit)
+	source := "ai500"
 	if err != nil {
-		return nil, err
+		if !e.config.CoinSource.UseLocalPoolFallback {
+			return nil, err
+		}
+		source = "local_pool"
+		logger.Warnf("⚠️ AI500 upstream unavailable (%v); falling back to local score pool", err)
+		symbols, err = e.localPool.GetTopRatedCoins(limit)
+		if err != nil {
+			return nil, fmt.Errorf("AI500 upstream and local pool both failed: %w", err)
+		}
 	}
 
 	var candidates []CandidateCoin
 	for _, symbol := range symbols {
 		candidates = append(candidates, CandidateCoin{
 			Symbol:  symbol,
-			Sources: []string{"ai500"},
+			Sources: []string{source},
 		})
 	}
 	return candidates, nil

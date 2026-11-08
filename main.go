@@ -151,6 +151,9 @@ func main() {
 
 	// Start API server
 	server := api.NewServer(traderManager, st, cryptoService, cfg.APIServerPort)
+	if err := server.StartManagedTrading(context.Background()); err != nil {
+		logger.Fatalf("❌ Failed to start managed trading supervision: %v", err)
+	}
 	server.StartBacktestRetention()
 
 	go func() {

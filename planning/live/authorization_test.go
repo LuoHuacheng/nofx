@@ -64,7 +64,7 @@ func policyOf(t *testing.T, store *risk.Store) risk.Policy {
 
 func authorize(t *testing.T, c *Controller, p core.Plan, version, signal string) View {
 	t.Helper()
-	v, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, version, signal)
+	v, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, version, signal, c.now().Add(30*time.Second))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -98,7 +98,7 @@ func reservationOrEmpty(t *testing.T, store *risk.Store, runID string) string {
 func TestPolicyAuthorizationBinding(t *testing.T) {
 	t.Run("owner", func(t *testing.T) {
 		c, _, _, p, store := policySetup(t)
-		if _, e := c.AuthorizePolicy(context.Background(), "bob", p.ID, p.Hash, policyOf(t, store).Version, "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "bob", p.ID, p.Hash, policyOf(t, store).Version, "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("another owner authorized the plan")
 		}
 	})
@@ -112,7 +112,7 @@ func TestPolicyAuthorizationBinding(t *testing.T) {
 			b, _, e := original(ctx, user, exchange)
 			return b, "other-account", e
 		}
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, policyOf(t, store).Version, "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, policyOf(t, store).Version, "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("a run was authorized for an account the binding does not own")
 		}
 	})
@@ -122,28 +122,28 @@ func TestPolicyAuthorizationBinding(t *testing.T) {
 		if e := c.DB.Model(&execution.Binding{}).Where("id = ?", "account").Update("environment", "sandbox").Error; e != nil {
 			t.Fatal(e)
 		}
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, policyOf(t, store).Version, "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, policyOf(t, store).Version, "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("a live policy authorized a sandbox account")
 		}
 	})
 
 	t.Run("plan-hash", func(t *testing.T) {
 		c, _, _, p, _ := policySetup(t)
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, "wrong", "v", "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, "wrong", "v", "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("a mismatched plan hash was authorized")
 		}
 	})
 
 	t.Run("policy-version", func(t *testing.T) {
 		c, _, _, p, _ := policySetup(t)
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, "stale-version", "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, "stale-version", "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("a stale policy version was authorized")
 		}
 	})
 
 	t.Run("signal", func(t *testing.T) {
 		c, _, _, p, store := policySetup(t)
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, policyOf(t, store).Version, ""); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, policyOf(t, store).Version, "", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("an authorization without a signal was accepted")
 		}
 	})
@@ -159,7 +159,7 @@ func TestPolicyAuthorizationBinding(t *testing.T) {
 		if _, e = store.PutPolicy(context.Background(), pol); e != nil {
 			t.Fatal(e)
 		}
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, pol.Version, "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, pol.Version, "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("a disabled policy authorized an automatic run")
 		}
 	})
@@ -176,7 +176,7 @@ func TestPolicyAuthorizationIdempotent(t *testing.T) {
 		}
 		other := policyPlan(t, m, "105000")
 		addDraft(t, c, other)
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", other.ID, other.Hash, version, "signal-1"); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", other.ID, other.Hash, version, "signal-1", c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("a second plan was authorized for the same signal")
 		}
 		var count int64
@@ -351,7 +351,7 @@ func TestPolicyAuthorizationGateRejections(t *testing.T) {
 				q.Enabled = true
 				tc.change(q)
 			})
-			if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, pol.Version, "signal-1"); e == nil {
+			if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, pol.Version, "signal-1", c.now().Add(30*time.Second)); e == nil {
 				t.Fatal("a plan the policy does not allow was authorized")
 			} else if !strings.Contains(e.Error(), tc.want) {
 				t.Fatalf("gate rejected for an unexpected reason: %v", e)
@@ -370,7 +370,7 @@ func TestPolicyAuthorizationGateRejections(t *testing.T) {
 		c, b, _, p, store := policySetup(t)
 		pol := enablePolicy(t, store)
 		long := strings.Repeat("s", 129)
-		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, pol.Version, long); e == nil {
+		if _, e := c.AuthorizePolicy(context.Background(), "alice", p.ID, p.Hash, pol.Version, long, c.now().Add(30*time.Second)); e == nil {
 			t.Fatal("an oversized signal id was authorized")
 		} else if !strings.Contains(e.Error(), "at most 128 bytes") {
 			t.Fatalf("gate rejected for an unexpected reason: %v", e)
@@ -492,7 +492,7 @@ func TestPolicyReplayDoesNotBlockOnARunningStep(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	repeated, e := c.AuthorizePolicy(ctx, "alice", p.ID, p.Hash, pol.Version, "signal-1")
+	repeated, e := c.AuthorizePolicy(ctx, "alice", p.ID, p.Hash, pol.Version, "signal-1", c.now().Add(30*time.Second))
 	if e != nil {
 		t.Fatalf("a replay waited on the run lock: %v", e)
 	}

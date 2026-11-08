@@ -143,3 +143,5 @@ img.png
 
 # Generated from the pinned charting submodule by web prebuild/predev.
 web/public/charting_library/
+.playwright-mcp/
+.pi/tasks/

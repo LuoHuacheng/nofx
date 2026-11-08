@@ -40,7 +40,7 @@ func ResolveBinding(ctx context.Context, db *gorm.DB, user, exchangeID string) (
 	var b Binding
 	err := db.WithContext(ctx).Where("user_id = ? AND exchange_id = ?", user, exchangeID).First(&b).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return Binding{}, errors.New("this exchange configuration is not bound to a physical account")
+		return Binding{}, fmt.Errorf("this exchange configuration is not bound to a physical account: %w", err)
 	}
 	if err != nil {
 		return Binding{}, fmt.Errorf("read the managed account binding: %w", err)

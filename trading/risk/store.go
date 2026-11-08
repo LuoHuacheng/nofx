@@ -273,9 +273,11 @@ func (s *Store) EquityState(ctx context.Context, accountKey, day string) (Equity
 // choose the version, and a stored policy can only be tightened: loosening a
 // live limit would silently grant risk the owner never approved.
 func (s *Store) PutPolicy(ctx context.Context, p Policy) (Policy, error) {
-	if p.ID == "" {
-		p.ID = policyID(p.UserID, p.AccountKey)
+	id := policyID(p.UserID, p.AccountKey)
+	if p.ID != "" && p.ID != id {
+		return Policy{}, errors.New("risk: policy ID does not belong to this owner and account")
 	}
+	p.ID = id
 	base, err := s.policyBaseline(ctx, p)
 	if err != nil {
 		return Policy{}, err
@@ -299,13 +301,20 @@ func (s *Store) PutPolicy(ctx context.Context, p Policy) (Policy, error) {
 		return Policy{}, fmt.Errorf("risk: encode policy: %w", err)
 	}
 	record := policyRecord{ID: p.ID, UserID: p.UserID, AccountKey: p.AccountKey, Version: p.Version, Body: string(body)}
-	if err := s.db.WithContext(ctx).
+	result := s.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"version", "body"}),
-		}).
-		Create(&record).Error; err != nil {
-		return Policy{}, fmt.Errorf("risk: store policy: %w", err)
+			Where: clause.Where{Exprs: []clause.Expression{
+				clause.Eq{Column: clause.Column{Table: clause.CurrentTable, Name: "user_id"}, Value: p.UserID},
+				clause.Eq{Column: clause.Column{Table: clause.CurrentTable, Name: "account_key"}, Value: p.AccountKey},
+			}},
+		}).Create(&record)
+	if result.Error != nil {
+		return Policy{}, fmt.Errorf("risk: store policy: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return Policy{}, errors.New("risk: policy owner or account changed")
 	}
 	return p, nil
 }

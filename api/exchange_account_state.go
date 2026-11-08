@@ -16,6 +16,7 @@ import (
 	"nofx/trader/binance"
 	"nofx/trader/bitget"
 	"nofx/trader/bybit"
+	"nofx/trader/execution"
 	"nofx/trader/gate"
 	hyperliquidtrader "nofx/trader/hyperliquid"
 	"nofx/trader/indodax"
@@ -227,7 +228,7 @@ func buildExchangeProbeTrader(exchangeCfg *store.Exchange, userID string) (trade
 	switch exchangeCfg.ExchangeType {
 	case "binance":
 		if exchangeCfg.Testnet {
-			return binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID, true), nil
+			return binance.NewManagedAccountTrader(context.Background(), string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID, execution.EnvironmentSandbox)
 		}
 		return binance.NewAccountTrader(context.Background(), string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID)
 	case "bybit":

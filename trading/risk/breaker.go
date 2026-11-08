@@ -75,7 +75,7 @@ func (s *Store) Evaluate(ctx context.Context, user, accountKey string, now time.
 			return err
 		}
 		if policy.PortfolioID != "" {
-			portfolio, ok, err := activeLatchTx(tx, ScopePortfolio, policy.PortfolioID)
+			portfolio, ok, err := activeLatchTx(tx, ScopePortfolio, portfolioScope(policy))
 			if err != nil {
 				return err
 			}
@@ -138,12 +138,12 @@ func (s *Store) Evaluate(ctx context.Context, user, accountKey string, now time.
 		if breached(adjusted, dayStart, policy.DailyLossBPS) {
 			reason := fmt.Sprintf("daily loss limit reached: adjusted equity %s against day start %s exceeds %d bps",
 				state.AdjustedEquity, state.DayStart, policy.DailyLossBPS)
-			return latchBreach(tx, accountKey, policy.PortfolioID, reason, &decision, now)
+			return latchBreach(tx, accountKey, portfolioScope(policy), reason, &decision, now)
 		}
 		if breached(adjusted, peak, policy.DrawdownBPS) {
 			reason := fmt.Sprintf("drawdown limit reached: adjusted equity %s against peak %s exceeds %d bps",
 				state.AdjustedEquity, state.Peak, policy.DrawdownBPS)
-			return latchBreach(tx, accountKey, policy.PortfolioID, reason, &decision, now)
+			return latchBreach(tx, accountKey, portfolioScope(policy), reason, &decision, now)
 		}
 		decision = Decision{Action: ActionAllow}
 		return nil
@@ -333,12 +333,12 @@ func (s *Store) Reset(ctx context.Context, user, accountKey, expectedVersion str
 		// latches of one incident were written separately and hash differently.
 		scopes := []struct{ scope, scopeID, version string }{{ScopeAccount, accountKey, latch.Version}}
 		if policy.PortfolioID != "" {
-			portfolio, found, err := latchTx(tx, ScopePortfolio, policy.PortfolioID)
+			portfolio, found, err := latchTx(tx, ScopePortfolio, portfolioScope(policy))
 			if err != nil {
 				return err
 			}
 			if found && !portfolio.TriggeredAt.After(latch.TriggeredAt) {
-				scopes = append(scopes, struct{ scope, scopeID, version string }{ScopePortfolio, policy.PortfolioID, portfolio.Version})
+				scopes = append(scopes, struct{ scope, scopeID, version string }{ScopePortfolio, portfolioScope(policy), portfolio.Version})
 			}
 		}
 		for _, s := range scopes {
